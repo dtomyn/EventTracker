@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="search-header mb-4">
+        <div class="search-header-copy">
+            <h1 class="h3 mb-1">Search Results</h1>
+            {% if has_query %}
+                <p class="text-body-secondary mb-0" data-search-result-copy>
+                    {% if search_has_more %}
+                        Showing first {{ initial_result_count }} of {{ result_count }} ranked match{% if result_count == 1 %}{% else %}es{% endif %} for "{{ query }}" in {{ selected_group_name }}.
+                    {% else %}
+                        Showing {{ result_count }} ranked match{% if result_count == 1 %}{% else %}es{% endif %} for "{{ query }}" in {{ selected_group_name }}.
+                    {% endif %}
+                </p>
+            {% else %}
+                <p class="text-body-secondary mb-0">Use search to find the strongest keyword and semantic matches across your entries.</p>
+            {% endif %}
+        </div>
+
+        <div class="search-header-controls">
+            {% if timeline_filters %}
+                <details class="group-flyout">
+                    <summary class="group-flyout-trigger">
+                        <span class="group-flyout-label">Group</span>
+                        <span class="group-flyout-value">{{ selected_group_name }}</span>
+                        <span class="group-flyout-icon" aria-hidden="true"></span>
+                    </summary>
+                    <div class="group-flyout-menu" aria-label="Timeline groups">
+                        <a class="group-flyout-option {% if selected_group_name == 'All groups' %}is-active{% endif %}" href="/search?group_id=all{% if query %}&q={{ query | urlencode }}{% endif %}">All groups</a>
+                        {% for timeline_filter in timeline_filters %}
+                            <a class="group-flyout-option {% if selected_group_id == timeline_filter.id %}is-active{% endif %}" href="/search?group_id={{ timeline_filter.id }}{% if query %}&q={{ query | urlencode }}{% endif %}">{{ timeline_filter.name }}</a>
+                        {% endfor %}
+                    </div>
+                </details>
+            {% endif %}
+
+            <div class="d-flex gap-2">
+                {% if has_query %}
+                    <a class="btn btn-outline-secondary" href="/?{% if selected_group_query_value %}group_id={{ selected_group_query_value }}&{% endif %}q={{ query | urlencode }}">Filter Timeline</a>
+                    <a class="btn btn-link" href="/search{% if selected_group_query_value %}?group_id={{ selected_group_query_value }}{% endif %}">Clear search</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if has_query %}
+        <div data-search-results-shell>
+            <div data-search-results>
+                {% include "partials/search_results.html" %}
+            </div>
+            <div class="timeline-fetch-state" data-search-loading hidden>Loading more results…</div>
+            <div class="timeline-fetch-state timeline-fetch-state-error" data-search-error hidden>
+                <span>Could not load more search results.</span>
+                <button class="btn btn-sm btn-outline-secondary" type="button" data-search-retry>Retry</button>
+            </div>
+            <div class="timeline-fetch-state" data-search-end {% if search_has_more %}hidden{% endif %}>You’ve reached the end of the ranked results.</div>
+            <div class="timeline-scroll-sentinel" data-search-sentinel aria-hidden="true"></div>
+        </div>
+        <script id="search-state" type="application/json">{{ search_scope | tojson }}</script>
+        <script>
+            (() => {
+                const stateNode = document.getElementById("search-state");
+                const resultsNode = document.querySelector("[data-search-results]");
+                const resultCopyNode = document.querySelector("[data-search-result-copy]");
+                const loadingNode = document.querySelector("[data-search-loading]");
+                const errorNode = document.querySelector("[data-search-error]");
+                const retryButton = document.querySelector("[data-search-retry]");
+                const endNode = document.querySelector("[data-search-end]");
+                const sentinelNode = document.querySelector("[data-search-sentinel]");
+
+                if (!stateNode || !resultsNode || !resultCopyNode || !loadingNode || !errorNode || !endNode || !sentinelNode) {
+                    return;
+                }
+
+                const searchState = JSON.parse(stateNode.textContent || "{}");
+                const details = {
+                    nextCursor: searchState.nextCursor || null,
+                    hasMore: Boolean(searchState.hasMore),
+                    loading: false,
+                    loadedCount: Number(searchState.loadedCount || 0),
+                    totalCount: Number(searchState.totalCount || 0),
+                };
+
+                const updateCopy = () => {
+                    const suffix = details.totalCount === 1 ? "match" : "matches";
+                    if (details.hasMore) {
+                        resultCopyNode.textContent = `Showing ${details.loadedCount} of ${details.totalCount} ranked ${suffix} for "${searchState.query}" in ${searchState.groupName}.`;
+                        return;
+                    }
+
+                    resultCopyNode.textContent = `Showing ${details.loadedCount} ranked ${suffix} for "${searchState.query}" in ${searchState.groupName}.`;
+                };
+
+                const syncState = () => {
+                    loadingNode.hidden = !details.loading;
+                    errorNode.hidden = true;
+                    endNode.hidden = details.hasMore;
+                    updateCopy();
+                };
+
+                const buildRequestUrl = () => {
+                    const params = new URLSearchParams();
+                    if (searchState.groupId) {
+                        params.set("group_id", String(searchState.groupId));
+                    }
+                    if (searchState.query) {
+                        params.set("q", searchState.query);
+                    }
+                    if (details.nextCursor) {
+                        params.set("cursor", details.nextCursor);
+                    }
+                    params.set("page_size", String(searchState.pageSize));
+                    return `${searchState.resultsEndpoint}?${params.toString()}`;
+                };
+
+                const appendResults = (html) => {
+                    if (!html.trim()) {
+                        return;
+                    }
+
+                    const template = document.createElement("template");
+                    template.innerHTML = html;
+                    const list = template.content.querySelector("[data-search-results-list]");
+                    const existingList = resultsNode.querySelector("[data-search-results-list]");
+
+                    if (list && existingList) {
+                        for (const child of Array.from(list.children)) {
+                            existingList.appendChild(child);
+                        }
+                        return;
+                    }
+
+                    if (list) {
+                        resultsNode.appendChild(list);
+                    }
+                };
+
+                const loadMoreResults = async () => {
+                    if (details.loading || !details.hasMore) {
+                        return;
+                    }
+
+                    details.loading = true;
+                    syncState();
+
+                    try {
+                        const response = await fetch(buildRequestUrl(), {
+                            headers: { "X-Requested-With": "fetch" },
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`Search request failed with ${response.status}`);
+                        }
+
+                        const payload = await response.json();
+                        if (payload.scope_key !== searchState.scopeKey) {
+                            throw new Error("Search scope changed during pagination.");
+                        }
+
+                        appendResults(payload.items_html || "");
+                        details.nextCursor = payload.next_cursor || null;
+                        details.hasMore = Boolean(payload.has_more);
+                        details.loadedCount += Number(payload.loaded_count || 0);
+                        details.loading = false;
+                        syncState();
+                    } catch (_error) {
+                        details.loading = false;
+                        loadingNode.hidden = true;
+                        errorNode.hidden = false;
+                    }
+                };
+
+                retryButton?.addEventListener("click", () => {
+                    errorNode.hidden = true;
+                    void loadMoreResults();
+                });
+
+                syncState();
+
+                const observer = new IntersectionObserver((entries) => {
+                    for (const entry of entries) {
+                        if (entry.isIntersecting) {
+                            void loadMoreResults();
+                        }
+                    }
+                }, {
+                    rootMargin: "300px 0px",
+                });
+
+                observer.observe(sentinelNode);
+            })();
+        </script>
+    {% else %}
+        <div class="empty-state card shadow-sm border-0">
+            <div class="card-body p-4">
+                <h2 class="h5">No search query yet</h2>
+                <p class="text-body-secondary mb-0">Enter a query in the navbar, then choose Search for ranked results or Filter for a narrowed timeline.</p>
+            </div>
+        </div>
+    {% endif %}
+{% endblock %}

@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="row justify-content-center">
+        <div class="col-xl-9">
+            <div class="d-flex justify-content-between align-items-center mb-4 gap-3">
+                <div>
+                    <h1 class="h3 mb-1">{{ entry.title }}</h1>
+                    <p class="text-body-secondary mb-0">{{ entry.display_date }} in {{ entry.group_name }}</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <a class="btn btn-outline-secondary" href="/">Back to timeline</a>
+                    <a class="btn btn-primary" href="/entries/{{ entry.id }}">Edit</a>
+                </div>
+            </div>
+
+            <article class="card shadow-sm border-0">
+                <div class="card-body p-4 p-lg-5">
+                    {% if entry.tags %}
+                        <div class="d-flex flex-wrap gap-2 mb-4">
+                            {% for tag in entry.tags %}
+                                <span class="badge text-bg-light border">{{ tag }}</span>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    <div class="entry-rich-text mb-4">{{ entry.final_text | render_entry_html | safe }}</div>
+
+                    {% if entry.source_url %}
+                        <section class="mb-4">
+                            <h2 class="h5 mb-3">Source URL</h2>
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">Type</th>
+                                            <th scope="col">URL</th>
+                                            <th scope="col">Note</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>Primary source</td>
+                                            <td><a href="{{ entry.source_url }}" target="_blank" rel="noreferrer">{{ entry.source_url }}</a></td>
+                                            <td class="text-body-secondary">Original source URL for this entry.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </section>
+                    {% endif %}
+
+                    <section>
+                        <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+                            <h2 class="h5 mb-0">Additional Links</h2>
+                            <span class="text-body-secondary small">{{ entry.links | length }} saved</span>
+                        </div>
+                        {% if entry.links %}
+                            <div class="table-responsive">
+                                <table class="table table-striped align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">#</th>
+                                            <th scope="col">Website</th>
+                                            <th scope="col">Brief Note</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for link in entry.links %}
+                                            <tr>
+                                                <td>{{ loop.index }}</td>
+                                                <td><a href="{{ link.url }}" target="_blank" rel="noreferrer">{{ link.url }}</a></td>
+                                                <td>{{ link.note }}</td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="border rounded p-3 text-body-secondary">No additional links saved for this event.</div>
+                        {% endif %}
+                    </section>
+                </div>
+            </article>
+        </div>
+    </div>
+{% endblock %}

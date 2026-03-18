@@ -1,0 +1,5 @@
+{% if preview_html %}
+    <div class="entry-rich-text">{{ preview_html | safe }}</div>
+{% else %}
+    <p class="entry-live-preview-empty text-body-secondary mb-0">{{ empty_message }}</p>
+{% endif %}

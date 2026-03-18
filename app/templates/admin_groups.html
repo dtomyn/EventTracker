@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="row g-4">
+        <div class="col-lg-5">
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-4">
+                    <h1 class="h3 mb-2">Timeline Groups</h1>
+                    <p class="text-body-secondary mb-4">Create a new top-level timeline group, rename an existing one, or delete an empty group.</p>
+
+                    {% if notice %}
+                        <div class="alert alert-success" role="status">{{ notice }}</div>
+                    {% endif %}
+
+                    <form method="post" action="/admin/groups" class="vstack gap-3">
+                        <div>
+                            <label class="form-label" for="name">New group name</label>
+                            <input class="form-control {% if create_group_errors.get('name') %}is-invalid{% endif %}" id="name" name="name" value="{{ create_group_name }}" placeholder="Agentic Coding">
+                            {% if create_group_errors.get('name') %}<div class="invalid-feedback">{{ create_group_errors['name'] }}</div>{% endif %}
+                        </div>
+                        <div>
+                            <label class="form-label" for="web-search-query">Web search query</label>
+                            <textarea class="form-control {% if create_group_errors.get('web_search_query') %}is-invalid{% endif %}" id="web-search-query" name="web_search_query" rows="3" placeholder="latest agentic coding model announcements">{{ create_group_web_search_query }}</textarea>
+                            {% if create_group_errors.get('web_search_query') %}<div class="invalid-feedback">{{ create_group_errors['web_search_query'] }}</div>{% endif %}
+                            <div class="form-text">Optional. Only used when <code>EVENTTRACKER_AI_PROVIDER=copilot</code>.</div>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch" id="new-group-default" name="is_default" {% if create_group_is_default %}checked{% endif %}>
+                            <label class="form-check-label" for="new-group-default">Make this the default group</label>
+                            <div class="form-text">Only one group can be the default at a time. Leave every group unchecked to default to All groups.</div>
+                        </div>
+                        <div class="d-flex justify-content-end">
+                            <button class="btn btn-primary" type="submit">Add Group</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-4 p-lg-5">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <div>
+                            <h2 class="h4 mb-1">Existing Groups</h2>
+                            <p class="text-body-secondary mb-0">Use these names to separate entirely different timeline collections.</p>
+                        </div>
+                        <a class="btn btn-link" href="/">Back to timeline</a>
+                    </div>
+
+                    {% if timeline_filters %}
+                        <div class="vstack gap-3">
+                            {% for timeline_filter in timeline_filters %}
+                                {% set group_errors = edit_group_errors.get(timeline_filter.id, {}) %}
+                                {% set group_values = edit_group_values.get(timeline_filter.id, {}) %}
+                                <form method="post" action="/admin/groups/{{ timeline_filter.id }}" class="border rounded-4 p-3 bg-white">
+                                    <div class="vstack gap-3">
+                                        <div class="flex-grow-1">
+                                            <label class="form-label" for="group-{{ timeline_filter.id }}">Group name</label>
+                                            <input class="form-control {% if group_errors.get('name') %}is-invalid{% endif %}" id="group-{{ timeline_filter.id }}" name="name" value="{{ group_values.get('name', timeline_filter.name) }}">
+                                            {% if group_errors.get('name') %}<div class="invalid-feedback">{{ group_errors['name'] }}</div>{% endif %}
+                                        </div>
+                                        <div>
+                                            <label class="form-label" for="group-web-search-{{ timeline_filter.id }}">Web search query</label>
+                                            <textarea class="form-control {% if group_errors.get('web_search_query') %}is-invalid{% endif %}" id="group-web-search-{{ timeline_filter.id }}" name="web_search_query" rows="3" placeholder="AI developer tools launches and benchmarks">{{ group_values.get('web_search_query', timeline_filter.web_search_query or '') }}</textarea>
+                                            {% if group_errors.get('web_search_query') %}<div class="invalid-feedback">{{ group_errors['web_search_query'] }}</div>{% endif %}
+                                            <div class="form-text mt-2">Optional. Only used when <code>EVENTTRACKER_AI_PROVIDER=copilot</code>.</div>
+                                            <div class="form-check form-switch mt-3">
+                                                <input class="form-check-input" type="checkbox" role="switch" id="group-default-{{ timeline_filter.id }}" name="is_default" {% if group_values.get('is_default', timeline_filter.is_default) %}checked{% endif %}>
+                                                <label class="form-check-label" for="group-default-{{ timeline_filter.id }}">Default group</label>
+                                            </div>
+                                            {% if delete_group_errors.get(timeline_filter.id) %}<div class="form-text text-danger mt-2">{{ delete_group_errors[timeline_filter.id] }}</div>{% endif %}
+                                            {% if timeline_filter.is_default %}<div class="form-text mt-2">This group opens first when no group is explicitly selected.</div>{% elif timeline_filter.entry_count > 0 %}<div class="form-text mt-2">Delete is disabled until this group has no entries.</div>{% else %}<div class="form-text mt-2">Leave every group unchecked to make All groups the default landing view.</div>{% endif %}
+                                        </div>
+                                        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                                            <div class="text-body-secondary small text-nowrap">{{ timeline_filter.entry_count }} entr{% if timeline_filter.entry_count == 1 %}y{% else %}ies{% endif %}</div>
+                                            <div class="d-flex justify-content-end gap-2">
+                                            <button class="btn btn-outline-secondary" type="submit">Save</button>
+                                            <button class="btn btn-outline-danger" type="submit" formaction="/admin/groups/{{ timeline_filter.id }}/delete" {% if timeline_filter.is_default or timeline_filter.entry_count > 0 %}disabled{% endif %}>Delete</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </form>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="empty-state card border-0">
+                            <div class="card-body px-0 pb-0">
+                                <p class="text-body-secondary mb-0">No timeline groups found.</p>
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

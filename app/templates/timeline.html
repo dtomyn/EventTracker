@@ -1,0 +1,1120 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="timeline-hero mb-4">
+        <div class="timeline-hero-header">
+            <div class="timeline-hero-copy">
+                {% if is_filtered %}
+                    <h1 class="h3 mb-1">Filtered Timeline</h1>
+                    <p class="text-body-secondary mb-0">Showing {{ match_count }} matching entr{% if match_count == 1 %}y{% else %}ies{% endif %} for "{{ query }}" in {{ selected_group_name }}.</p>
+                {% else %}
+                    <h1 class="h3 mb-1">{{ selected_group_name }} Timeline</h1>
+                {% endif %}
+            </div>
+
+            {% if timeline_filters %}
+                <details class="group-flyout">
+                    <summary class="group-flyout-trigger">
+                        <span class="group-flyout-label">Group</span>
+                        <span class="group-flyout-value">{{ selected_group_name }}</span>
+                        <span class="group-flyout-icon" aria-hidden="true"></span>
+                    </summary>
+                    <div class="group-flyout-menu" aria-label="Timeline groups">
+                        <a class="group-flyout-option {% if selected_group_name == 'All groups' %}is-active{% endif %}" href="/?group_id=all{% if query %}&q={{ query | urlencode }}{% endif %}">All groups</a>
+                        {% for timeline_filter in timeline_filters %}
+                            <a class="group-flyout-option {% if selected_group_id == timeline_filter.id %}is-active{% endif %}" href="/?group_id={{ timeline_filter.id }}{% if query %}&q={{ query | urlencode }}{% endif %}">{{ timeline_filter.name }}</a>
+                        {% endfor %}
+                    </div>
+                </details>
+            {% endif %}
+        </div>
+
+        {% if is_filtered %}
+            <div class="timeline-hero-actions mt-3">
+                <a class="btn btn-link px-0" href="/{% if selected_group_query_value %}?group_id={{ selected_group_query_value }}{% endif %}">Clear filter</a>
+            </div>
+        {% endif %}
+    </div>
+
+    {% if timeline_web_search.show_panel %}
+        <section class="timeline-web-card timeline-web-section mb-4" data-group-web-search-panel>
+            <button class="timeline-web-toggle" type="button" data-group-web-search-toggle aria-expanded="false" title="Expanding this section will initiate a web search for recent developments.">
+                <span class="timeline-web-toggle-spacer" aria-hidden="true"></span>
+                <span class="timeline-web-toggle-title">Recent Developments</span>
+                <span class="timeline-web-toggle-icon" aria-hidden="true"></span>
+            </button>
+
+            <div class="timeline-web-body" data-group-web-search-body hidden>
+                {% if timeline_web_search.provider_is_copilot %}
+                    <div class="timeline-web-card-header">
+                        <div class="timeline-web-card-actions ms-auto">
+                            <button class="btn btn-sm btn-outline-secondary" type="button" data-group-web-search-refresh>
+                                Refresh
+                            </button>
+                        </div>
+                </div>
+
+                    <div class="timeline-web-state" data-group-web-search-loading hidden>Searching the web...</div>
+                    <div class="timeline-web-state timeline-web-state-error" data-group-web-search-error hidden>
+                        <span>Could not load web results.</span>
+                        <button class="btn btn-sm btn-outline-secondary" type="button" data-group-web-search-refresh>Refresh</button>
+                    </div>
+                    <div class="timeline-web-state timeline-web-state-empty" data-group-web-search-empty hidden>
+                        <span>No related results found right now.</span>
+                        <button class="btn btn-sm btn-outline-secondary" type="button" data-group-web-search-refresh>Refresh</button>
+                    </div>
+                    <div class="timeline-web-progress" data-group-web-search-progress hidden>
+                        <details class="timeline-web-progress-shell" data-group-web-search-progress-shell open>
+                            <summary class="timeline-web-progress-summary">
+                                <div>
+                                    <div class="timeline-web-progress-label">Copilot trace</div>
+                                    <div class="timeline-web-progress-meta" data-group-web-search-progress-meta>Live updates</div>
+                                </div>
+                                <span class="timeline-web-progress-summary-icon" aria-hidden="true"></span>
+                            </summary>
+                            <div class="timeline-web-progress-controls" role="group" aria-label="Trace detail level">
+                                <button class="timeline-web-progress-mode" type="button" data-group-web-search-progress-mode="compact" aria-pressed="true">
+                                    Less detail
+                                </button>
+                                <button class="timeline-web-progress-mode" type="button" data-group-web-search-progress-mode="detailed" aria-pressed="false">
+                                    Detailed
+                                </button>
+                            </div>
+                            <div class="timeline-web-progress-log" data-group-web-search-progress-log></div>
+                        </details>
+                    </div>
+                    <div class="timeline-web-results" data-group-web-search-results hidden></div>
+                {% else %}
+                    <div class="timeline-web-state">Available when GitHub Copilot is the active AI provider.</div>
+                {% endif %}
+            </div>
+        </section>
+    {% endif %}
+
+    {% if timeline_groups %}
+        <div class="visualization-toolbar" aria-label="Timeline view controls">
+            <div>
+                <div class="visualization-toolbar-label">View</div>
+                <p class="visualization-toolbar-copy mb-0">Switch between detailed entries and summary views. Click a year card to drill into its months, then click a month card to open its event summaries.</p>
+            </div>
+            <div class="visualization-segmented-controls" role="group" aria-label="Timeline views">
+                <button class="visualization-view-button" type="button" data-zoom-target="details" aria-pressed="true">Details</button>
+                <button class="visualization-view-button" type="button" data-zoom-target="events" aria-pressed="false">Summaries</button>
+                <button class="visualization-view-button" type="button" data-zoom-target="months" aria-pressed="false">Months</button>
+                <button class="visualization-view-button" type="button" data-zoom-target="years" aria-pressed="false">Years</button>
+            </div>
+        </div>
+
+        <section class="visualization-surface" aria-label="Timeline views">
+            <div class="visualization-statusbar">
+                <span class="visualization-status-label">Current view</span>
+                <strong data-current-view-label>Details</strong>
+                <span class="visualization-status-context" data-current-view-context>{% if details_has_more %}Showing first batch{% else %}All loaded{% endif %}</span>
+            </div>
+            <nav class="visualization-history" aria-label="Drill path" data-view-history hidden></nav>
+            <div class="visualization-shell">
+                <div id="timeline-details-view" data-view-panel="details">
+                    <div data-detail-groups>
+                        {% include "partials/timeline_detail_groups.html" %}
+                    </div>
+                    <div class="timeline-fetch-state" data-detail-loading hidden>Loading more entries…</div>
+                    <div class="timeline-fetch-state timeline-fetch-state-error" data-detail-error hidden>
+                        <span>Could not load more entries.</span>
+                        <button class="btn btn-sm btn-outline-secondary" type="button" data-detail-retry>Retry</button>
+                    </div>
+                    <div class="timeline-fetch-state" data-detail-end {% if details_has_more %}hidden{% endif %}>You’ve reached the end of the timeline.</div>
+                    <div class="timeline-scroll-sentinel" data-detail-sentinel aria-hidden="true"></div>
+                </div>
+                <div id="visualization-content" data-view-panel="summary" data-current-view="events" hidden>
+                    <div class="timeline-summary-loading" data-summary-loading>Loading view…</div>
+                    <div class="timeline-fetch-state timeline-fetch-state-error" data-summary-error hidden>
+                        <span>Could not load this view.</span>
+                        <button class="btn btn-sm btn-outline-secondary" type="button" data-summary-retry>Retry</button>
+                    </div>
+                    <div data-summary-content hidden></div>
+                </div>
+            </div>
+        </section>
+
+        <script id="timeline-state" type="application/json">{{ timeline_scope | tojson }}</script>
+        <script>
+            (() => {
+                const stateNode = document.getElementById("timeline-state");
+                const panel = document.querySelector("[data-group-web-search-panel]");
+                const toggleButton = panel?.querySelector("[data-group-web-search-toggle]");
+                const bodyNode = panel?.querySelector("[data-group-web-search-body]");
+                const loadingNode = panel?.querySelector("[data-group-web-search-loading]");
+                const errorNode = panel?.querySelector("[data-group-web-search-error]");
+                const emptyNode = panel?.querySelector("[data-group-web-search-empty]");
+                const progressNode = panel?.querySelector("[data-group-web-search-progress]");
+                const progressShellNode = panel?.querySelector("[data-group-web-search-progress-shell]");
+                const progressMetaNode = panel?.querySelector("[data-group-web-search-progress-meta]");
+                const progressLogNode = panel?.querySelector("[data-group-web-search-progress-log]");
+                const progressModeButtons = Array.from(panel?.querySelectorAll("[data-group-web-search-progress-mode]") || []);
+                const resultsNode = panel?.querySelector("[data-group-web-search-results]");
+                const refreshButtons = Array.from(panel?.querySelectorAll("[data-group-web-search-refresh]") || []);
+
+                if (!stateNode || !panel || !toggleButton || !bodyNode) {
+                    return;
+                }
+
+                const timelineState = JSON.parse(stateNode.textContent || "{}");
+                const webSearchState = timelineState.groupWebSearch || {};
+                const requestTimeoutMs = Number(webSearchState.requestTimeoutMs) || 65000;
+                const streamEndpoint = webSearchState.streamEndpoint;
+                const supportsLiveWebSearch = Boolean(
+                    webSearchState.providerIsCopilot
+                    && webSearchState.groupId
+                    && webSearchState.hasQuery
+                    && streamEndpoint
+                );
+                let activeStream = null;
+                let activeRequestId = 0;
+                let inactivityTimeoutId = 0;
+                let progressEntries = [];
+                let progressMode = "compact";
+                let progressState = "idle";
+                let hasSettledSearch = false;
+
+                const escapeHtml = (value) => String(value)
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/\"/g, "&quot;")
+                    .replace(/'/g, "&#39;");
+
+                const setErrorMessage = (message) => {
+                    const errorMessageNode = errorNode.querySelector("span");
+                    if (errorMessageNode) {
+                        errorMessageNode.textContent = message;
+                    }
+                };
+
+                const setLoading = (isLoading) => {
+                    loadingNode.hidden = !isLoading;
+                    refreshButtons.forEach((button) => {
+                        button.disabled = isLoading;
+                    });
+                    if (isLoading) {
+                        progressState = "streaming";
+                        progressShellNode.open = true;
+                        errorNode.hidden = true;
+                        emptyNode.hidden = true;
+                        setErrorMessage("Could not load web results.");
+                    }
+                    renderProgress();
+                };
+
+                const setExpanded = (isExpanded) => {
+                    toggleButton.setAttribute("aria-expanded", isExpanded ? "true" : "false");
+                    bodyNode.hidden = !isExpanded;
+                    panel.classList.toggle("is-expanded", isExpanded);
+                };
+
+                const closeActiveStream = () => {
+                    if (activeStream) {
+                        activeStream.close();
+                        activeStream = null;
+                    }
+                    window.clearTimeout(inactivityTimeoutId);
+                    inactivityTimeoutId = 0;
+                };
+
+                const resetInactivityTimeout = (requestId) => {
+                    window.clearTimeout(inactivityTimeoutId);
+                    inactivityTimeoutId = window.setTimeout(() => {
+                        if (requestId !== activeRequestId) {
+                            return;
+                        }
+                        progressState = "error";
+                        closeActiveStream();
+                        resultsNode.hidden = true;
+                        emptyNode.hidden = true;
+                        setErrorMessage("Web search timed out. Try again.");
+                        errorNode.hidden = false;
+                        setLoading(false);
+                    }, requestTimeoutMs);
+                };
+
+                const humanizeEventType = (value) => {
+                    const normalized = String(value || "copilot.event")
+                        .replace(/[._]+/g, " ")
+                        .trim();
+                    if (!normalized) {
+                        return "Copilot event";
+                    }
+                    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+                };
+
+                const isAssistantStreamingDeltaEvent = (payload) => {
+                    if (!payload || payload.kind !== "copilot_event") {
+                        return false;
+                    }
+                    const eventType = String(payload.eventType || "");
+                    return /assistant[._]streaming[._]?delta$/i.test(eventType);
+                };
+
+                const isAssistantTextDeltaEvent = (payload) => {
+                    if (!payload || payload.kind !== "copilot_event") {
+                        return false;
+                    }
+                    if (!payload.message || isAssistantStreamingDeltaEvent(payload)) {
+                        return false;
+                    }
+                    const eventType = String(payload.eventType || "");
+                    return /assistant[._][a-z_]+[._]?delta$/i.test(eventType);
+                };
+
+                const canMergeProgressEntry = (previousPayload, nextPayload) => {
+                    if (!isAssistantTextDeltaEvent(previousPayload) || !isAssistantTextDeltaEvent(nextPayload)) {
+                        return false;
+                    }
+                    return String(previousPayload.phase || "") === String(nextPayload.phase || "")
+                        && String(previousPayload.eventType || "") === String(nextPayload.eventType || "");
+                };
+
+                const mergeProgressMessages = (previousMessage, nextMessage) => {
+                    const priorText = typeof previousMessage === "string" ? previousMessage : "";
+                    const nextText = typeof nextMessage === "string" ? nextMessage : "";
+                    return `${priorText}${nextText}`;
+                };
+
+                const shouldIncludeCompactTraceEntry = (payload) => {
+                    if (!payload || typeof payload !== "object") {
+                        return false;
+                    }
+                    if (payload.kind === "status" || payload.kind === "search_error") {
+                        return true;
+                    }
+                    if (payload.kind !== "copilot_event") {
+                        return Boolean(payload.message);
+                    }
+                    if (isAssistantStreamingDeltaEvent(payload)) {
+                        return false;
+                    }
+                    const eventType = String(payload.eventType || "");
+                    if (/error|fail/i.test(eventType)) {
+                        return true;
+                    }
+                    if (/tool/i.test(eventType)) {
+                        return true;
+                    }
+                    if (/start|complete|finish|done/i.test(eventType)) {
+                        return true;
+                    }
+                    if (/message|summary|progress/i.test(eventType) && payload.message) {
+                        return true;
+                    }
+                    return false;
+                };
+
+                const getVisibleProgressEntries = () => {
+                    if (progressMode === "detailed") {
+                        return progressEntries.slice();
+                    }
+                    const compactEntries = progressEntries.filter((payload) => shouldIncludeCompactTraceEntry(payload));
+                    if (compactEntries.length > 0) {
+                        return compactEntries;
+                    }
+                    return progressEntries.slice(-1);
+                };
+
+                const formatTraceLine = (payload) => {
+                    const prefix = payload.phase ? `[${payload.phase}] ` : "";
+                    if (payload.kind === "status") {
+                        return `${prefix}${payload.message || "Status update"}`;
+                    }
+                    if (payload.kind === "copilot_event") {
+                        if (isAssistantTextDeltaEvent(payload) && payload.message) {
+                            return `${prefix}${payload.eventType || "assistant.message.delta"}: ${payload.message}`;
+                        }
+                        const raw = payload.raw ? JSON.stringify(payload.raw) : "";
+                        const message = payload.message ? ` ${payload.message}` : "";
+                        return `${prefix}${payload.eventType || "copilot.event"}${message}${raw ? ` ${raw}` : ""}`;
+                    }
+                    if (payload.message) {
+                        return `${prefix}${payload.message}`;
+                    }
+                    return JSON.stringify(payload);
+                };
+
+                const formatCompactTraceLine = (payload) => {
+                    const prefix = payload.phase ? `[${payload.phase}] ` : "";
+                    if (payload.kind === "status" || payload.kind === "search_error") {
+                        return `${prefix}${payload.message || "Status update"}`;
+                    }
+                    if (payload.kind === "copilot_event") {
+                        if (isAssistantTextDeltaEvent(payload) && payload.message) {
+                            return `${prefix}${payload.message}`;
+                        }
+                        const label = humanizeEventType(payload.eventType);
+                        if (payload.message) {
+                            return `${prefix}${label}: ${payload.message}`;
+                        }
+                        return `${prefix}${label}`;
+                    }
+                    if (payload.message) {
+                        return `${prefix}${payload.message}`;
+                    }
+                    return `${prefix}Update`;
+                };
+
+                const updateProgressModeButtons = () => {
+                    progressModeButtons.forEach((button) => {
+                        const isActive = button.dataset.groupWebSearchProgressMode === progressMode;
+                        button.setAttribute("aria-pressed", isActive ? "true" : "false");
+                    });
+                };
+
+                const updateProgressMeta = (visibleEntries) => {
+                    if (progressEntries.length === 0) {
+                        progressMetaNode.textContent = progressState === "streaming" ? "Live updates" : "Waiting for updates";
+                        return;
+                    }
+                    const updateCount = visibleEntries.length;
+                    const updateLabel = updateCount === 1 ? "update" : "updates";
+                    const stateLabel = {
+                        streaming: "Streaming",
+                        complete: "Finished",
+                        error: "Stopped on error",
+                        idle: "Updates",
+                    }[progressState] || "Updates";
+                    if (progressMode === "compact" && visibleEntries.length < progressEntries.length) {
+                        const keyUpdateLabel = updateCount === 1 ? "key update" : "key updates";
+                        progressMetaNode.textContent = `${stateLabel} • ${updateCount} ${keyUpdateLabel} shown`;
+                        return;
+                    }
+                    progressMetaNode.textContent = `${stateLabel} • ${updateCount} ${updateLabel} shown`;
+                };
+
+                const renderProgress = () => {
+                    const visibleEntries = getVisibleProgressEntries();
+                    progressLogNode.innerHTML = "";
+                    visibleEntries.forEach((payload) => {
+                        const line = document.createElement("div");
+                        const kind = payload.kind === "search_error"
+                            ? "error"
+                            : payload.kind === "status"
+                                ? "status"
+                                : "trace";
+                        line.className = `timeline-web-progress-line is-${kind}`;
+                        line.textContent = progressMode === "detailed"
+                            ? formatTraceLine(payload)
+                            : formatCompactTraceLine(payload);
+                        progressLogNode.appendChild(line);
+                    });
+                    progressNode.hidden = progressEntries.length === 0;
+                    updateProgressModeButtons();
+                    updateProgressMeta(visibleEntries);
+                    if (!progressNode.hidden) {
+                        progressLogNode.scrollTop = progressLogNode.scrollHeight;
+                    }
+                };
+
+                const clearProgress = () => {
+                    progressEntries = [];
+                    progressState = "idle";
+                    progressShellNode.open = true;
+                    renderProgress();
+                };
+
+                const appendProgressLine = (payload, kind = "trace") => {
+                    if (!payload) {
+                        return;
+                    }
+                    const normalizedPayload = typeof payload === "string"
+                        ? { kind, message: payload }
+                        : { ...payload, kind: payload.kind || kind };
+                    if (isAssistantStreamingDeltaEvent(normalizedPayload)) {
+                        return;
+                    }
+                    const lastEntry = progressEntries.at(-1);
+                    if (canMergeProgressEntry(lastEntry, normalizedPayload)) {
+                        lastEntry.message = mergeProgressMessages(lastEntry.message, normalizedPayload.message);
+                        lastEntry.raw = normalizedPayload.raw ?? lastEntry.raw;
+                        renderProgress();
+                        return;
+                    }
+                    progressEntries.push(normalizedPayload);
+                    renderProgress();
+                };
+
+                const renderMetadata = (item) => {
+                    const parts = [item.source, item.article_date].filter(Boolean).map((value) => escapeHtml(value));
+                    if (parts.length === 0) {
+                        return "";
+                    }
+                    return `<div class="timeline-web-result-source">${parts.join(" <span aria-hidden=\"true\">&middot;</span> ")}</div>`;
+                };
+
+                const renderResults = (items) => {
+                    resultsNode.innerHTML = items.map((item) => `
+                        <article class="timeline-web-result">
+                            <a class="timeline-web-result-title" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer noopener">${escapeHtml(item.title)}</a>
+                            ${renderMetadata(item)}
+                            ${item.snippet ? `<p class="timeline-web-result-snippet mb-0">${escapeHtml(item.snippet)}</p>` : ""}
+                        </article>
+                    `).join("");
+                    resultsNode.hidden = items.length === 0;
+                    emptyNode.hidden = items.length !== 0;
+                };
+
+                const openResultStream = ({ forceRefresh = false } = {}) => {
+                    hasSettledSearch = false;
+                    activeRequestId += 1;
+                    const requestId = activeRequestId;
+                    closeActiveStream();
+                    clearProgress();
+                    setLoading(true);
+                    resultsNode.hidden = true;
+
+                    const params = new URLSearchParams({
+                        group_id: String(webSearchState.groupId),
+                        force_refresh: forceRefresh ? "1" : "0",
+                        _: String(Date.now()),
+                    });
+                    const source = new EventSource(`${streamEndpoint}?${params.toString()}`);
+                    activeStream = source;
+                    resetInactivityTimeout(requestId);
+
+                    source.addEventListener("status", (event) => {
+                        if (source !== activeStream || requestId !== activeRequestId) {
+                            return;
+                        }
+                        resetInactivityTimeout(requestId);
+                        const payload = JSON.parse(event.data || "{}");
+                        appendProgressLine(payload, "status");
+                    });
+
+                    source.addEventListener("copilot_event", (event) => {
+                        if (source !== activeStream || requestId !== activeRequestId) {
+                            return;
+                        }
+                        resetInactivityTimeout(requestId);
+                        const payload = JSON.parse(event.data || "{}");
+                        appendProgressLine(payload, "trace");
+                    });
+
+                    source.addEventListener("result", (event) => {
+                        if (source !== activeStream || requestId !== activeRequestId) {
+                            return;
+                        }
+                        resetInactivityTimeout(requestId);
+                        const payload = JSON.parse(event.data || "{}");
+                        errorNode.hidden = true;
+                        renderResults(Array.isArray(payload.items) ? payload.items : []);
+                    });
+
+                    source.addEventListener("search_error", (event) => {
+                        if (source !== activeStream || requestId !== activeRequestId) {
+                            return;
+                        }
+                        const payload = JSON.parse(event.data || "{}");
+                        hasSettledSearch = true;
+                        progressState = "error";
+                        closeActiveStream();
+                        resultsNode.hidden = true;
+                        emptyNode.hidden = true;
+                        setErrorMessage(payload.message || "Could not load web results.");
+                        errorNode.hidden = false;
+                        appendProgressLine(payload, "error");
+                        setLoading(false);
+                    });
+
+                    source.addEventListener("complete", () => {
+                        if (source !== activeStream || requestId !== activeRequestId) {
+                            return;
+                        }
+                        hasSettledSearch = true;
+                        progressState = "complete";
+                        closeActiveStream();
+                        setLoading(false);
+                        if (progressEntries.length > 0) {
+                            progressShellNode.open = false;
+                            renderProgress();
+                        }
+                    });
+
+                    source.onerror = () => {
+                        if (source !== activeStream || requestId !== activeRequestId) {
+                            return;
+                        }
+                        hasSettledSearch = true;
+                        progressState = "error";
+                        closeActiveStream();
+                        resultsNode.hidden = true;
+                        emptyNode.hidden = true;
+                        setErrorMessage("Lost the live web search stream. Try again.");
+                        errorNode.hidden = false;
+                        setLoading(false);
+                    };
+                };
+
+                toggleButton.addEventListener("click", () => {
+                    const shouldExpand = toggleButton.getAttribute("aria-expanded") !== "true";
+                    setExpanded(shouldExpand);
+                    if (!shouldExpand) {
+                        if (activeStream) {
+                            closeActiveStream();
+                            setLoading(false);
+                        }
+                        return;
+                    }
+                    if (supportsLiveWebSearch && !hasSettledSearch && !activeStream) {
+                        openResultStream();
+                    }
+                });
+
+                if (!supportsLiveWebSearch) {
+                    setExpanded(false);
+                    return;
+                }
+
+                if (!loadingNode || !errorNode || !emptyNode || !progressNode || !progressShellNode || !progressMetaNode || !progressLogNode || !resultsNode) {
+                    return;
+                }
+
+                progressModeButtons.forEach((button) => {
+                    button.addEventListener("click", () => {
+                        const nextMode = button.dataset.groupWebSearchProgressMode;
+                        if (!nextMode || nextMode === progressMode) {
+                            return;
+                        }
+                        progressMode = nextMode;
+                        renderProgress();
+                    });
+                });
+
+                refreshButtons.forEach((button) => {
+                    button.addEventListener("click", () => {
+                        setExpanded(true);
+                        openResultStream({ forceRefresh: true });
+                    });
+                });
+
+                setExpanded(false);
+                renderProgress();
+            })();
+        </script>
+        <script>
+            (() => {
+                const viewLabels = {
+                    details: "Details",
+                    events: "Summaries",
+                    months: "Months",
+                    years: "Years",
+                };
+
+                const detailPanel = document.getElementById("timeline-details-view");
+                const summaryPanel = document.getElementById("visualization-content");
+                const statusLabel = document.querySelector("[data-current-view-label]");
+                const statusContext = document.querySelector("[data-current-view-context]");
+                const controls = Array.from(document.querySelectorAll("[data-zoom-target]"));
+                const stateNode = document.getElementById("timeline-state");
+                const detailGroupsNode = detailPanel?.querySelector("[data-detail-groups]");
+                const detailLoadingNode = detailPanel?.querySelector("[data-detail-loading]");
+                const detailErrorNode = detailPanel?.querySelector("[data-detail-error]");
+                const detailEndNode = detailPanel?.querySelector("[data-detail-end]");
+                const detailRetryButton = detailPanel?.querySelector("[data-detail-retry]");
+                const detailSentinel = detailPanel?.querySelector("[data-detail-sentinel]");
+                const summaryLoadingNode = summaryPanel?.querySelector("[data-summary-loading]");
+                const summaryErrorNode = summaryPanel?.querySelector("[data-summary-error]");
+                const summaryRetryButton = summaryPanel?.querySelector("[data-summary-retry]");
+                const summaryContentNode = summaryPanel?.querySelector("[data-summary-content]");
+
+                if (!detailPanel || !summaryPanel || !statusLabel || !statusContext || !stateNode || controls.length === 0 || !detailGroupsNode || !detailSentinel || !summaryLoadingNode || !summaryErrorNode || !summaryContentNode) {
+                    return;
+                }
+
+                const timelineState = JSON.parse(stateNode.textContent || "{}");
+                let state = {
+                    view: "details",
+                    year: null,
+                    month: null,
+                };
+                let history = [];
+                let activeSummaryRequestId = 0;
+                const summaryCache = new Map();
+                const details = {
+                    nextCursor: timelineState.nextCursor || null,
+                    hasMore: Boolean(timelineState.hasMore),
+                    loading: false,
+                };
+
+                const escapeHtml = (value) => String(value)
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/\"/g, "&quot;")
+                    .replace(/'/g, "&#39;");
+
+                const monthLabel = (month, year) => new Date(year, month - 1, 1)
+                    .toLocaleString("en-US", { month: "long", year: "numeric" });
+
+                const monthFocusKey = (month, year) => `month-${year}-${String(month).padStart(2, "0")}`;
+
+                const statesEqual = (left, right) => (
+                    left.view === right.view
+                    && left.year === right.year
+                    && left.month === right.month
+                );
+
+                const historyNode = document.querySelector("[data-view-history]");
+
+                const describeState = (nextState) => {
+                    if (nextState.view === "details") {
+                        const loadedCount = detailGroupsNode.querySelectorAll("[data-entry-card]").length;
+                        if (details.hasMore) {
+                            return `${loadedCount} loaded, more available`;
+                        }
+                        return loadedCount === 1 ? "1 loaded entry" : `${loadedCount} loaded entries`;
+                    }
+                    if (nextState.view === "years") {
+                        return "All years";
+                    }
+                    if (nextState.view === "months" && nextState.year !== null) {
+                        return `Months in ${nextState.year}`;
+                    }
+                    if (nextState.view === "months") {
+                        return "All months";
+                    }
+                    if (nextState.view === "events" && nextState.month !== null && nextState.year !== null) {
+                        return `Summaries in ${monthLabel(nextState.month, nextState.year)}`;
+                    }
+                    if (nextState.view === "events" && nextState.year !== null) {
+                        return `Summaries in ${nextState.year}`;
+                    }
+                    return "All summaries";
+                };
+
+                const normalizeState = (nextState) => {
+                    if (nextState.view === "details") {
+                        return {
+                            view: "details",
+                            year: null,
+                            month: null,
+                        };
+                    }
+                    if (nextState.view === "years") {
+                        return {
+                            view: "years",
+                            year: null,
+                            month: null,
+                        };
+                    }
+                    if (nextState.view === "months") {
+                        return {
+                            view: "months",
+                            year: nextState.year ?? null,
+                            month: null,
+                        };
+                    }
+                    return {
+                        view: "events",
+                        year: nextState.year ?? null,
+                        month: nextState.month ?? null,
+                    };
+                };
+
+                const currentLocationLabel = () => {
+                    if (state.view === "events" && state.month !== null && state.year !== null) {
+                        return monthLabel(state.month, state.year);
+                    }
+                    if (state.view === "months" && state.year !== null) {
+                        return String(state.year);
+                    }
+                    return viewLabels[state.view];
+                };
+
+                const snapshotState = () => ({
+                    view: state.view,
+                    year: state.year,
+                    month: state.month,
+                });
+
+                const renderHistory = () => {
+                    if (!historyNode) {
+                        return;
+                    }
+
+                    if (history.length === 0) {
+                        historyNode.hidden = true;
+                        historyNode.innerHTML = "";
+                        return;
+                    }
+
+                    const lastIndex = history.length - 1;
+                    historyNode.hidden = false;
+                    historyNode.innerHTML = `
+                        <button class="visualization-history-back" type="button" data-history-index="${lastIndex}">Back</button>
+                        <ol class="visualization-history-list mb-0" role="list">
+                            ${history.map((item, index) => `
+                                <li class="visualization-history-item">
+                                    <button class="visualization-history-link" type="button" data-history-index="${index}">${escapeHtml(item.label)}</button>
+                                </li>
+                            `).join("")}
+                            <li class="visualization-history-item visualization-history-current" aria-current="page">${escapeHtml(currentLocationLabel())}</li>
+                        </ol>
+                    `;
+                };
+
+                const clearActiveFocus = () => {
+                    for (const element of document.querySelectorAll("[data-focus-key].is-active")) {
+                        element.classList.remove("is-active");
+                    }
+                };
+
+                const focusElement = (element) => {
+                    if (!(element instanceof HTMLElement)) {
+                        return;
+                    }
+
+                    element.classList.add("is-active");
+                    window.requestAnimationFrame(() => {
+                        if (typeof element.focus === "function") {
+                            element.focus({ preventScroll: true });
+                        }
+                        element.scrollIntoView({ behavior: "smooth", block: "center" });
+                    });
+                };
+
+                const syncFocusedElement = (focusKey = null) => {
+                    clearActiveFocus();
+
+                    if (!focusKey) {
+                        return;
+                    }
+
+                    const scope = state.view === "details" ? detailPanel : summaryPanel;
+                    const target = scope.querySelector(`[data-focus-key="${focusKey}"]`);
+                    focusElement(target);
+                };
+
+                const syncControls = () => {
+                    summaryPanel.dataset.currentView = state.view;
+                    detailPanel.hidden = state.view !== "details";
+                    summaryPanel.hidden = state.view === "details";
+                    statusLabel.textContent = viewLabels[state.view];
+                    statusContext.textContent = describeState(state);
+                    for (const control of controls) {
+                        const pressed = control.dataset.zoomTarget === state.view;
+                        control.setAttribute("aria-pressed", String(pressed));
+                    }
+                };
+
+                const buildRequestUrl = (endpoint, extraParams = {}) => {
+                    const params = new URLSearchParams();
+                    if (timelineState.groupId) {
+                        params.set("group_id", String(timelineState.groupId));
+                    }
+                    if (timelineState.query) {
+                        params.set("q", timelineState.query);
+                    }
+                    for (const [key, value] of Object.entries(extraParams)) {
+                        if (value === null || value === undefined || value === "") {
+                            continue;
+                        }
+                        params.set(key, String(value));
+                    }
+                    const queryString = params.toString();
+                    return queryString ? `${endpoint}?${queryString}` : endpoint;
+                };
+
+                const mergeDetailFragment = (html) => {
+                    if (!html.trim()) {
+                        return;
+                    }
+
+                    const template = document.createElement("template");
+                    template.innerHTML = html;
+                    const newGroups = Array.from(template.content.querySelectorAll("[data-group-key]"));
+                    const lastExistingGroup = detailGroupsNode.lastElementChild;
+                    const firstNewGroup = newGroups[0];
+
+                    if (
+                        lastExistingGroup instanceof HTMLElement
+                        && firstNewGroup instanceof HTMLElement
+                        && lastExistingGroup.dataset.groupKey
+                        && lastExistingGroup.dataset.groupKey === firstNewGroup.dataset.groupKey
+                    ) {
+                        const existingEntries = lastExistingGroup.querySelector("[data-group-entries]");
+                        const newEntries = firstNewGroup.querySelector("[data-group-entries]");
+                        if (existingEntries && newEntries) {
+                            for (const child of Array.from(newEntries.children)) {
+                                existingEntries.appendChild(child);
+                            }
+                            firstNewGroup.remove();
+                        }
+                    }
+
+                    detailGroupsNode.appendChild(template.content);
+                };
+
+                const syncDetailStates = () => {
+                    detailLoadingNode.hidden = !details.loading;
+                    detailErrorNode.hidden = true;
+                    detailEndNode.hidden = details.hasMore;
+                    statusContext.textContent = describeState(state);
+                };
+
+                const loadMoreDetails = async () => {
+                    if (state.view !== "details" || details.loading || !details.hasMore) {
+                        return;
+                    }
+
+                    details.loading = true;
+                    syncDetailStates();
+
+                    try {
+                        const response = await fetch(buildRequestUrl(timelineState.detailsEndpoint, {
+                            cursor: details.nextCursor,
+                            page_size: timelineState.pageSize,
+                        }), {
+                            headers: { "X-Requested-With": "fetch" },
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`Detail request failed with ${response.status}`);
+                        }
+
+                        const payload = await response.json();
+                        if (payload.scope_key !== timelineState.scopeKey) {
+                            throw new Error("Timeline scope changed during detail load.");
+                        }
+
+                        mergeDetailFragment(payload.items_html || "");
+                        details.nextCursor = payload.next_cursor || null;
+                        details.hasMore = Boolean(payload.has_more);
+                        details.loading = false;
+                        syncDetailStates();
+                    } catch (_error) {
+                        details.loading = false;
+                        detailLoadingNode.hidden = true;
+                        detailErrorNode.hidden = false;
+                    }
+                };
+
+                const summaryCacheKey = (nextState) => JSON.stringify({
+                    view: nextState.view,
+                    year: nextState.year,
+                    month: nextState.month,
+                });
+
+                const loadSummaryView = async (nextState, focusKey = null) => {
+                    const cacheKey = summaryCacheKey(nextState);
+                    if (summaryCache.has(cacheKey)) {
+                        summaryContentNode.innerHTML = summaryCache.get(cacheKey);
+                        summaryLoadingNode.hidden = true;
+                        summaryErrorNode.hidden = true;
+                        summaryContentNode.hidden = false;
+                        syncFocusedElement(focusKey);
+                        return;
+                    }
+
+                    const requestId = ++activeSummaryRequestId;
+                    summaryLoadingNode.hidden = false;
+                    summaryErrorNode.hidden = true;
+                    summaryContentNode.innerHTML = "";
+                    summaryContentNode.hidden = true;
+
+                    const endpoint = nextState.view === "years"
+                        ? timelineState.yearsEndpoint
+                        : (nextState.view === "months" ? timelineState.monthsEndpoint : timelineState.summariesEndpoint);
+
+                    try {
+                        const response = await fetch(buildRequestUrl(endpoint, {
+                            year: nextState.year,
+                            month: nextState.month,
+                        }), {
+                            headers: { "X-Requested-With": "fetch" },
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`Summary request failed with ${response.status}`);
+                        }
+
+                        const payload = await response.json();
+                        if (requestId !== activeSummaryRequestId || payload.scope_key !== timelineState.scopeKey) {
+                            return;
+                        }
+
+                        summaryCache.set(cacheKey, payload.items_html || "");
+                        summaryContentNode.innerHTML = payload.items_html || "";
+                        summaryLoadingNode.hidden = true;
+                        summaryErrorNode.hidden = true;
+                        summaryContentNode.hidden = false;
+                        syncFocusedElement(focusKey);
+                    } catch (_error) {
+                        if (requestId !== activeSummaryRequestId) {
+                            return;
+                        }
+                        summaryLoadingNode.hidden = true;
+                        summaryContentNode.hidden = true;
+                        summaryErrorNode.hidden = false;
+                    }
+                };
+
+                const openMonthView = (target) => {
+                    if (!(target instanceof HTMLElement)) {
+                        return;
+                    }
+
+                    const targetYear = target.dataset.targetYear ? Number(target.dataset.targetYear) : null;
+                    const targetMonth = target.dataset.targetMonth ? Number(target.dataset.targetMonth) : null;
+
+                    if (Number.isNaN(targetYear) || Number.isNaN(targetMonth) || targetYear === null || targetMonth === null) {
+                        return;
+                    }
+
+                    void setState({
+                        view: "months",
+                        year: targetYear,
+                        month: null,
+                    }, {
+                        clearHistory: true,
+                        focusKey: monthFocusKey(targetMonth, targetYear),
+                    });
+                };
+
+                const setState = async (nextState, options = {}) => {
+                    const normalizedState = normalizeState(nextState);
+                    const { clearHistory = false, pushSnapshot = null, replaceHistory = null, focusKey = null } = options;
+
+                    if (clearHistory) {
+                        history = [];
+                    } else if (Array.isArray(replaceHistory)) {
+                        history = replaceHistory;
+                    } else if (pushSnapshot) {
+                        history = [...history, pushSnapshot];
+                    }
+
+                    const hasChanged = !statesEqual(normalizedState, state);
+                    state = normalizedState;
+
+                    syncControls();
+                    renderHistory();
+
+                    if (state.view === "details") {
+                        syncFocusedElement(focusKey);
+                    } else if (hasChanged || !summaryContentNode.innerHTML.trim()) {
+                        await loadSummaryView(state, focusKey);
+                    } else {
+                        syncFocusedElement(focusKey);
+                    }
+
+                    return true;
+                };
+
+                syncControls();
+                renderHistory();
+                syncDetailStates();
+
+                for (const control of controls) {
+                    control.addEventListener("click", async () => {
+                        await setState({
+                            view: control.dataset.zoomTarget || "details",
+                            year: null,
+                            month: null,
+                        }, { clearHistory: true });
+                    });
+                }
+
+                detailPanel.addEventListener("click", (event) => {
+                    const target = event.target.closest("[data-open-month-view]");
+                    if (!(target instanceof HTMLElement)) {
+                        return;
+                    }
+
+                    openMonthView(target);
+                });
+
+                summaryPanel.addEventListener("click", async (event) => {
+                    const monthTarget = event.target.closest("[data-open-month-view]");
+                    if (monthTarget instanceof HTMLElement) {
+                        openMonthView(monthTarget);
+                        return;
+                    }
+
+                    const target = event.target.closest("[data-drill-view]");
+                    if (!(target instanceof HTMLElement)) {
+                        return;
+                    }
+
+                    const drillView = target.dataset.drillView;
+                    if (!drillView) {
+                        return;
+                    }
+
+                    const drillYear = target.dataset.drillYear ? Number(target.dataset.drillYear) : null;
+                    const drillMonth = target.dataset.drillMonth ? Number(target.dataset.drillMonth) : null;
+                    const drillLabel = target.dataset.drillLabel || viewLabels[drillView] || "Selection";
+                    const focusKey = target.dataset.focusKey || null;
+
+                    await setState({
+                        view: drillView,
+                        year: Number.isNaN(drillYear) ? null : drillYear,
+                        month: Number.isNaN(drillMonth) ? null : drillMonth,
+                    }, {
+                        pushSnapshot: {
+                            label: drillLabel,
+                            focusKey,
+                            state: snapshotState(),
+                        },
+                    });
+                });
+
+                historyNode?.addEventListener("click", async (event) => {
+                    const target = event.target.closest("[data-history-index]");
+                    if (!(target instanceof HTMLElement)) {
+                        return;
+                    }
+
+                    const historyIndex = Number(target.dataset.historyIndex);
+                    if (Number.isNaN(historyIndex) || historyIndex < 0 || historyIndex >= history.length) {
+                        return;
+                    }
+
+                    const snapshot = history[historyIndex];
+                    await setState(snapshot.state, {
+                        replaceHistory: history.slice(0, historyIndex),
+                        focusKey: snapshot.focusKey,
+                    });
+                });
+
+                detailRetryButton?.addEventListener("click", () => {
+                    detailErrorNode.hidden = true;
+                    void loadMoreDetails();
+                });
+
+                summaryRetryButton?.addEventListener("click", () => {
+                    summaryErrorNode.hidden = true;
+                    void loadSummaryView(state);
+                });
+
+                const observer = new IntersectionObserver((entries) => {
+                    for (const entry of entries) {
+                        if (entry.isIntersecting) {
+                            void loadMoreDetails();
+                        }
+                    }
+                }, {
+                    rootMargin: "300px 0px",
+                });
+
+                observer.observe(detailSentinel);
+            })();
+        </script>
+    {% else %}
+        <div class="empty-state card shadow-sm border-0">
+            <div class="card-body p-4">
+                {% if is_filtered %}
+                    <h2 class="h5">No matching entries</h2>
+                    <p class="text-body-secondary mb-0">Try a different English query or clear the filter.</p>
+                {% else %}
+                    <h2 class="h5">No entries yet</h2>
+                    <p class="text-body-secondary mb-0">Create your first event to start building the timeline.</p>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+{% endblock %}

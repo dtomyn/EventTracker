@@ -1,0 +1,32 @@
+<article class="card border-0 shadow-sm timeline-card" id="entry-{{ entry.id }}" data-entry-card data-entry-id="{{ entry.id }}" data-focus-key="entry-{{ entry.id }}" tabindex="-1">
+    <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+            <div>
+                <div class="d-flex flex-wrap align-items-center gap-2 text-body-secondary small mb-2">
+                    <span>{{ entry.display_date }}</span>
+                    <span class="badge rounded-pill text-bg-light border">{{ entry.group_name }}</span>
+                </div>
+                {% if entry.title %}
+                    <div class="fw-bold mb-2">{{ entry.title }}</div>
+                {% endif %}
+                <div class="entry-rich-text">{{ entry.final_text | render_entry_html | safe }}</div>
+            </div>
+            <div class="d-flex gap-2">
+                <a class="btn btn-sm btn-outline-secondary" href="/entries/{{ entry.id }}/view">View</a>
+                <a class="btn btn-sm btn-outline-secondary" href="/entries/{{ entry.id }}">Edit</a>
+            </div>
+        </div>
+        {% if entry.tags %}
+            <div class="d-flex flex-wrap gap-2 mb-2">
+                {% for tag in entry.tags %}
+                    <span class="badge text-bg-light border">{{ tag }}</span>
+                {% endfor %}
+            </div>
+        {% endif %}
+        {% if entry.source_url %}
+            <div>
+                <a href="{{ entry.source_url }}" class="small link-secondary" target="_blank" rel="noreferrer">{{ entry.source_url }}</a>
+            </div>
+        {% endif %}
+    </div>
+</article>

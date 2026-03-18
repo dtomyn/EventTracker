@@ -1,0 +1,31 @@
+[project]
+name = "EventTracker"
+version = "0.1.0"
+description = "Local-first personal timeline and journal app built with FastAPI and SQLite."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "beautifulsoup4==4.13.3",
+    "fastapi==0.116.1",
+    "github-copilot-sdk",
+    "httpx==0.28.1",
+    "jinja2==3.1.6",
+    "openai>=1.0.0,<2.0.0",
+    "python-dotenv==1.2.2",
+    "python-multipart==0.0.20",
+    "sqlite-vec==0.1.6",
+    "uvicorn[standard]==0.35.0",
+]
+
+[dependency-groups]
+dev = [
+    "playwright>=1.52,<2",
+    "pytest>=8.4,<9",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+

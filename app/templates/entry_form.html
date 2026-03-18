@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="row justify-content-center">
+        <div class="col-xl-9">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h1 class="h3 mb-1">{{ page_title }}</h1>
+                    <p class="text-body-secondary mb-0">Entries are stored locally in SQLite. Event summaries support basic HTML formatting.</p>
+                </div>
+                <a class="btn btn-link" href="/">Back to timeline</a>
+            </div>
+
+            <form method="post" action="{% if entry_id %}/entries/{{ entry_id }}{% else %}/entries/new{% endif %}" class="card shadow-sm border-0">
+                <div class="card-body p-4 p-lg-5">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label" for="group_id">Timeline Group</label>
+                            <select class="form-select {% if form_state.errors.get('group_id') %}is-invalid{% endif %}" id="group_id" name="group_id">
+                                <option value="">Select a group</option>
+                                {% for timeline_filter in timeline_filters %}
+                                    <option value="{{ timeline_filter.id }}" {% if form_state.values.get('group_id') == (timeline_filter.id | string) %}selected{% endif %}>{{ timeline_filter.name }}</option>
+                                {% endfor %}
+                            </select>
+                            {% if form_state.errors.get('group_id') %}<div class="invalid-feedback">{{ form_state.errors['group_id'] }}</div>{% endif %}
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label" for="event_year">Year</label>
+                            <input class="form-control {% if form_state.errors.get('event_year') %}is-invalid{% endif %}" id="event_year" name="event_year" value="{{ form_state.values.get('event_year', '') }}" inputmode="numeric">
+                            {% if form_state.errors.get('event_year') %}<div class="invalid-feedback">{{ form_state.errors['event_year'] }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="event_month">Month</label>
+                            <input class="form-control {% if form_state.errors.get('event_month') %}is-invalid{% endif %}" id="event_month" name="event_month" value="{{ form_state.values.get('event_month', '') }}" inputmode="numeric">
+                            {% if form_state.errors.get('event_month') %}<div class="invalid-feedback">{{ form_state.errors['event_month'] }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="event_day">Day</label>
+                            <input class="form-control {% if form_state.errors.get('event_day') %}is-invalid{% endif %}" id="event_day" name="event_day" value="{{ form_state.values.get('event_day', '') }}" inputmode="numeric">
+                            {% if form_state.errors.get('event_day') %}<div class="invalid-feedback">{{ form_state.errors['event_day'] }}</div>{% endif %}
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label" for="title">Title</label>
+                            <input class="form-control {% if form_state.errors.get('title') %}is-invalid{% endif %}" id="title" name="title" value="{{ form_state.values.get('title', '') }}">
+                            {% if form_state.errors.get('title') %}<div class="invalid-feedback">{{ form_state.errors['title'] }}</div>{% endif %}
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label" for="source_url">Source URL</label>
+                            <input class="form-control {% if form_state.errors.get('source_url') %}is-invalid{% endif %}" id="source_url" name="source_url" value="{{ form_state.values.get('source_url', '') }}" placeholder="https://example.com/article">
+                            {% if form_state.errors.get('source_url') %}<div class="invalid-feedback">{{ form_state.errors['source_url'] }}</div>{% endif %}
+                            <div class="form-text">Only the URL is stored. Extracted article content is kept in memory only during generation.</div>
+                        </div>
+
+                        <div class="col-12">
+                            <div class="d-flex justify-content-between align-items-center gap-3 mb-2">
+                                <div>
+                                    <label class="form-label mb-0">Additional Links</label>
+                                    <div class="form-text">Each extra URL requires a short note explaining why it was added.</div>
+                                </div>
+                                <button class="btn btn-outline-secondary btn-sm" type="button" id="add-link-row">Add Link</button>
+                            </div>
+                            <div class="vstack gap-3" id="entry-links-container">
+                                {% for link_row in form_state.link_rows %}
+                                    {% set row_index = loop.index0 %}
+                                    <div class="border rounded p-3" data-link-row>
+                                        <div class="row g-3 align-items-start">
+                                            <div class="col-md-6">
+                                                <label class="form-label" for="link_url_{{ row_index }}">URL</label>
+                                                <input class="form-control {% if form_state.errors.get('link_url_' ~ row_index) %}is-invalid{% endif %}" id="link_url_{{ row_index }}" name="link_url" value="{{ link_row.url }}" placeholder="https://example.com/reference">
+                                                {% if form_state.errors.get('link_url_' ~ row_index) %}<div class="invalid-feedback">{{ form_state.errors['link_url_' ~ row_index] }}</div>{% endif %}
+                                            </div>
+                                            <div class="col-md-5">
+                                                <label class="form-label" for="link_note_{{ row_index }}">Brief Note</label>
+                                                <input class="form-control {% if form_state.errors.get('link_note_' ~ row_index) %}is-invalid{% endif %}" id="link_note_{{ row_index }}" name="link_note" value="{{ link_row.note }}" placeholder="Why this link matters">
+                                                {% if form_state.errors.get('link_note_' ~ row_index) %}<div class="invalid-feedback">{{ form_state.errors['link_note_' ~ row_index] }}</div>{% endif %}
+                                            </div>
+                                            <div class="col-md-1 d-flex align-items-end">
+                                                <button class="btn btn-outline-danger w-100" type="button" data-remove-link-row aria-label="Remove link row">×</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <div class="d-flex justify-content-between align-items-center gap-3 mb-2">
+                                <label class="form-label mb-0" for="final_text">Event Summary</label>
+                                <button class="btn btn-outline-secondary btn-sm" type="button" id="generate-button">Generate</button>
+                            </div>
+                            <div id="generated-preview-container" class="mb-2">
+                                {% include "partials/generated_preview.html" %}
+                            </div>
+                            <textarea class="form-control {% if form_state.errors.get('final_text') %}is-invalid{% endif %}" id="final_text" name="final_text" rows="8" data-html-preview-source data-preview-target="final-text-preview">{{ form_state.values.get('final_text', '') }}</textarea>
+                            {% if form_state.errors.get('final_text') %}<div class="invalid-feedback">{{ form_state.errors['final_text'] }}</div>{% endif %}
+                            <div class="form-text">Supports basic HTML such as &lt;b&gt;, &lt;i&gt;, &lt;ul&gt;, &lt;ol&gt;, and &lt;li&gt;.</div>
+                            <div class="entry-live-preview mt-3">
+                                <div class="entry-live-preview-label">Live preview</div>
+                                <div class="entry-live-preview-body" id="final-text-preview" aria-live="polite">
+                                    {% set preview_html = form_state.values.get('final_text', '') | render_entry_html %}
+                                    {% set empty_message = 'Event summary preview updates here as you type.' %}
+                                    {% include "partials/html_preview_content.html" %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label" for="tags">Tags</label>
+                            <input class="form-control" id="tags" name="tags" value="{{ form_state.values.get('tags', '') }}" placeholder="research, milestone, release">
+                            <div class="form-text">Comma-separated. Tags are normalized and deduplicated on save.</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-transparent d-flex justify-content-end gap-2 p-4 pt-0">
+                    <a class="btn btn-link" href="/">Cancel</a>
+                    <button class="btn btn-primary" type="submit">Save Entry</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const generateButton = document.getElementById('generate-button');
+        const previewContainer = document.getElementById('generated-preview-container');
+        const linkContainer = document.getElementById('entry-links-container');
+        const addLinkRowButton = document.getElementById('add-link-row');
+        const finalTextField = document.getElementById('final_text');
+        const htmlPreviewEndpoint = '/entries/preview-html';
+        const htmlPreviewTimers = new WeakMap();
+        const htmlPreviewControllers = new WeakMap();
+
+        function renderGenerationFeedback(feedbackClass = 'text-body-secondary', feedbackMessage = '') {
+            return `
+                <input type="hidden" id="generated_text" name="generated_text" value="">
+                <div id="generate-feedback" class="form-text ${feedbackClass}">${feedbackMessage}</div>
+                <input type="hidden" id="generated_suggested_title" value="">
+                <input type="hidden" id="generated_suggested_event_year" value="">
+                <input type="hidden" id="generated_suggested_event_month" value="">
+                <input type="hidden" id="generated_suggested_event_day" value="">
+            `;
+        }
+
+        function scheduleHtmlPreview(field, delay = 160) {
+            const existingTimer = htmlPreviewTimers.get(field);
+            if (existingTimer) {
+                window.clearTimeout(existingTimer);
+            }
+
+            const timerId = window.setTimeout(() => {
+                htmlPreviewTimers.delete(field);
+                void refreshHtmlPreview(field);
+            }, delay);
+            htmlPreviewTimers.set(field, timerId);
+        }
+
+        async function refreshHtmlPreview(field) {
+            const previewTargetId = field.dataset.previewTarget;
+            const previewTarget = previewTargetId ? document.getElementById(previewTargetId) : null;
+
+            if (!previewTarget) {
+                return;
+            }
+
+            const existingController = htmlPreviewControllers.get(field);
+            if (existingController) {
+                existingController.abort();
+            }
+
+            const controller = new AbortController();
+            htmlPreviewControllers.set(field, controller);
+
+            const payload = new FormData();
+            payload.append('raw_html', field.value);
+
+            try {
+                const response = await fetch(htmlPreviewEndpoint, {
+                    method: 'POST',
+                    body: payload,
+                    signal: controller.signal,
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Preview request failed with ${response.status}`);
+                }
+
+                previewTarget.innerHTML = await response.text();
+            } catch {
+                if (controller.signal.aborted) {
+                    return;
+                }
+                previewTarget.innerHTML = '<p class="entry-live-preview-empty text-danger mb-0">Preview is temporarily unavailable.</p>';
+            } finally {
+                if (htmlPreviewControllers.get(field) === controller) {
+                    htmlPreviewControllers.delete(field);
+                }
+            }
+        }
+
+        function createLinkRow(url = '', note = '') {
+            const rowIndex = linkContainer.querySelectorAll('[data-link-row]').length;
+            const wrapper = document.createElement('div');
+            wrapper.className = 'border rounded p-3';
+            wrapper.setAttribute('data-link-row', '');
+            wrapper.innerHTML = `
+                <div class="row g-3 align-items-start">
+                    <div class="col-md-6">
+                        <label class="form-label" for="link_url_${rowIndex}">URL</label>
+                        <input class="form-control" id="link_url_${rowIndex}" name="link_url" value="${url}" placeholder="https://example.com/reference">
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label" for="link_note_${rowIndex}">Brief Note</label>
+                        <input class="form-control" id="link_note_${rowIndex}" name="link_note" value="${note}" placeholder="Why this link matters">
+                    </div>
+                    <div class="col-md-1 d-flex align-items-end">
+                        <button class="btn btn-outline-danger w-100" type="button" data-remove-link-row aria-label="Remove link row">×</button>
+                    </div>
+                </div>
+            `;
+            return wrapper;
+        }
+
+        function ensureAtLeastOneLinkRow() {
+            if (!linkContainer.querySelector('[data-link-row]')) {
+                linkContainer.appendChild(createLinkRow());
+            }
+        }
+
+        addLinkRowButton.addEventListener('click', () => {
+            linkContainer.appendChild(createLinkRow());
+        });
+
+        linkContainer.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-remove-link-row]');
+            if (!button) {
+                return;
+            }
+            button.closest('[data-link-row]')?.remove();
+            ensureAtLeastOneLinkRow();
+        });
+
+        function applySuggestedMetadata() {
+            const suggestedTitle = document.getElementById('generated_suggested_title');
+            const suggestedYear = document.getElementById('generated_suggested_event_year');
+            const suggestedMonth = document.getElementById('generated_suggested_event_month');
+            const suggestedDay = document.getElementById('generated_suggested_event_day');
+
+            if (suggestedTitle && suggestedTitle.value) {
+                document.getElementById('title').value = suggestedTitle.value;
+            }
+            if (suggestedYear && suggestedYear.value) {
+                document.getElementById('event_year').value = suggestedYear.value;
+            }
+            if (suggestedMonth && suggestedMonth.value) {
+                document.getElementById('event_month').value = suggestedMonth.value;
+            }
+            if (suggestedDay) {
+                document.getElementById('event_day').value = suggestedDay.value;
+            }
+        }
+
+        generateButton.addEventListener('click', async () => {
+            const currentSummaryText = finalTextField.value;
+            previewContainer.innerHTML = renderGenerationFeedback('text-body-secondary', 'Generating summary...');
+            document.getElementById('generated_text').value = currentSummaryText;
+
+            const payload = new FormData();
+            payload.append('title', document.getElementById('title').value);
+            payload.append('source_url', document.getElementById('source_url').value);
+            payload.append('generated_text', currentSummaryText);
+
+            try {
+                const response = await fetch('/entries/generate', {
+                    method: 'POST',
+                    body: payload,
+                });
+                const responseHtml = await response.text();
+                previewContainer.innerHTML = responseHtml;
+                if (response.ok) {
+                    const generatedText = document.getElementById('generated_text');
+                    if (generatedText) {
+                        finalTextField.value = generatedText.value;
+                        scheduleHtmlPreview(finalTextField, 0);
+                        finalTextField.focus();
+                    }
+                    applySuggestedMetadata();
+                }
+            } catch {
+                previewContainer.innerHTML = renderGenerationFeedback('text-danger', 'Summary generation request failed. You can still write manually.');
+                document.getElementById('generated_text').value = currentSummaryText;
+            }
+        });
+
+        document.addEventListener('input', (event) => {
+            if (!(event.target instanceof HTMLTextAreaElement)) {
+                return;
+            }
+            if (!event.target.hasAttribute('data-html-preview-source')) {
+                return;
+            }
+            scheduleHtmlPreview(event.target);
+        });
+
+        ensureAtLeastOneLinkRow();
+    </script>
+{% endblock %}

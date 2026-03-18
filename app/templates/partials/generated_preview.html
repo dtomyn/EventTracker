@@ -1,0 +1,13 @@
+{% set current_generated_text = generated_text if generated_text is defined else form_state.values.get('generated_text', '') %}
+<input type="hidden" id="generated_text" name="generated_text" value="{{ current_generated_text }}">
+<div id="generate-feedback" class="form-text{% if feedback_class is defined and feedback_class %} {{ feedback_class }}{% endif %}">{{ feedback_message if feedback_message is defined else '' }}</div>
+<input type="hidden" id="generated_suggested_title" value="{{ suggested_title if suggested_title is defined else '' }}">
+<input type="hidden" id="generated_suggested_event_year" value="{{ suggested_event_year if suggested_event_year is defined else '' }}">
+<input type="hidden" id="generated_suggested_event_month" value="{{ suggested_event_month if suggested_event_month is defined else '' }}">
+<input type="hidden" id="generated_suggested_event_day" value="{{ suggested_event_day if suggested_event_day is defined else '' }}">
+{% if suggested_title is defined and suggested_title %}
+	<div class="small text-body-secondary mt-2">Suggested title: <strong>{{ suggested_title }}</strong></div>
+{% endif %}
+{% if suggested_event_year is defined and suggested_event_year %}
+	<div class="small text-body-secondary">Suggested date: {{ suggested_event_year }}{% if suggested_event_month is defined and suggested_event_month %}-{{ suggested_event_month }}{% endif %}{% if suggested_event_day is defined and suggested_event_day %}-{{ suggested_event_day }}{% endif %}</div>
+{% endif %}

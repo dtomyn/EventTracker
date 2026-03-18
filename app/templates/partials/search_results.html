@@ -1,0 +1,37 @@
+{% if search_results %}
+    <div class="vstack gap-3" data-search-results-list>
+        {% for result in search_results %}
+            <article class="card border-0 shadow-sm timeline-card">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
+                        <div>
+                            <div class="text-body-secondary small mb-2">{{ result.entry.display_date }}</div>
+                            {% if result.entry.title %}
+                                <div class="fw-bold mb-2">{{ result.entry.title }}</div>
+                            {% endif %}
+                            <div class="search-snippet">{{ result.snippet | render_search_snippet | safe }}</div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <a class="btn btn-sm btn-outline-secondary" href="/entries/{{ result.entry.id }}/view">View</a>
+                            <a class="btn btn-sm btn-outline-secondary" href="/entries/{{ result.entry.id }}">Edit</a>
+                        </div>
+                    </div>
+                    {% if result.entry.tags %}
+                        <div class="d-flex flex-wrap gap-2 mt-3">
+                            {% for tag in result.entry.tags %}
+                                <span class="badge text-bg-light border">{{ tag }}</span>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+            </article>
+        {% endfor %}
+    </div>
+{% elif show_empty_state | default(true) %}
+    <div class="empty-state card shadow-sm border-0">
+        <div class="card-body p-4">
+            <h2 class="h5">No search matches</h2>
+            <p class="text-body-secondary mb-0">Try a different term or create a new entry.</p>
+        </div>
+    </div>
+{% endif %}

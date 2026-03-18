@@ -1,0 +1,26 @@
+{% for group in timeline_groups %}
+    <section
+        class="timeline-group mb-5"
+        data-group-key="{{ group.entries[0].event_year }}-{{ '%02d' | format(group.entries[0].event_month) }}"
+    >
+        <div class="timeline-heading">
+            <h2 class="h5 mb-0">
+                <button
+                    class="timeline-heading-button"
+                    type="button"
+                    data-open-month-view
+                    data-target-year="{{ group.entries[0].event_year }}"
+                    data-target-month="{{ group.entries[0].event_month }}"
+                    aria-label="Open {{ group.label }} in the Months view"
+                >
+                    {{ group.label }}
+                </button>
+            </h2>
+        </div>
+        <div class="vstack gap-3 mt-3" data-group-entries>
+            {% for entry in group.entries %}
+                {% include "partials/entry_card.html" %}
+            {% endfor %}
+        </div>
+    </section>
+{% endfor %}

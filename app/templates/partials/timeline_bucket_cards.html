@@ -1,0 +1,25 @@
+{% if buckets %}
+    <section class="visualization-summary" aria-label="Timeline buckets">
+        {% for bucket in buckets %}
+            <button
+                class="visualization-summary-card visualization-summary-card-button"
+                type="button"
+                data-drill-view="{{ bucket.drill_view }}"
+                {% if bucket.drill_year is not none %}data-drill-year="{{ bucket.drill_year }}"{% endif %}
+                {% if bucket.drill_month is not none %}data-drill-month="{{ bucket.drill_month }}"{% endif %}
+                data-drill-label="{{ bucket.label }}"
+                data-focus-key="{{ bucket.focus_key }}"
+                aria-label="Open {{ bucket.label }}"
+            >
+                <div class="visualization-summary-label">{{ bucket.label }}</div>
+                <div class="visualization-summary-count">{{ bucket.count }}</div>
+                <div class="visualization-summary-copy">{% if bucket.count == 1 %}event{% else %}events{% endif %}</div>
+                <div class="visualization-summary-action">Click to drill in</div>
+            </button>
+        {% endfor %}
+    </section>
+{% else %}
+    <div class="visualization-empty-state">
+        <p class="mb-0">No timeline buckets match the current drill-down.</p>
+    </div>
+{% endif %}

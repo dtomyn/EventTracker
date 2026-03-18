@@ -1,0 +1,39 @@
+{% if timeline_groups %}
+    {% for group in timeline_groups %}
+        <section class="visualization-group">
+            <div class="visualization-heading">
+                <h2 class="h5 mb-0">
+                    <button
+                        class="visualization-heading-button"
+                        type="button"
+                        data-open-month-view
+                        data-target-year="{{ group.entries[0].event_year }}"
+                        data-target-month="{{ group.entries[0].event_month }}"
+                        aria-label="Open {{ group.label }} in the Months view"
+                    >
+                        {{ group.label }}
+                    </button>
+                </h2>
+            </div>
+            <ol class="visualization-list list-unstyled mb-0">
+                {% for entry in group.entries %}
+                    <li class="visualization-item">
+                        <div class="visualization-node" aria-hidden="true"></div>
+                        <div class="visualization-content">
+                            <div class="visualization-date">{{ entry.display_date }}</div>
+                            <a class="visualization-title-link" href="/entries/{{ entry.id }}/view">
+                                <span class="visualization-title">{{ entry.title }}</span>
+                            </a>
+                            <a class="visualization-inline-link" href="/entries/{{ entry.id }}/view">View</a>
+                            <a class="visualization-inline-link" href="/entries/{{ entry.id }}">Edit</a>
+                        </div>
+                    </li>
+                {% endfor %}
+            </ol>
+        </section>
+    {% endfor %}
+{% else %}
+    <div class="visualization-empty-state">
+        <p class="mb-0">No events match the current drill-down.</p>
+    </div>
+{% endif %}
