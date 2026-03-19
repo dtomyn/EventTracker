@@ -5,13 +5,16 @@ from contextlib import asynccontextmanager
 from dataclasses import asdict
 from datetime import datetime
 import asyncio
+from html import escape
 import json
 import logging
 import os
 from pathlib import Path
 import sqlite3
-from typing import TypedDict, cast
+from typing import Any, TypedDict, cast
+from urllib.parse import urlparse
 
+from bs4 import BeautifulSoup, Tag
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import (
     HTMLResponse,
@@ -24,13 +27,31 @@ from fastapi.templating import Jinja2Templates
 
 from app.db import connection_context, init_db
 from app.env import load_app_env
-from app.models import Entry, SearchResult, TimelineGroup
-from app.schemas import EntryFormState
+from app.models import (
+    Entry,
+    SearchResult,
+    StoryFormat,
+    TimelineGroup,
+    TimelineStoryCitation,
+    TimelineStoryScope,
+)
+from app.schemas import (
+    EntryFormState,
+    TimelineStoryCitationPayload,
+    TimelineStoryFormState,
+    TimelineStorySavePayload,
+)
 from app.services.ai_generate import (
     DraftGenerationConfigurationError,
     DraftGenerationError,
     generate_entry_suggestion,
     load_ai_provider,
+)
+from app.services.ai_story_mode import (
+    GeneratedTimelineStory,
+    StoryGenerationConfigurationError,
+    StoryGenerationError,
+    generate_timeline_story,
 )
 from app.services.entries import (
     blank_form_state,
@@ -48,6 +69,7 @@ from app.services.entries import (
     list_timeline_entries_page,
     list_timeline_groups,
     list_timeline_entries,
+    plain_text_from_html,
     TimelineEntryGroup,
     list_timeline_month_buckets,
     list_timeline_summary_groups,
@@ -59,6 +81,7 @@ from app.services.entries import (
     sanitize_search_snippet,
     save_entry,
     TimelineGroupValidationError,
+    utc_now_iso,
     update_entry,
     validate_entry_form,
 )
@@ -79,6 +102,7 @@ from app.services.search import (
     paginate_search_results,
     search_entries,
 )
+from app.services.story_mode import get_story, list_story_entries, resolve_story_scope, save_story
 
 
 load_app_env()
@@ -89,6 +113,14 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 templates.env.filters["plain_text"] = format_plain_text
 templates.env.filters["render_entry_html"] = sanitize_rich_text
 templates.env.filters["render_search_snippet"] = sanitize_search_snippet
+
+_ALLOWED_STORY_HTML_TAGS = {"a", "h2", "p", "section"}
+_ALLOWED_STORY_HTML_ATTRIBUTES = {
+    "a": {"href", "title", "class"},
+    "h2": {"class"},
+    "p": {"class"},
+    "section": {"class"},
+}
 
 
 @asynccontextmanager
@@ -233,6 +265,65 @@ class SearchResultsPayload(TypedDict):
     total_count: int
 
 
+class StoryFormatOption(TypedDict):
+    value: StoryFormat
+    label: str
+    selected: bool
+
+
+class StoryScopeDetails(TypedDict):
+    scope_type: str
+    scope_label: str
+    group_name: str
+    query: str
+    year: int | None
+    month: int | None
+    description: str
+
+
+class StoryCitationContext(TypedDict):
+    citation_order: int
+    entry_id: int
+    entry_title: str
+    entry_url: str | None
+    entry_date: str | None
+    quote_text: str | None
+    note: str | None
+
+
+class StoryResultContext(TypedDict):
+    story_id: int | None
+    format: StoryFormat
+    title: str
+    narrative_html: str
+    narrative_text: str | None
+    generated_utc: str
+    provider_name: str | None
+    source_entry_count: int
+    truncated_input: bool
+    error_text: str | None
+    is_saved: bool
+    citations: list[StoryCitationContext]
+    save_citations_json: str
+
+
+class StoryPageContext(TypedDict, total=False):
+    request: Request
+    page_title: str
+    query: str
+    timeline_filters: list[TimelineGroup]
+    selected_group_id: int | None
+    selected_group_query_value: str
+    selected_group_name: str
+    story_form_state: TimelineStoryFormState
+    story_formats: list[StoryFormatOption]
+    story_scope: StoryScopeDetails
+    source_entry_count: int
+    feedback_message: str | None
+    feedback_class: str
+    story_result: StoryResultContext | None
+
+
 class TimelineGroupWebSearchPayload(TypedDict):
     enabled: bool
     query: str | None
@@ -330,6 +421,13 @@ class DevExtractSuccessPayload(TypedDict):
     ok: bool
     title: str | None
     preview: str
+
+
+_STORY_FORMAT_LABELS: dict[StoryFormat, str] = {
+    "executive_summary": "Executive Summary",
+    "detailed_chronology": "Detailed Chronology",
+    "recent_changes": "What Changed Recently",
+}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -736,6 +834,8 @@ def timeline_years(q: str = "", group_id: str = "") -> JSONResponse:
         "items_html": _render_partial(
             "partials/timeline_bucket_cards.html",
             buckets=buckets,
+            query=scope["normalized_query"],
+            selected_group_query_value=scope["selected_group_query_value"],
         ),
     }
     return JSONResponse(payload)
@@ -764,6 +864,8 @@ def timeline_months(
         "items_html": _render_partial(
             "partials/timeline_bucket_cards.html",
             buckets=buckets,
+            query=scope["normalized_query"],
+            selected_group_query_value=scope["selected_group_query_value"],
         ),
     }
     return JSONResponse(payload)
@@ -891,6 +993,356 @@ def ranked_search_results(
         "total_count": len(all_results),
     }
     return JSONResponse(payload)
+
+
+@app.get("/story", response_class=HTMLResponse)
+def story_page(
+    request: Request,
+    q: str = "",
+    group_id: str = "",
+    year: str = "",
+    month: str = "",
+    format: str = "executive_summary",
+) -> HTMLResponse:
+    story_format = _parse_story_format(format)
+    with connection_context() as connection:
+        group_scope, story_scope = _load_story_page_scope(
+            connection,
+            q=q,
+            group_id=group_id,
+            year=year,
+            month=month,
+        )
+        entries = list_story_entries(connection, story_scope)
+
+    feedback_message: str | None = None
+    feedback_class = "warning"
+    if not entries:
+        feedback_message = (
+            "No entries match this scope yet. Adjust the current filters or add entries, "
+            "then generate a story."
+        )
+
+    context = _build_story_page_context(
+        request,
+        group_scope=group_scope,
+        story_scope=story_scope,
+        story_format=story_format,
+        source_entry_count=len(entries),
+        feedback_message=feedback_message,
+        feedback_class=feedback_class,
+    )
+    return templates.TemplateResponse(
+        request,
+        "story.html",
+        cast(dict[str, object], context),
+    )
+
+
+@app.post("/story/generate", response_class=HTMLResponse)
+async def generate_story_page(
+    request: Request,
+    q: str = Form(""),
+    group_id: str = Form(""),
+    year: str = Form(""),
+    month: str = Form(""),
+    format: str = Form("executive_summary"),
+) -> HTMLResponse:
+    story_format = _parse_story_format(format)
+    with connection_context() as connection:
+        group_scope, story_scope = _load_story_page_scope(
+            connection,
+            q=q,
+            group_id=group_id,
+            year=year,
+            month=month,
+        )
+        entries = list_story_entries(connection, story_scope)
+
+    if not entries:
+        context = _build_story_page_context(
+            request,
+            group_scope=group_scope,
+            story_scope=story_scope,
+            story_format=story_format,
+            source_entry_count=0,
+            feedback_message=(
+                "No entries match this scope yet. Adjust the current filters or add "
+                "entries, then generate a story."
+            ),
+            feedback_class="warning",
+        )
+        return templates.TemplateResponse(
+            request,
+            "story.html",
+            cast(dict[str, object], context),
+        )
+
+    try:
+        generated_story = await generate_timeline_story(story_scope, story_format, entries)
+    except StoryGenerationConfigurationError as exc:
+        context = _build_story_page_context(
+            request,
+            group_scope=group_scope,
+            story_scope=story_scope,
+            story_format=story_format,
+            source_entry_count=len(entries),
+            feedback_message=str(exc),
+            feedback_class="danger",
+        )
+        return templates.TemplateResponse(
+            request,
+            "story.html",
+            cast(dict[str, object], context),
+            status_code=400,
+        )
+    except ValueError as exc:
+        context = _build_story_page_context(
+            request,
+            group_scope=group_scope,
+            story_scope=story_scope,
+            story_format=story_format,
+            source_entry_count=len(entries),
+            feedback_message=str(exc),
+            feedback_class="danger",
+        )
+        return templates.TemplateResponse(
+            request,
+            "story.html",
+            cast(dict[str, object], context),
+            status_code=400,
+        )
+    except StoryGenerationError as exc:
+        context = _build_story_page_context(
+            request,
+            group_scope=group_scope,
+            story_scope=story_scope,
+            story_format=story_format,
+            source_entry_count=len(entries),
+            feedback_message=str(exc),
+            feedback_class="danger",
+        )
+        return templates.TemplateResponse(
+            request,
+            "story.html",
+            cast(dict[str, object], context),
+            status_code=502,
+        )
+    except Exception:
+        logging.getLogger(__name__).exception("Story generation failed")
+        context = _build_story_page_context(
+            request,
+            group_scope=group_scope,
+            story_scope=story_scope,
+            story_format=story_format,
+            source_entry_count=len(entries),
+            feedback_message="Story generation failed. You can adjust the scope and try again.",
+            feedback_class="danger",
+        )
+        return templates.TemplateResponse(
+            request,
+            "story.html",
+            cast(dict[str, object], context),
+            status_code=500,
+        )
+
+    generated_utc = utc_now_iso()
+    story_result = _build_generated_story_result(
+        generated_story,
+        entries=entries,
+        generated_utc=generated_utc,
+    )
+    context = _build_story_page_context(
+        request,
+        group_scope=group_scope,
+        story_scope=story_scope,
+        story_format=story_format,
+        source_entry_count=len(entries),
+        feedback_message="Story generated for the current scope.",
+        feedback_class="success",
+        story_result=story_result,
+    )
+    return templates.TemplateResponse(
+        request,
+        "story.html",
+        cast(dict[str, object], context),
+    )
+
+
+@app.post("/story/save", response_model=None)
+def save_story_page(
+    request: Request,
+    q: str = Form(""),
+    group_id: str = Form(""),
+    year: str = Form(""),
+    month: str = Form(""),
+    format: str = Form("executive_summary"),
+    title: str = Form(""),
+    narrative_html: str = Form(""),
+    narrative_text: str = Form(""),
+    generated_utc: str = Form(""),
+    provider_name: str = Form(""),
+    source_entry_count: str = Form("0"),
+    truncated_input: str = Form("false"),
+    error_text: str = Form(""),
+    citations_json: str = Form("[]"),
+) -> RedirectResponse | HTMLResponse:
+    story_format = _parse_story_format(format)
+    with connection_context() as connection:
+        group_scope, story_scope = _load_story_page_scope(
+            connection,
+            q=q,
+            group_id=group_id,
+            year=year,
+            month=month,
+        )
+        current_entries = list_story_entries(connection, story_scope)
+
+        try:
+            source_entry_count_value = _parse_story_source_entry_count(source_entry_count)
+            citations = _parse_story_citation_payloads(citations_json)
+            payload = TimelineStorySavePayload(
+                scope_type=story_scope.scope_type,
+                group_id=story_scope.group_id,
+                query_text=story_scope.query_text,
+                year=story_scope.year,
+                month=story_scope.month,
+                format=story_format,
+                title=title.strip(),
+                narrative_html=_sanitize_story_html(narrative_html),
+                narrative_text=narrative_text.strip() or None,
+                generated_utc=generated_utc.strip(),
+                provider_name=provider_name.strip() or None,
+                source_entry_count=source_entry_count_value,
+                truncated_input=_parse_story_bool_value(truncated_input),
+                error_text=error_text.strip() or None,
+                citations=citations,
+            )
+            if not payload.title:
+                raise ValueError("A generated story title is required before saving.")
+            if not payload.narrative_html:
+                raise ValueError("A generated story is required before saving.")
+            story_id = save_story(connection, payload)
+        except ValueError as exc:
+            story_result = _build_posted_story_result(
+                story_format=story_format,
+                title=title,
+                narrative_html=narrative_html,
+                narrative_text=narrative_text,
+                generated_utc=generated_utc,
+                provider_name=provider_name,
+                source_entry_count=source_entry_count,
+                truncated_input=truncated_input,
+                error_text=error_text,
+                citations_json=citations_json,
+                entries=current_entries,
+            )
+            context = _build_story_page_context(
+                request,
+                group_scope=group_scope,
+                story_scope=story_scope,
+                story_format=story_format,
+                source_entry_count=len(current_entries),
+                feedback_message=str(exc),
+                feedback_class="danger",
+                story_result=story_result,
+            )
+            return templates.TemplateResponse(
+                request,
+                "story.html",
+                cast(dict[str, object], context),
+                status_code=400,
+            )
+
+    return RedirectResponse(url=f"/story/{story_id}", status_code=303)
+
+
+@app.get("/story/{story_id:int}", response_class=HTMLResponse)
+def saved_story_page(request: Request, story_id: int) -> HTMLResponse:
+    with connection_context() as connection:
+        story = get_story(connection, story_id)
+        if story is None:
+            raise HTTPException(status_code=404, detail="Story not found")
+
+        timeline_filters = list_timeline_groups(connection)
+        selected_group = (
+            get_timeline_group(connection, story.group_id)
+            if story.group_id is not None
+            else None
+        )
+        selected_group_name = (
+            selected_group.name
+            if selected_group is not None
+            else (f"Group {story.group_id}" if story.group_id is not None else "All groups")
+        )
+        citations = _build_story_citation_contexts(
+            story.citations,
+            {
+                citation.entry_id: get_entry(connection, citation.entry_id)
+                for citation in story.citations
+            },
+        )
+
+    context: StoryPageContext = {
+        "request": request,
+        "page_title": story.title,
+        "query": story.query_text or "",
+        "timeline_filters": timeline_filters,
+        "selected_group_id": story.group_id,
+        "selected_group_query_value": (
+            str(story.group_id) if story.group_id is not None else ""
+        ),
+        "selected_group_name": selected_group_name,
+        "story_form_state": _build_story_form_state(
+            q=story.query_text or "",
+            group_id=(str(story.group_id) if story.group_id is not None else ""),
+            year=story.year,
+            month=story.month,
+            story_format=story.format,
+        ),
+        "story_formats": _build_story_format_options(story.format),
+        "story_scope": _build_story_scope_details(
+            story_scope=TimelineStoryScope(
+                scope_type=story.scope_type,
+                group_id=story.group_id,
+                query_text=story.query_text,
+                year=story.year,
+                month=story.month,
+            ),
+            selected_group_name=selected_group_name,
+        ),
+        "source_entry_count": story.source_entry_count,
+        "story_result": {
+            "story_id": story.id,
+            "format": story.format,
+            "title": story.title,
+            "narrative_html": story.narrative_html,
+            "narrative_text": story.narrative_text,
+            "generated_utc": story.generated_utc,
+            "provider_name": story.provider_name,
+            "source_entry_count": story.source_entry_count,
+            "truncated_input": story.truncated_input,
+            "error_text": story.error_text,
+            "is_saved": True,
+            "citations": citations,
+            "save_citations_json": json.dumps(
+                [
+                    {
+                        "entry_id": citation.entry_id,
+                        "citation_order": citation.citation_order,
+                        "quote_text": citation.quote_text,
+                        "note": citation.note,
+                    }
+                    for citation in story.citations
+                ]
+            ),
+        },
+    }
+    return templates.TemplateResponse(
+        request,
+        "story.html",
+        cast(dict[str, object], context),
+    )
 
 
 @app.get("/visualization", response_class=HTMLResponse)
@@ -1544,6 +1996,420 @@ def _build_search_client_scope(
         "totalCount": total_count,
         "loadedCount": loaded_count,
     }
+
+
+def _load_story_page_scope(
+    connection: sqlite3.Connection,
+    *,
+    q: str,
+    group_id: str,
+    year: str,
+    month: str,
+) -> tuple[GroupScope, TimelineStoryScope]:
+    group_scope = _load_group_scope(connection, q=q, group_id=group_id)
+    try:
+        story_scope = resolve_story_scope(
+            connection,
+            q=q,
+            group_id=group_id,
+            year=year,
+            month=month,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        if message == "Timeline group not found." or message == "Timeline group not found":
+            raise HTTPException(status_code=404, detail="Timeline group not found") from exc
+        raise HTTPException(status_code=400, detail=message) from exc
+    return group_scope, story_scope
+
+
+def _parse_story_format(raw_value: str) -> StoryFormat:
+    normalized = raw_value.strip() or "executive_summary"
+    if normalized not in _STORY_FORMAT_LABELS:
+        raise HTTPException(status_code=400, detail="Invalid story format")
+    return cast(StoryFormat, normalized)
+
+
+def _build_story_format_options(selected_format: StoryFormat) -> list[StoryFormatOption]:
+    return [
+        {
+            "value": value,
+            "label": label,
+            "selected": value == selected_format,
+        }
+        for value, label in _STORY_FORMAT_LABELS.items()
+    ]
+
+
+def _build_story_form_state(
+    *,
+    q: str,
+    group_id: str,
+    year: int | str | None,
+    month: int | str | None,
+    story_format: StoryFormat,
+    errors: dict[str, str] | None = None,
+) -> TimelineStoryFormState:
+    return TimelineStoryFormState(
+        values={
+            "q": q,
+            "group_id": group_id,
+            "year": "" if year is None else str(year),
+            "month": "" if month is None else str(month),
+            "format": story_format,
+        },
+        errors=errors or {},
+    )
+
+
+def _build_story_scope_details(
+    *, story_scope: TimelineStoryScope, selected_group_name: str
+) -> StoryScopeDetails:
+    parts = [selected_group_name]
+    if story_scope.query_text:
+        parts.append(f'Search query: "{story_scope.query_text}"')
+    if story_scope.year is not None and story_scope.month is not None:
+        parts.append(f"Month: {story_scope.year}-{story_scope.month:02d}")
+    elif story_scope.year is not None:
+        parts.append(f"Year: {story_scope.year}")
+
+    return {
+        "scope_type": story_scope.scope_type,
+        "scope_label": "Search scope" if story_scope.scope_type == "search" else "Timeline scope",
+        "group_name": selected_group_name,
+        "query": story_scope.query_text or "",
+        "year": story_scope.year,
+        "month": story_scope.month,
+        "description": " | ".join(parts),
+    }
+
+
+def _build_story_page_context(
+    request: Request,
+    *,
+    group_scope: GroupScope,
+    story_scope: TimelineStoryScope,
+    story_format: StoryFormat,
+    source_entry_count: int,
+    feedback_message: str | None = None,
+    feedback_class: str = "warning",
+    story_result: StoryResultContext | None = None,
+) -> StoryPageContext:
+    selected_group_name = (
+        group_scope["selected_group"].name
+        if group_scope["selected_group"]
+        else "All groups"
+    )
+    context: StoryPageContext = {
+        "request": request,
+        "page_title": "Story Mode",
+        "query": group_scope["normalized_query"],
+        "timeline_filters": group_scope["timeline_filters"],
+        "selected_group_id": group_scope["selected_group_id"],
+        "selected_group_query_value": group_scope["selected_group_query_value"],
+        "selected_group_name": selected_group_name,
+        "story_form_state": _build_story_form_state(
+            q=group_scope["normalized_query"],
+            group_id=group_scope["selected_group_query_value"],
+            year=story_scope.year,
+            month=story_scope.month,
+            story_format=story_format,
+        ),
+        "story_formats": _build_story_format_options(story_format),
+        "story_scope": _build_story_scope_details(
+            story_scope=story_scope,
+            selected_group_name=selected_group_name,
+        ),
+        "source_entry_count": source_entry_count,
+        "feedback_message": feedback_message,
+        "feedback_class": feedback_class,
+        "story_result": story_result,
+    }
+    return context
+
+
+def _build_generated_story_result(
+    story: GeneratedTimelineStory,
+    *,
+    entries: list[Entry],
+    generated_utc: str,
+) -> StoryResultContext:
+    entry_lookup = {entry.id: entry for entry in entries}
+    citations = _build_story_citation_contexts(
+        [
+            TimelineStoryCitation(
+                story_id=0,
+                entry_id=citation.entry_id,
+                citation_order=citation.citation_order,
+                quote_text=citation.quote_text,
+                note=citation.note,
+            )
+            for citation in story.citations
+        ],
+        entry_lookup,
+    )
+    narrative_html, narrative_text = _render_generated_story(story, citations)
+    return {
+        "story_id": None,
+        "format": story.format,
+        "title": story.title,
+        "narrative_html": narrative_html,
+        "narrative_text": narrative_text,
+        "generated_utc": generated_utc,
+        "provider_name": story.provider_name,
+        "source_entry_count": story.source_entry_count,
+        "truncated_input": story.truncated_input,
+        "error_text": None,
+        "is_saved": False,
+        "citations": citations,
+        "save_citations_json": json.dumps(
+            [
+                {
+                    "entry_id": citation.entry_id,
+                    "citation_order": citation.citation_order,
+                    "quote_text": citation.quote_text,
+                    "note": citation.note,
+                }
+                for citation in story.citations
+            ]
+        ),
+    }
+
+
+def _build_posted_story_result(
+    *,
+    story_format: StoryFormat,
+    title: str,
+    narrative_html: str,
+    narrative_text: str,
+    generated_utc: str,
+    provider_name: str,
+    source_entry_count: str,
+    truncated_input: str,
+    error_text: str,
+    citations_json: str,
+    entries: list[Entry],
+) -> StoryResultContext | None:
+    if not title.strip() and not narrative_html.strip():
+        return None
+    entry_lookup = {entry.id: entry for entry in entries}
+    citations = _build_story_citation_contexts(
+        [
+            TimelineStoryCitation(
+                story_id=0,
+                entry_id=item.entry_id,
+                citation_order=item.citation_order,
+                quote_text=item.quote_text,
+                note=item.note,
+            )
+            for item in _parse_story_citation_payloads(citations_json, fail_silently=True)
+        ],
+        entry_lookup,
+    )
+    return {
+        "story_id": None,
+        "format": story_format,
+        "title": title.strip(),
+        "narrative_html": _sanitize_story_html(narrative_html),
+        "narrative_text": narrative_text.strip() or None,
+        "generated_utc": generated_utc.strip() or utc_now_iso(),
+        "provider_name": provider_name.strip() or None,
+        "source_entry_count": _parse_story_source_entry_count(source_entry_count, default=0),
+        "truncated_input": _parse_story_bool_value(truncated_input),
+        "error_text": error_text.strip() or None,
+        "is_saved": False,
+        "citations": citations,
+        "save_citations_json": citations_json,
+    }
+
+
+def _build_story_citation_contexts(
+    citations: list[TimelineStoryCitation],
+    entry_lookup: Mapping[int, Entry | None],
+) -> list[StoryCitationContext]:
+    contexts: list[StoryCitationContext] = []
+    for citation in citations:
+        entry = entry_lookup.get(citation.entry_id)
+        contexts.append(
+            {
+                "citation_order": citation.citation_order,
+                "entry_id": citation.entry_id,
+                "entry_title": entry.title if entry is not None else f"Entry #{citation.entry_id}",
+                "entry_url": (
+                    f"/entries/{citation.entry_id}/view" if entry is not None else None
+                ),
+                "entry_date": entry.display_date if entry is not None else None,
+                "quote_text": citation.quote_text,
+                "note": citation.note,
+            }
+        )
+    return contexts
+
+
+def _render_generated_story(
+    story: GeneratedTimelineStory,
+    citations: list[StoryCitationContext],
+) -> tuple[str, str]:
+    citation_lookup = {
+        citation["citation_order"]: citation for citation in citations
+    }
+    html_parts: list[str] = []
+    text_parts: list[str] = []
+    for section in story.sections:
+        html_parts.append('<section class="story-section mb-4">')
+        html_parts.append(f"<h2 class=\"h5 mb-2\">{escape(section.heading)}</h2>")
+        for paragraph in _split_story_paragraphs(section.body):
+            html_parts.append(f"<p>{escape(paragraph)}</p>")
+        if section.citation_orders:
+            citation_links = " ".join(
+                _render_story_inline_citation_link(order, citation_lookup.get(order))
+                for order in section.citation_orders
+            )
+            html_parts.append(
+                '<p class="small text-body-secondary mb-0">Sources '
+                f"{citation_links}</p>"
+            )
+        html_parts.append("</section>")
+
+        text_parts.append(section.heading)
+        text_parts.append(section.body.strip())
+
+    return _sanitize_story_html("".join(html_parts)), "\n\n".join(part for part in text_parts if part)
+
+
+def _render_story_inline_citation_link(
+    citation_order: int,
+    citation: StoryCitationContext | None,
+) -> str:
+    label = f"[{citation_order}]"
+    fallback_href = f"#citation-{citation_order}"
+    if citation is None:
+        return f'<a href="{fallback_href}" class="story-inline-citation">{label}</a>'
+
+    title_parts = [citation["entry_title"]]
+    if citation["entry_date"]:
+        title_parts.append(citation["entry_date"])
+    title = " | ".join(part for part in title_parts if part)
+    return (
+        f'<a href="{fallback_href}" class="story-inline-citation" '
+        f'title="{escape(title)}">{label}</a>'
+    )
+
+
+def _sanitize_story_html(value: str) -> str:
+    if not value:
+        return ""
+
+    soup = BeautifulSoup(value, "html.parser")
+    for tag in soup.find_all(True):
+        if not isinstance(tag, Tag):
+            continue
+        if tag.name in {"script", "style"}:
+            tag.decompose()
+            continue
+        if tag.name not in _ALLOWED_STORY_HTML_TAGS:
+            tag.unwrap()
+            continue
+
+        allowed_attributes = _ALLOWED_STORY_HTML_ATTRIBUTES.get(tag.name, set())
+        sanitized_attributes: dict[str, str | list[str]] = {}
+        for attribute_name, attribute_value in tag.attrs.items():
+            if attribute_name not in allowed_attributes:
+                continue
+            if tag.name == "a" and attribute_name == "href":
+                href = str(attribute_value).strip()
+                if _is_safe_story_href(href):
+                    sanitized_attributes[attribute_name] = href
+                continue
+            sanitized_attributes[attribute_name] = cast(
+                str | list[str],
+                attribute_value,
+            )
+        tag.attrs = cast(Any, sanitized_attributes)
+
+    return str(soup)
+
+
+def _is_safe_story_href(value: str) -> bool:
+    if value.startswith("#"):
+        return True
+    if value.startswith("/"):
+        parsed = urlparse(value)
+        return parsed.scheme == "" and parsed.netloc == ""
+    return False
+
+
+def _split_story_paragraphs(value: str) -> list[str]:
+    paragraphs = [paragraph.strip() for paragraph in value.split("\n\n") if paragraph.strip()]
+    if paragraphs:
+        return paragraphs
+    stripped = value.strip()
+    return [stripped] if stripped else []
+
+
+def _parse_story_source_entry_count(raw_value: str, *, default: int | None = None) -> int:
+    normalized = raw_value.strip()
+    if not normalized:
+        if default is not None:
+            return default
+        raise ValueError("Source entry count is required.")
+    try:
+        value = int(normalized)
+    except ValueError as exc:
+        if default is not None:
+            return default
+        raise ValueError("Source entry count must be a valid number.") from exc
+    if value < 0:
+        if default is not None:
+            return default
+        raise ValueError("Source entry count must be zero or greater.")
+    return value
+
+
+def _parse_story_bool_value(raw_value: str) -> bool:
+    normalized = raw_value.strip().lower()
+    return normalized in {"1", "true", "yes", "on"}
+
+
+def _parse_story_citation_payloads(
+    raw_value: str, *, fail_silently: bool = False
+) -> list[TimelineStoryCitationPayload]:
+    try:
+        parsed = json.loads(raw_value or "[]")
+    except json.JSONDecodeError as exc:
+        if fail_silently:
+            return []
+        raise ValueError("Generated citations could not be parsed.") from exc
+
+    if not isinstance(parsed, list):
+        if fail_silently:
+            return []
+        raise ValueError("Generated citations could not be parsed.")
+
+    citations: list[TimelineStoryCitationPayload] = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            if fail_silently:
+                return []
+            raise ValueError("Generated citations could not be parsed.")
+        try:
+            citations.append(
+                TimelineStoryCitationPayload(
+                    entry_id=int(item["entry_id"]),
+                    citation_order=int(item["citation_order"]),
+                    quote_text=(
+                        str(item["quote_text"])
+                        if item.get("quote_text") is not None
+                        else None
+                    ),
+                    note=str(item["note"]) if item.get("note") is not None else None,
+                )
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            if fail_silently:
+                return []
+            raise ValueError("Generated citations could not be parsed.") from exc
+    return citations
 
 
 def _encode_sse_event(event_name: str, payload: Mapping[str, object]) -> str:

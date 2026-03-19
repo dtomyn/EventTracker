@@ -1,0 +1,344 @@
+{% extends "base.html" %}
+{% from "partials/story_links.html" import story_href %}
+
+{% block content %}
+    <section class="story-hero mb-4">
+        <div class="story-hero-header">
+            <div>
+                <div class="story-kicker">Timeline Story Mode</div>
+                <h1 class="h2 mb-2">Build a narrative from the current scope</h1>
+                <p class="text-body-secondary mb-0">Generate a readable arc over a timeline, a filtered search, or a drilled-in year or month without leaving the server-rendered flow.</p>
+            </div>
+            <div class="story-hero-actions">
+                <a class="btn btn-outline-secondary" href="{{ story_href(selected_group_query_value, query, story_form_state.values.year, story_form_state.values.month) }}">Reset scope</a>
+            </div>
+        </div>
+        <div class="story-scope-pills">
+            <span class="story-scope-pill is-primary">{{ story_scope.scope_label }}</span>
+            <span class="story-scope-pill">{{ selected_group_name }}</span>
+            {% if story_scope.query %}
+                <span class="story-scope-pill">Search: {{ story_scope.query }}</span>
+            {% endif %}
+            {% if story_scope.year is not none and story_scope.month is not none %}
+                <span class="story-scope-pill">{{ story_scope.year }}-{{ '%02d' | format(story_scope.month) }}</span>
+            {% elif story_scope.year is not none %}
+                <span class="story-scope-pill">{{ story_scope.year }}</span>
+            {% endif %}
+            <span class="story-scope-pill">{{ source_entry_count }} scoped entr{% if source_entry_count == 1 %}y{% else %}ies{% endif %}</span>
+        </div>
+    </section>
+
+    <div class="row g-4 align-items-start">
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0 story-sidebar-card">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                        <div>
+                            <h2 class="h4 mb-1">Scope and Format</h2>
+                            <p class="text-body-secondary mb-0">Adjust the active scope, choose the narrative shape, then generate or save a snapshot.</p>
+                        </div>
+                        {% if story_result and story_result.is_saved %}
+                            <span class="badge text-bg-success">Saved</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="small text-body-secondary mb-3 story-scope-summary">
+                        <div><strong>{{ story_scope.scope_label }}</strong></div>
+                        <div>{{ story_scope.description }}</div>
+                    </div>
+
+                    {% if feedback_message %}
+                        <div class="alert alert-{{ feedback_class }} mb-3" role="alert">{{ feedback_message }}</div>
+                    {% endif %}
+
+                    <div class="story-progress-panel d-none mb-3" data-story-progress aria-live="polite" aria-atomic="true">
+                        <div class="story-progress-label" data-story-progress-title>Preparing Story Mode</div>
+                        <div class="story-progress-copy" data-story-progress-message>Gathering the current scope.</div>
+                        <div class="story-progress-steps" data-story-progress-steps>
+                            <span class="story-progress-step is-active">Gathering entries</span>
+                            <span class="story-progress-step">Finding patterns</span>
+                            <span class="story-progress-step">Drafting narrative</span>
+                            <span class="story-progress-step">Linking citations</span>
+                        </div>
+                    </div>
+
+                    <form method="post" action="/story/generate" class="d-grid gap-3" data-story-generate-form>
+                        <div>
+                            <label class="form-label" for="story-group-id">Group</label>
+                            <select class="form-select" id="story-group-id" name="group_id">
+                                <option value="all" {% if story_form_state.values.group_id == 'all' %}selected{% endif %}>All groups</option>
+                                {% for timeline_filter in timeline_filters %}
+                                    <option value="{{ timeline_filter.id }}" {% if story_form_state.values.group_id == timeline_filter.id | string %}selected{% endif %}>{{ timeline_filter.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="form-label" for="story-query">Search query</label>
+                            <input class="form-control" id="story-query" name="q" value="{{ story_form_state.values.q }}" placeholder="Optional plain-English search scope">
+                        </div>
+
+                        <div class="row g-3">
+                            <div class="col-sm-6">
+                                <label class="form-label" for="story-year">Year</label>
+                                <input class="form-control" id="story-year" name="year" value="{{ story_form_state.values.year }}" inputmode="numeric" placeholder="Optional">
+                            </div>
+                            <div class="col-sm-6">
+                                <label class="form-label" for="story-month">Month</label>
+                                <input class="form-control" id="story-month" name="month" value="{{ story_form_state.values.month }}" inputmode="numeric" placeholder="Optional">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="form-label" for="story-format">Format</label>
+                            <select class="form-select" id="story-format" name="format">
+                                {% for option in story_formats %}
+                                    <option value="{{ option.value }}" {% if option.selected %}selected{% endif %}>{{ option.label }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="story-format-help mt-2">
+                                <div>Executive Summary: concise arc, main turning points, and why they matter.</div>
+                                <div>Detailed Chronology: step through phases in time order.</div>
+                                <div>What Changed Recently: emphasize the newest shifts and repeated themes.</div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-primary" type="submit" data-story-generate-button>
+                                <span data-story-generate-label>Generate story</span>
+                            </button>
+                            <a class="btn btn-outline-secondary" href="{{ story_href(selected_group_query_value, query, story_form_state.values.year, story_form_state.values.month) }}">Reset result</a>
+                        </div>
+                    </form>
+
+                    <div class="story-guide mt-4">
+                        <div class="story-guide-label">Narrative guide</div>
+                        <ul class="story-guide-list mb-0">
+                            <li>Phases should break the timeline into readable periods.</li>
+                            <li>Turning points should explain when the direction changed.</li>
+                            <li>Repeated themes should connect patterns across entries.</li>
+                            <li>Recent changes should make the latest movement easy to scan.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0 story-output-card">
+                <div class="card-body p-4 p-lg-5">
+                    {% if story_result %}
+                        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                            <div>
+                                <h2 class="h3 mb-1" id="story-result-title">{{ story_result.title }}</h2>
+                                <p class="text-body-secondary mb-0">
+                                    {{ story_result.source_entry_count }} source entr{% if story_result.source_entry_count == 1 %}y{% else %}ies{% endif %}
+                                    {% if story_result.provider_name %} · {{ story_result.provider_name }}{% endif %}
+                                    {% if story_result.generated_utc %} · {{ story_result.generated_utc }}{% endif %}
+                                </p>
+                            </div>
+                            {% if not story_result.is_saved %}
+                                <form method="post" action="/story/save" class="d-inline" data-story-save-form>
+                                    <input type="hidden" name="q" value="{{ story_form_state.values.q }}">
+                                    <input type="hidden" name="group_id" value="{{ story_form_state.values.group_id }}">
+                                    <input type="hidden" name="year" value="{{ story_form_state.values.year }}">
+                                    <input type="hidden" name="month" value="{{ story_form_state.values.month }}">
+                                    <input type="hidden" name="format" value="{{ story_result.format }}">
+                                    <input type="hidden" name="title" value="{{ story_result.title }}">
+                                    <textarea name="narrative_html" hidden>{{ story_result.narrative_html }}</textarea>
+                                    <textarea name="narrative_text" hidden>{{ story_result.narrative_text or '' }}</textarea>
+                                    <input type="hidden" name="generated_utc" value="{{ story_result.generated_utc }}">
+                                    <input type="hidden" name="provider_name" value="{{ story_result.provider_name or '' }}">
+                                    <input type="hidden" name="source_entry_count" value="{{ story_result.source_entry_count }}">
+                                    <input type="hidden" name="truncated_input" value="{{ 'true' if story_result.truncated_input else 'false' }}">
+                                    <input type="hidden" name="error_text" value="{{ story_result.error_text or '' }}">
+                                    <textarea name="citations_json" hidden>{{ story_result.save_citations_json }}</textarea>
+                                    <button class="btn btn-outline-secondary" type="submit" data-story-save-button>
+                                        <span data-story-save-label>Save snapshot</span>
+                                    </button>
+                                </form>
+                            {% else %}
+                                <span class="badge text-bg-success">Saved snapshot</span>
+                            {% endif %}
+                        </div>
+
+                        <div class="story-meta-grid mb-4">
+                            <section class="story-meta-card">
+                                <div class="story-meta-label">Scope</div>
+                                <div class="fw-semibold">{{ story_scope.scope_label }}</div>
+                                <div class="text-body-secondary small">{{ story_scope.description }}</div>
+                            </section>
+                            <section class="story-meta-card">
+                                <div class="story-meta-label">Format</div>
+                                {% for option in story_formats %}
+                                    {% if option.selected %}
+                                        <div class="fw-semibold">{{ option.label }}</div>
+                                    {% endif %}
+                                {% endfor %}
+                                <div class="text-body-secondary small">Server-rendered narrative with linked citations.</div>
+                            </section>
+                            <section class="story-meta-card">
+                                <div class="story-meta-label">Coverage</div>
+                                <div class="fw-semibold">{{ story_result.source_entry_count }} source entr{% if story_result.source_entry_count == 1 %}y{% else %}ies{% endif %}</div>
+                                <div class="text-body-secondary small">Chronological story generation over the current scope.</div>
+                            </section>
+                            <section class="story-meta-card">
+                                <div class="story-meta-label">Citations</div>
+                                <div class="fw-semibold">{{ story_result.citations | length }} linked</div>
+                                <div class="text-body-secondary small">Inline citations jump to the reference list below, where each entry still links to the saved detail page.</div>
+                            </section>
+                        </div>
+
+                        {% if story_result.truncated_input %}
+                            <div class="alert alert-warning py-2" role="alert">The input was truncated to keep generation bounded.</div>
+                        {% endif %}
+
+                        {% if story_result.error_text %}
+                            <div class="alert alert-warning py-2" role="alert">{{ story_result.error_text }}</div>
+                        {% endif %}
+
+                        <section class="story-panel mb-4">
+                            <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+                                <h3 class="h4 mb-0">Narrative Arc</h3>
+                                {% if story_result.citations %}
+                                    <a class="small" href="#story-citations">Jump to citations</a>
+                                {% endif %}
+                            </div>
+
+                            <div class="story-rich-text" data-story-result>
+                                {{ story_result.narrative_html | safe }}
+                            </div>
+                        </section>
+
+                        {% if story_result.citations %}
+                            <section id="story-citations">
+                                <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+                                    <h3 class="h5 mb-0">Citations</h3>
+                                    <span class="text-body-secondary small">{{ story_result.citations | length }} linked</span>
+                                </div>
+                                <ol class="list-group list-group-numbered story-citation-list">
+                                    {% for citation in story_result.citations %}
+                                        <li class="list-group-item" id="citation-{{ citation.citation_order }}">
+                                            <div class="fw-semibold">
+                                                {% if citation.entry_url %}
+                                                    <a href="{{ citation.entry_url }}">{{ citation.entry_title }}</a>
+                                                {% else %}
+                                                    {{ citation.entry_title }}
+                                                {% endif %}
+                                            </div>
+                                            <div class="small text-body-secondary">Entry ID {{ citation.entry_id }}{% if citation.entry_date %} · {{ citation.entry_date }}{% endif %}</div>
+                                            {% if citation.quote_text %}
+                                                <div class="mt-2">{{ citation.quote_text }}</div>
+                                            {% endif %}
+                                            {% if citation.note %}
+                                                <div class="small text-body-secondary mt-1">{{ citation.note }}</div>
+                                            {% endif %}
+                                        </li>
+                                    {% endfor %}
+                                </ol>
+                            </section>
+                        {% endif %}
+                    {% else %}
+                        <div class="empty-state border rounded p-4">
+                            <h2 class="h5">No generated story yet</h2>
+                            <p class="text-body-secondary">Choose a scope and format, then generate a story. The result will render a narrative arc with clearly separated sections and linked citations.</p>
+                            <div class="story-preview-grid">
+                                <section class="story-preview-card">
+                                    <div class="story-preview-title">Phases</div>
+                                    <p class="mb-0">Group related events into distinct periods so the arc is easy to follow.</p>
+                                </section>
+                                <section class="story-preview-card">
+                                    <div class="story-preview-title">Turning points</div>
+                                    <p class="mb-0">Call out the moments when the story shifts direction.</p>
+                                </section>
+                                <section class="story-preview-card">
+                                    <div class="story-preview-title">Repeated themes</div>
+                                    <p class="mb-0">Highlight recurring patterns that show up across the scoped entries.</p>
+                                </section>
+                                <section class="story-preview-card">
+                                    <div class="story-preview-title">Recent changes</div>
+                                    <p class="mb-0">Surface the latest signals so the current state is easy to understand.</p>
+                                </section>
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            var progressPanel = document.querySelector('[data-story-progress]');
+            var progressTitle = document.querySelector('[data-story-progress-title]');
+            var progressMessage = document.querySelector('[data-story-progress-message]');
+            var progressSteps = Array.prototype.slice.call(document.querySelectorAll('.story-progress-step'));
+            var generateForm = document.querySelector('[data-story-generate-form]');
+            var generateButton = document.querySelector('[data-story-generate-button]');
+            var generateLabel = document.querySelector('[data-story-generate-label]');
+            var saveForm = document.querySelector('[data-story-save-form]');
+            var saveButton = document.querySelector('[data-story-save-button]');
+            var saveLabel = document.querySelector('[data-story-save-label]');
+            var progressTimer = null;
+
+            function stopProgressTimer() {
+                if (progressTimer) {
+                    window.clearInterval(progressTimer);
+                    progressTimer = null;
+                }
+            }
+
+            function activateStep(index) {
+                progressSteps.forEach(function (step, currentIndex) {
+                    step.classList.toggle('is-active', currentIndex === index);
+                    step.classList.toggle('is-complete', currentIndex < index);
+                });
+            }
+
+            function startProgress(title, messages) {
+                if (!progressPanel || !progressTitle || !progressMessage) {
+                    return;
+                }
+                stopProgressTimer();
+                progressPanel.classList.remove('d-none');
+                progressTitle.textContent = title;
+                progressMessage.textContent = messages[0];
+                activateStep(0);
+                var index = 0;
+                progressTimer = window.setInterval(function () {
+                    index = Math.min(index + 1, messages.length - 1);
+                    progressMessage.textContent = messages[index];
+                    activateStep(Math.min(index, progressSteps.length - 1));
+                    if (index >= messages.length - 1) {
+                        stopProgressTimer();
+                    }
+                }, 1100);
+            }
+
+            if (generateForm && generateButton && generateLabel) {
+                generateForm.addEventListener('submit', function () {
+                    startProgress('Generating story', [
+                        'Gathering entries from the current scope.',
+                        'Looking for turning points and repeated themes.',
+                        'Drafting the narrative arc.',
+                        'Linking citations back to entries.'
+                    ]);
+                    generateButton.disabled = true;
+                    generateLabel.textContent = 'Generating...';
+                });
+            }
+
+            if (saveForm && saveButton && saveLabel) {
+                saveForm.addEventListener('submit', function () {
+                    startProgress('Saving snapshot', [
+                        'Preparing the generated story for storage.',
+                        'Saving the snapshot and citation links.',
+                        'Opening the saved story view.'
+                    ]);
+                    saveButton.disabled = true;
+                    saveLabel.textContent = 'Saving...';
+                });
+            }
+        })();
+    </script>
+{% endblock %}

@@ -76,3 +76,80 @@ class TestDatabaseInitialization(unittest.TestCase):
             persisted.close()
 
         self.assertEqual(row, ("Existing entry", "keep-me"))
+
+    def test_init_db_creates_timeline_story_tables_and_indexes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "EventTracker-test.db"
+
+            with patch.dict(
+                os.environ, {"EVENTTRACKER_DB_PATH": str(db_path)}, clear=False
+            ):
+                init_db()
+                init_db()
+
+            connection = sqlite3.connect(db_path)
+            try:
+                story_columns = tuple(
+                    row[1]
+                    for row in connection.execute(
+                        "PRAGMA table_info(timeline_stories)"
+                    ).fetchall()
+                )
+                citation_columns = tuple(
+                    row[1]
+                    for row in connection.execute(
+                        "PRAGMA table_info(timeline_story_entries)"
+                    ).fetchall()
+                )
+                story_indexes = {
+                    row[1]
+                    for row in connection.execute(
+                        "PRAGMA index_list(timeline_stories)"
+                    ).fetchall()
+                }
+                citation_indexes = {
+                    row[1]
+                    for row in connection.execute(
+                        "PRAGMA index_list(timeline_story_entries)"
+                    ).fetchall()
+                }
+            finally:
+                connection.close()
+
+        self.assertEqual(
+            story_columns,
+            (
+                "id",
+                "scope_type",
+                "group_id",
+                "query_text",
+                "year",
+                "month",
+                "format",
+                "title",
+                "narrative_html",
+                "narrative_text",
+                "generated_utc",
+                "updated_utc",
+                "provider_name",
+                "source_entry_count",
+                "truncated_input",
+                "error_text",
+            ),
+        )
+        self.assertEqual(
+            citation_columns,
+            ("story_id", "entry_id", "citation_order", "quote_text", "note"),
+        )
+        self.assertIn(
+            "idx_timeline_stories_scope_generated_utc",
+            story_indexes,
+        )
+        self.assertIn(
+            "idx_timeline_story_entries_story_order",
+            citation_indexes,
+        )
+        self.assertIn(
+            "idx_timeline_story_entries_entry_id",
+            citation_indexes,
+        )

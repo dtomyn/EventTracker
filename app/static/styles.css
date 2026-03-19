@@ -604,6 +604,210 @@ body {
     backdrop-filter: blur(8px);
 }
 
+.story-hero {
+    display: grid;
+    gap: 1rem;
+    padding: 1.25rem;
+    border: 1px solid var(--et-border-light);
+    border-radius: 1.25rem;
+    background: var(--et-card-bg-glass);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 1rem 2rem var(--et-card-shadow);
+}
+
+.story-hero-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.story-kicker,
+.story-guide-label,
+.story-meta-label,
+.story-preview-title {
+    color: var(--et-text-muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.story-hero-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.story-scope-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.story-scope-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.4rem 0.75rem;
+    border: 1px solid var(--et-border-light);
+    border-radius: 999px;
+    background: var(--et-card-bg-solid);
+    color: var(--et-text-secondary);
+    font-size: 0.9rem;
+}
+
+.story-scope-pill.is-primary {
+    border-color: var(--et-primary-border);
+    background: var(--et-primary-bg);
+    color: var(--et-primary);
+    font-weight: 600;
+}
+
+.story-sidebar-card,
+.story-output-card {
+    background: var(--et-card-bg-solid);
+}
+
+.story-scope-summary {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.story-format-help {
+    display: grid;
+    gap: 0.3rem;
+    color: var(--et-text-muted);
+    font-size: 0.88rem;
+}
+
+.story-progress-panel {
+    display: grid;
+    gap: 0.6rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--et-primary-border);
+    border-radius: 1rem;
+    background: linear-gradient(180deg, var(--et-primary-bg), transparent);
+}
+
+.story-progress-label {
+    color: var(--et-text);
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.story-progress-copy {
+    color: var(--et-text-secondary);
+    font-size: 0.95rem;
+}
+
+.story-progress-steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.story-progress-step {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 0.7rem;
+    border: 1px solid var(--et-border-light);
+    border-radius: 999px;
+    background: var(--et-card-bg-solid);
+    color: var(--et-text-muted);
+    font-size: 0.82rem;
+}
+
+.story-progress-step.is-active {
+    border-color: var(--et-primary-border-hover);
+    background: var(--et-primary-bg);
+    color: var(--et-primary);
+    font-weight: 600;
+}
+
+.story-progress-step.is-complete {
+    color: var(--et-text-secondary);
+}
+
+.story-guide-list {
+    display: grid;
+    gap: 0.55rem;
+    padding-left: 1.1rem;
+    color: var(--et-text-secondary);
+}
+
+.story-meta-grid,
+.story-preview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.9rem;
+}
+
+.story-meta-card,
+.story-preview-card {
+    display: grid;
+    gap: 0.4rem;
+    padding: 1rem;
+    border: 1px solid var(--et-border-light);
+    border-radius: 1rem;
+    background: var(--et-card-bg-empty);
+}
+
+.story-panel {
+    display: grid;
+    gap: 1rem;
+}
+
+.story-rich-text {
+    display: grid;
+    gap: 1rem;
+}
+
+.story-section {
+    padding: 1.1rem 1.15rem;
+    border: 1px solid var(--et-border-light);
+    border-radius: 1rem;
+    background: linear-gradient(180deg, var(--et-summary-gradient-start), var(--et-summary-gradient-end));
+    box-shadow: 0 0.8rem 1.6rem var(--et-card-shadow);
+}
+
+.story-section h2,
+.story-section .h5 {
+    color: var(--et-text);
+}
+
+.story-section p:last-child {
+    margin-bottom: 0;
+}
+
+.story-inline-citation {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.85rem;
+    padding: 0.2rem 0.45rem;
+    border: 1px solid var(--et-primary-border);
+    border-radius: 999px;
+    background: var(--et-primary-bg);
+    color: var(--et-primary);
+    font-size: 0.82rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.story-inline-citation:hover,
+.story-inline-citation:focus-visible {
+    border-color: var(--et-primary-border-hover);
+    color: var(--et-primary);
+    box-shadow: 0 0 0 0.2rem var(--et-primary-focus-shadow);
+}
+
+.story-citation-list .list-group-item {
+    border-color: var(--et-border-light);
+    background: var(--et-card-bg-empty);
+}
+
 .visualization-shell {
     display: grid;
     gap: 2rem;
@@ -798,7 +1002,15 @@ body {
     box-shadow: 0 0.8rem 1.6rem var(--et-card-shadow);
 }
 
+.visualization-summary-card-shell {
+    display: grid;
+    gap: 0.85rem;
+}
+
 .visualization-summary-card-button {
+    padding: 0;
+    border: 0;
+    background: transparent;
     width: 100%;
     text-align: left;
     transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
@@ -837,6 +1049,24 @@ body {
     color: var(--et-primary);
     font-size: 0.85rem;
     font-weight: 600;
+}
+
+.visualization-summary-footer {
+    display: flex;
+    justify-content: flex-start;
+}
+
+.visualization-summary-story-link {
+    color: var(--et-primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.visualization-summary-story-link:hover,
+.visualization-summary-story-link:focus-visible {
+    text-decoration: underline;
+    text-underline-offset: 0.16em;
 }
 
 .visualization-status-context {
@@ -959,7 +1189,8 @@ body {
 @media (max-width: 575.98px) {
     .timeline-hero-header,
     .search-header,
-    .search-header-controls {
+    .search-header-controls,
+    .story-hero-header {
         align-items: stretch;
         flex-direction: column;
     }

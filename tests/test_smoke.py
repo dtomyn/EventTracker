@@ -391,6 +391,7 @@ class TestAppSmokeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Search Results", response.text)
         self.assertIn("Search-focused entry", response.text)
+        self.assertIn('href="/story?group_id=1&q=semantic%20search"', response.text)
         self.assertIn("Clear search", response.text)
         self.assertIn("Filter Timeline", response.text)
         self.assertNotIn("Filtered Timeline", response.text)

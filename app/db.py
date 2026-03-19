@@ -132,6 +132,45 @@ POST_ENTRY_SCHEMA_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_entry_links_entry_id ON entry_links(entry_id)",
 ]
 
+TIMELINE_STORY_SCHEMA_STATEMENTS = [
+    """
+    CREATE TABLE IF NOT EXISTS timeline_stories (
+        id INTEGER PRIMARY KEY,
+        scope_type TEXT NOT NULL,
+        group_id INTEGER NULL,
+        query_text TEXT NULL,
+        year INTEGER NULL,
+        month INTEGER NULL,
+        format TEXT NOT NULL,
+        title TEXT NOT NULL DEFAULT '',
+        narrative_html TEXT NOT NULL DEFAULT '',
+        narrative_text TEXT NULL,
+        generated_utc TEXT NOT NULL,
+        updated_utc TEXT NOT NULL,
+        provider_name TEXT NULL,
+        source_entry_count INTEGER NOT NULL DEFAULT 0,
+        truncated_input INTEGER NOT NULL DEFAULT 0,
+        error_text TEXT NULL,
+        FOREIGN KEY (group_id) REFERENCES timeline_groups(id) ON DELETE SET NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_timeline_stories_scope_generated_utc ON timeline_stories(scope_type, group_id, year, month, generated_utc DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS timeline_story_entries (
+        story_id INTEGER NOT NULL,
+        entry_id INTEGER NOT NULL,
+        citation_order INTEGER NOT NULL,
+        quote_text TEXT NULL,
+        note TEXT NULL,
+        PRIMARY KEY (story_id, citation_order),
+        FOREIGN KEY (story_id) REFERENCES timeline_stories(id) ON DELETE CASCADE,
+        FOREIGN KEY (entry_id) REFERENCES entries(id) ON DELETE CASCADE
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_timeline_story_entries_story_order ON timeline_story_entries(story_id, citation_order)",
+    "CREATE INDEX IF NOT EXISTS idx_timeline_story_entries_entry_id ON timeline_story_entries(entry_id)",
+]
+
 FTS_TABLE_SQL = """
 CREATE VIRTUAL TABLE entries_fts
 USING fts5(
@@ -209,6 +248,8 @@ def init_db() -> None:
 
         for statement in POST_ENTRY_SCHEMA_STATEMENTS:
             connection.execute(statement)
+
+        ensure_timeline_story_schema(connection)
 
         ensure_entries_fts_schema(connection)
         ensure_entry_embeddings_schema(connection)
@@ -296,6 +337,11 @@ def ensure_entry_group_assignments(
         "UPDATE entries SET group_id = ? WHERE group_id IS NULL",
         (default_group_id,),
     )
+
+
+def ensure_timeline_story_schema(connection: sqlite3.Connection) -> None:
+    for statement in TIMELINE_STORY_SCHEMA_STATEMENTS:
+        connection.execute(statement)
 
 
 def ensure_entries_fts_schema(connection: sqlite3.Connection) -> None:

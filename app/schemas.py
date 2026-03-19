@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from app.models import StoryFormat, StoryScopeType
+
 
 @dataclass(slots=True)
 class EntryLinkPayload:
@@ -28,3 +30,41 @@ class EntryFormState:
     values: dict[str, str] = field(default_factory=dict)
     errors: dict[str, str] = field(default_factory=dict)
     link_rows: list[dict[str, str]] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class TimelineStoryScopePayload:
+    scope_type: StoryScopeType
+    group_id: int | None = None
+    query_text: str | None = None
+    year: int | None = None
+    month: int | None = None
+
+
+@dataclass(slots=True)
+class TimelineStoryCitationPayload:
+    entry_id: int
+    citation_order: int
+    quote_text: str | None = None
+    note: str | None = None
+
+
+@dataclass(slots=True)
+class TimelineStorySavePayload(TimelineStoryScopePayload):
+    format: StoryFormat = "executive_summary"
+    title: str = ""
+    narrative_html: str = ""
+    narrative_text: str | None = None
+    generated_utc: str = ""
+    updated_utc: str = ""
+    provider_name: str | None = None
+    source_entry_count: int = 0
+    truncated_input: bool = False
+    error_text: str | None = None
+    citations: list[TimelineStoryCitationPayload] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class TimelineStoryFormState:
+    values: dict[str, str] = field(default_factory=dict)
+    errors: dict[str, str] = field(default_factory=dict)

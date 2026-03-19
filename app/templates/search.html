@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "partials/story_links.html" import story_href %}
 
 {% block content %}
     <div class="search-header mb-4">
@@ -36,6 +37,7 @@
 
             <div class="d-flex gap-2">
                 {% if has_query %}
+                    <a class="btn btn-primary" href="{{ story_href(selected_group_query_value, query) }}">Create story</a>
                     <a class="btn btn-outline-secondary" href="/?{% if selected_group_query_value %}group_id={{ selected_group_query_value }}&{% endif %}q={{ query | urlencode }}">Filter Timeline</a>
                     <a class="btn btn-link" href="/search{% if selected_group_query_value %}?group_id={{ selected_group_query_value }}{% endif %}">Clear search</a>
                 {% endif %}

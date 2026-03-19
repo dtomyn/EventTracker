@@ -18,6 +18,7 @@ This app helps you keep those notes tidy.
 - Search for notes when you want to find something again.
 - Ask the computer to help write a first draft for your note.
 - Look on the web for new things to add.
+- Press a button and ask, "Can you tell me the story of these notes?"
 
 ## What the app is really for
 
@@ -34,6 +35,7 @@ So instead of having lots of messy notes everywhere, the app says:
 - Group: a bucket that holds notes that belong together.
 - Search: a way to ask, "Can you find the note about this thing?"
 - AI help: a smart helper that can suggest words for your note.
+- Story Mode: a helper that reads lots of notes and tells the big story in order.
 
 ## A tiny example
 
@@ -54,6 +56,18 @@ Then later, you could come back and say:
 
 And EventTracker would help you find them.
 
+You could also say:
+
+"Tell me the story of what changed."
+
+Then the app can:
+
+1. read the notes in the right order
+2. write a simple story about what happened first and what happened next
+3. show little number links like `[1]` and `[2]`
+4. jump down to the matching note in the list at the bottom
+5. save that story so you can read it again later
+
 ## In one sentence
 
-EventTracker is a helper for saving important things that happened, putting them in order, and finding them again later.
+EventTracker is a helper for saving important things that happened, putting them in order, finding them again later, and even telling you the story of how they changed.

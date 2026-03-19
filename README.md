@@ -15,6 +15,8 @@ This demo shows the main AI-assisted workflow in EventTracker, from live web dis
 - Entering a source URL in `New Entry` and generating a suggested summary, title, and date.
 - Reviewing the rendered preview before saving the entry.
 
+Timeline Story Mode is also available in the current app. It lets you launch a narrative view from the timeline, a search scope, or drilled year/month buckets, generate a story over the current scope, save that story as a snapshot, and follow inline citations down to a linked reference list.
+
 ## Quick start
 
 Run these commands from the repository root:
@@ -63,6 +65,7 @@ The harness will:
 - Defaults the main timeline and ranked search to the current default timeline group. Users can switch to a specific group or `All groups`.
 - Supports timeline filtering on `/` with the `q` query string. This keeps matches in timeline order instead of ranked order.
 - Supports ranked search at `/search`, combining FTS matches with semantic matches when embeddings are available.
+- Supports `Story Mode` for the current scope, turning matching entries into a narrative arc with sections, saved snapshots, and linked citations.
 - Organizes entries into timeline groups, seeded with a default `Agentic Coding` group.
 - Lets users create, rename, delete, and mark the default group at `/admin/groups`, and store an optional per-group web search query.
 - Generates AI draft suggestions from either a title alone or a title plus temporary extracted URL content.
@@ -82,6 +85,7 @@ The harness will:
 - Persistence: SQLite in `data/EventTracker.db` by default.
 - Search: SQLite FTS5 for keyword search and optional sqlite-vec for semantic recall.
 - AI draft generation: provider abstraction in `app/services/ai_generate.py`.
+- AI story generation: provider abstraction in `app/services/ai_story_mode.py`.
 
 ### Database model
 
@@ -89,6 +93,8 @@ The app currently stores:
 
 - `timeline_groups`: top-level collections for entries, with optional `web_search_query` and `is_default`.
 - `entries`: the main event records.
+- `timeline_stories`: saved Story Mode snapshots for a specific scope and output format.
+- `timeline_story_entries`: citation rows that preserve which entries were cited by a saved story and in what order.
 - `tags` and `entry_tags`: normalized tag mapping.
 - `entry_links`: additional per-entry websites with required notes.
 - `entries_fts`: derived FTS5 index over `entries.final_text` only.
@@ -102,6 +108,7 @@ Important implementation details:
 - `group_id` is required when saving an entry.
 - `sort_key` is derived as `YYYYMMDD`, using `00` when day is missing.
 - Extracted URL content is not stored in the database.
+- Saved Story Mode snapshots are stored as point-in-time results and are not auto-regenerated when entries change later.
 - URL extraction fetches remote content server-side and is intended only for local or otherwise trusted deployments.
 - Embeddings are derived only from `final_text`.
 - FTS indexes `final_text` only.
@@ -127,6 +134,8 @@ Additional timeline endpoints:
 - `GET /timeline/months`: month-bucket HTML payload, optionally scoped by year.
 - `GET /timeline/years`: year-bucket HTML payload.
 
+The timeline and its year/month drill views now also expose entry points into Story Mode for the current scope.
+
 ### Ranked search
 
 `GET /search`
@@ -141,6 +150,48 @@ Additional timeline endpoints:
 Additional search endpoint:
 
 - `GET /search/results`: paginated HTML payload for additional ranked results.
+
+The ranked search page also exposes a Story Mode launch action for the current query and selected group.
+
+### Story Mode
+
+`GET /story`
+
+- Loads Story Mode for the current scope.
+- Accepts `q`, `group_id`, `year`, `month`, and `format`.
+- Uses the same default-group and `All groups` scoping model as the timeline and ranked search.
+- Shows a server-rendered Story Mode page with scope summary, format selector, and current source-entry count.
+- Shows a non-fatal warning if no entries match the requested scope.
+
+`POST /story/generate`
+
+- Generates a scoped story in one of three formats:
+  - `executive_summary`
+  - `detailed_chronology`
+  - `recent_changes`
+- Uses chronological entry context, even when the scope came from ranked search.
+- Shows a visible in-page progress state while the request is being submitted.
+- Returns a server-rendered page containing the generated narrative, inline citation jumps, and a save action.
+
+`POST /story/save`
+
+- Saves the generated story as a snapshot tied to the current scope.
+- Stores the rendered narrative plus the exact cited entry ids and citation order.
+- Redirects to the saved story page after success.
+
+`GET /story/{id}`
+
+- Loads a previously saved story snapshot.
+- Keeps the bottom citation list linked to the original entry detail pages.
+- Uses inline citation links inside the narrative to jump down to the matching citation in the reference list.
+
+Story Mode UI behavior:
+
+- Launch points exist on the timeline page, the ranked search page, and the year/month bucket cards.
+- The generated narrative is organized into sections.
+- Inline citations jump to the bottom citation list instead of leaving the story page.
+- The bottom citation list still links to the actual entry detail pages.
+- Saving a story preserves the current generated output as a snapshot.
 
 ### Entry create, view, and edit
 
@@ -177,6 +228,8 @@ Additional search endpoint:
 - If extraction fails and a title exists, falls back to title-only generation.
 - If extraction fails and there is no title, returns a server-rendered partial with an error.
 - On success, returns a server-rendered partial containing generated draft HTML, a rendered preview, a suggested title, and suggested date fields.
+
+This remains separate from Story Mode. Entry draft generation helps write one entry, while Story Mode helps narrate a whole scoped collection of entries.
 
 `POST /entries/preview-html`
 
