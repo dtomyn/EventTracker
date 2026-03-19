@@ -39,6 +39,7 @@ from app.services.entries import (
     decode_timeline_cursor,
     delete_timeline_group,
     DEFAULT_TIMELINE_PAGE_SIZE,
+    DuplicateEntrySourceUrlError,
     form_state_from_entry,
     format_plain_text,
     get_default_timeline_group,
@@ -965,6 +966,7 @@ def view_entry(request: Request, entry_id: int) -> HTMLResponse:
 async def create_entry(request: Request) -> RedirectResponse | HTMLResponse:
     form = await request.form()
     form_state, payload = validate_entry_form(form)
+    timeline_filters: list[TimelineGroup] = []
     with connection_context() as connection:
         timeline_filters = list_timeline_groups(connection)
         if (
@@ -988,8 +990,23 @@ async def create_entry(request: Request) -> RedirectResponse | HTMLResponse:
             status_code=400,
         )
 
-    with connection_context() as connection:
-        entry_id = save_entry(connection, payload)
+    try:
+        with connection_context() as connection:
+            entry_id = save_entry(connection, payload)
+    except DuplicateEntrySourceUrlError as exc:
+        form_state.errors["source_url"] = str(exc)
+        context = {
+            "page_title": "New Entry",
+            "form_state": form_state,
+            "entry_id": None,
+            "timeline_filters": timeline_filters,
+        }
+        return templates.TemplateResponse(
+            request,
+            "entry_form.html",
+            cast(dict[str, object], context),
+            status_code=400,
+        )
     return RedirectResponse(url=f"/entries/{entry_id}/view", status_code=303)
 
 
@@ -1020,6 +1037,7 @@ async def update_entry_route(
 ) -> RedirectResponse | HTMLResponse:
     form = await request.form()
     form_state, payload = validate_entry_form(form)
+    timeline_filters: list[TimelineGroup] = []
     with connection_context() as connection:
         timeline_filters = list_timeline_groups(connection)
         if (
@@ -1043,11 +1061,26 @@ async def update_entry_route(
             status_code=400,
         )
 
-    with connection_context() as connection:
-        existing = get_entry(connection, entry_id)
-        if existing is None:
-            raise HTTPException(status_code=404, detail="Entry not found")
-        update_entry(connection, entry_id, payload)
+    try:
+        with connection_context() as connection:
+            existing = get_entry(connection, entry_id)
+            if existing is None:
+                raise HTTPException(status_code=404, detail="Entry not found")
+            update_entry(connection, entry_id, payload)
+    except DuplicateEntrySourceUrlError as exc:
+        form_state.errors["source_url"] = str(exc)
+        context = {
+            "page_title": "Edit Entry",
+            "form_state": form_state,
+            "entry_id": entry_id,
+            "timeline_filters": timeline_filters,
+        }
+        return templates.TemplateResponse(
+            request,
+            "entry_form.html",
+            cast(dict[str, object], context),
+            status_code=400,
+        )
     return RedirectResponse(url=f"/entries/{entry_id}/view", status_code=303)
 
 

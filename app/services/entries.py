@@ -67,6 +67,14 @@ class TimelineGroupValidationError(ValueError):
         self.field = field
 
 
+class DuplicateEntrySourceUrlError(ValueError):
+    def __init__(
+        self,
+        message: str = "This timeline group already has an entry with the same source URL.",
+    ) -> None:
+        super().__init__(message)
+
+
 class TimelineEntryGroup(TypedDict):
     label: str
     entries: list[Entry]
@@ -271,7 +279,36 @@ def compute_sort_key(year: int, month: int, day: int | None) -> int:
     return (year * 10000) + (month * 100) + (day or 0)
 
 
+def _ensure_unique_source_url(
+    connection: sqlite3.Connection,
+    *,
+    group_id: int,
+    source_url: str | None,
+    exclude_entry_id: int | None = None,
+) -> None:
+    if source_url is None:
+        return
+
+    parameters: list[int | str] = [group_id, source_url]
+    where_sql = "WHERE group_id = ? AND source_url = ?"
+    if exclude_entry_id is not None:
+        where_sql += " AND id != ?"
+        parameters.append(exclude_entry_id)
+
+    duplicate_row = connection.execute(
+        f"SELECT id FROM entries {where_sql} LIMIT 1",
+        parameters,
+    ).fetchone()
+    if duplicate_row is not None:
+        raise DuplicateEntrySourceUrlError()
+
+
 def save_entry(connection: sqlite3.Connection, payload: EntryPayload) -> int:
+    _ensure_unique_source_url(
+        connection,
+        group_id=payload.group_id,
+        source_url=payload.source_url,
+    )
     now = utc_now_iso()
     cursor = connection.execute(
         """
@@ -318,6 +355,12 @@ def save_entry(connection: sqlite3.Connection, payload: EntryPayload) -> int:
 def update_entry(
     connection: sqlite3.Connection, entry_id: int, payload: EntryPayload
 ) -> None:
+    _ensure_unique_source_url(
+        connection,
+        group_id=payload.group_id,
+        source_url=payload.source_url,
+        exclude_entry_id=entry_id,
+    )
     connection.execute(
         """
         UPDATE entries

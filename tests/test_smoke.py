@@ -195,6 +195,127 @@ class TestAppSmokeTests(unittest.TestCase):
         self.assertEqual(links[0]["url"], "https://example.com/update-details")
         self.assertEqual(links[0]["note"], "Release update details")
 
+    def test_create_entry_rejects_duplicate_source_url_within_group(self) -> None:
+        with TestClient(app) as client:
+            first_response = client.post(
+                "/entries/new",
+                data={
+                    "event_year": "2026",
+                    "event_month": "3",
+                    "event_day": "16",
+                    "group_id": "1",
+                    "title": "Original entry",
+                    "source_url": "https://example.com/duplicate",
+                    "generated_text": "",
+                    "final_text": "<p>Original entry content.</p>",
+                    "tags": "",
+                },
+                follow_redirects=False,
+            )
+            self.assertEqual(first_response.status_code, 303)
+
+            duplicate_response = client.post(
+                "/entries/new",
+                data={
+                    "event_year": "2026",
+                    "event_month": "3",
+                    "event_day": "17",
+                    "group_id": "1",
+                    "title": "Duplicate entry",
+                    "source_url": "https://example.com/duplicate",
+                    "generated_text": "",
+                    "final_text": "<p>Duplicate entry content.</p>",
+                    "tags": "",
+                },
+                follow_redirects=False,
+            )
+
+        self.assertEqual(duplicate_response.status_code, 400)
+        self.assertIn(
+            "This timeline group already has an entry with the same source URL.",
+            duplicate_response.text,
+        )
+        self.assertIn('id="source_url"', duplicate_response.text)
+        self.assertIn("is-invalid", duplicate_response.text)
+
+        with connection_context() as connection:
+            entries = connection.execute(
+                "SELECT COUNT(*) AS count FROM entries WHERE group_id = ? AND source_url = ?",
+                (1, "https://example.com/duplicate"),
+            ).fetchone()
+
+        self.assertIsNotNone(entries)
+        self.assertEqual(entries["count"], 1)
+
+    def test_edit_entry_rejects_duplicate_source_url_within_group(self) -> None:
+        with TestClient(app) as client:
+            first_response = client.post(
+                "/entries/new",
+                data={
+                    "event_year": "2026",
+                    "event_month": "3",
+                    "event_day": "16",
+                    "group_id": "1",
+                    "title": "First entry",
+                    "source_url": "https://example.com/original",
+                    "generated_text": "",
+                    "final_text": "<p>First entry content.</p>",
+                    "tags": "",
+                },
+                follow_redirects=False,
+            )
+            self.assertEqual(first_response.status_code, 303)
+
+            first_entry_id = self._first_entry_id()
+
+            second_response = client.post(
+                "/entries/new",
+                data={
+                    "event_year": "2026",
+                    "event_month": "3",
+                    "event_day": "17",
+                    "group_id": "1",
+                    "title": "Second entry",
+                    "source_url": "https://example.com/second",
+                    "generated_text": "",
+                    "final_text": "<p>Second entry content.</p>",
+                    "tags": "",
+                },
+                follow_redirects=False,
+            )
+            self.assertEqual(second_response.status_code, 303)
+
+            edit_response = client.post(
+                f"/entries/{first_entry_id}",
+                data={
+                    "event_year": "2026",
+                    "event_month": "3",
+                    "event_day": "16",
+                    "group_id": "1",
+                    "title": "First entry",
+                    "source_url": "https://example.com/second",
+                    "generated_text": "",
+                    "final_text": "<p>First entry content.</p>",
+                    "tags": "",
+                },
+                follow_redirects=False,
+            )
+
+        self.assertEqual(edit_response.status_code, 400)
+        self.assertIn(
+            "This timeline group already has an entry with the same source URL.",
+            edit_response.text,
+        )
+
+        with connection_context() as connection:
+            first_entry = connection.execute(
+                "SELECT source_url FROM entries WHERE id = ?",
+                (first_entry_id,),
+            ).fetchone()
+
+        self.assertIsNotNone(first_entry)
+        self.assertEqual(first_entry["source_url"], "https://example.com/original")
+
     def test_timeline_filter_supports_english_query_via_semantic_match(self) -> None:
         with TestClient(app) as client:
             first_response = client.post(
