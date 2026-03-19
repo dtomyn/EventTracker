@@ -11,7 +11,11 @@ from fastapi.testclient import TestClient
 
 from app.db import connection_context
 from app.main import app
-from app.services.ai_generate import DraftGenerationError, GeneratedEntrySuggestion
+from app.services.ai_generate import (
+    DraftGenerationError,
+    GeneratedEntrySuggestion,
+    get_draft_generator,
+)
 from app.services.embeddings import SemanticMatch
 from app.services.embeddings import load_embedding_settings
 from app.services.group_web_search import GroupWebSearchItem, GroupWebSearchResponse
@@ -39,6 +43,7 @@ class TestAppSmokeTests(unittest.TestCase):
         os.environ["EVENTTRACKER_DB_PATH"] = str(
             Path(self.temp_dir.name) / "EventTracker-test.db"
         )
+        get_draft_generator.cache_clear()
         load_embedding_settings.cache_clear()
 
     def tearDown(self) -> None:
@@ -48,6 +53,7 @@ class TestAppSmokeTests(unittest.TestCase):
             else:
                 os.environ[key] = value
 
+        get_draft_generator.cache_clear()
         load_embedding_settings.cache_clear()
         self.temp_dir.cleanup()
 

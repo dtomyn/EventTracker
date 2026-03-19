@@ -5,8 +5,9 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
+import sqlite3
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 from dotenv import load_dotenv
 
 from app.db import connection_context, init_db
@@ -88,14 +89,17 @@ def normalize_title_text(value: str) -> str:
 def parse_entries_document(raw_html: str) -> list[ParsedEntry]:
     soup = BeautifulSoup(f"<ul>{raw_html}</ul>", "html.parser")
     container = soup.find("ul")
-    if container is None:
+    if not isinstance(container, Tag):
         return []
 
     parsed_entries: list[ParsedEntry] = []
-    for item in container.find_all("li", recursive=False):
-        heading_tag = item.find("h4")
-        paragraph_tag = item.find("p")
-        if heading_tag is None or paragraph_tag is None:
+    for raw_item in container.find_all("li", recursive=False):
+        if not isinstance(raw_item, Tag):
+            continue
+
+        heading_tag = raw_item.find("h4")
+        paragraph_tag = raw_item.find("p")
+        if not isinstance(heading_tag, Tag) or not isinstance(paragraph_tag, Tag):
             continue
 
         heading_text = heading_tag.get_text(" ", strip=True)
@@ -181,7 +185,7 @@ def parse_entries_export(raw_json: str) -> list[ParsedEntry]:
     return parsed_entries
 
 
-def entry_exists(connection: object, payload: EntryPayload) -> bool:
+def entry_exists(connection: sqlite3.Connection, payload: EntryPayload) -> bool:
     if payload.event_day is None:
         row = connection.execute(
             """
@@ -248,7 +252,7 @@ def import_entries(input_path: Path, *, skip_existing: bool) -> tuple[int, int]:
 
 
 def insert_entry_without_embeddings(
-    connection: object,
+    connection: sqlite3.Connection,
     payload: EntryPayload,
     *,
     created_utc: str | None = None,
@@ -288,7 +292,10 @@ def insert_entry_without_embeddings(
             updated_utc or created_utc or now,
         ),
     )
-    entry_id = int(cursor.lastrowid)
+    raw_entry_id = cursor.lastrowid
+    if raw_entry_id is None:
+        raise RuntimeError("SQLite did not return an entry id for the inserted row.")
+    entry_id = int(raw_entry_id)
     sync_entry_tags(connection, entry_id, payload.tags)
     sync_entry_links(connection, entry_id, payload.links)
     return entry_id

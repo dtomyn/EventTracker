@@ -34,6 +34,7 @@ installed.cfg
 pip-log.txt
 pip-delete-this-directory.txt
 # Unit test / coverage reports
+.pytest_cache/
 htmlcov/
 tox/
 nox/
@@ -80,6 +81,5 @@ vscode/
 DS_Store
 
 .env
-
-data/EventTracker.db
 .eventtracker-dev-reload.pid
+data/EventTracker.db

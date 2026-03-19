@@ -13,17 +13,21 @@ from app.services.embeddings import (
 )
 
 
-if __name__ == "__main__":
-    workspace_root = Path(__file__).resolve().parents[1]
-    load_dotenv(workspace_root / ".env", override=True)
-
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--reindex-embeddings",
         action="store_true",
         help="Rebuild sqlite-vec embeddings for all saved entries.",
     )
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def main() -> None:
+    workspace_root = Path(__file__).resolve().parents[1]
+    load_dotenv(workspace_root / ".env", override=True)
+
+    args = parse_args()
 
     init_db()
     print("Database initialized.")
@@ -38,3 +42,7 @@ if __name__ == "__main__":
 
         print(message)
         print(f"Indexed entries: {count}")
+
+
+if __name__ == "__main__":
+    main()

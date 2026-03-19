@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 import logging
 import os
 import sqlite3
@@ -183,7 +184,7 @@ def get_db_path() -> Path:
 
 
 @contextmanager
-def connection_context() -> sqlite3.Connection:
+def connection_context() -> Iterator[sqlite3.Connection]:
     connection = get_connection()
     try:
         yield connection
@@ -282,7 +283,10 @@ def ensure_default_timeline_group(connection: sqlite3.Connection) -> int:
         "INSERT INTO timeline_groups(name, is_default) VALUES (?, 1)",
         (DEFAULT_TIMELINE_GROUP_NAME,),
     )
-    return int(cursor.lastrowid)
+    last_row_id = cursor.lastrowid
+    if last_row_id is None:
+        raise RuntimeError("Expected inserted timeline group row id.")
+    return int(last_row_id)
 
 
 def ensure_entry_group_assignments(

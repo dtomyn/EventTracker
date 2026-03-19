@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import base64
-from collections.abc import Mapping
+from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, date, datetime
 from html import escape
 import json
 import logging
 import sqlite3
-from typing import Any
+from typing import Literal, TypedDict, cast
 from urllib.parse import urlparse
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 from app.models import Entry, EntryLink, TimelineGroup
 from app.schemas import EntryFormState, EntryLinkPayload, EntryPayload
@@ -67,6 +67,34 @@ class TimelineGroupValidationError(ValueError):
         self.field = field
 
 
+class TimelineEntryGroup(TypedDict):
+    label: str
+    entries: list[Entry]
+
+
+class TimelineYearBucket(TypedDict):
+    key: str
+    label: str
+    event_year: int
+    count: int
+    focus_key: str
+    drill_view: Literal["months"]
+    drill_year: int
+    drill_month: None
+
+
+class TimelineMonthBucket(TypedDict):
+    key: str
+    label: str
+    event_year: int
+    event_month: int
+    count: int
+    focus_key: str
+    drill_view: Literal["events"]
+    drill_year: int
+    drill_month: int
+
+
 def blank_form_state() -> EntryFormState:
     return EntryFormState(
         values={
@@ -107,7 +135,7 @@ def form_state_from_entry(entry: Entry) -> EntryFormState:
 
 
 def validate_entry_form(
-    form_data: Mapping[str, Any],
+    form_data: Mapping[str, object],
 ) -> tuple[EntryFormState, EntryPayload | None]:
     values = {
         "event_year": str(form_data.get("event_year", "")).strip(),
@@ -185,9 +213,13 @@ def validate_entry_form(
     return state, payload
 
 
-def parse_link_rows(form_data: Mapping[str, Any]) -> list[dict[str, str]]:
-    raw_urls = form_data.getlist("link_url") if hasattr(form_data, "getlist") else []
-    raw_notes = form_data.getlist("link_note") if hasattr(form_data, "getlist") else []
+def parse_link_rows(form_data: Mapping[str, object]) -> list[dict[str, str]]:
+    getlist = cast(
+        Callable[[str], Iterable[object]] | None,
+        getattr(form_data, "getlist", None),
+    )
+    raw_urls = list(getlist("link_url")) if getlist is not None else []
+    raw_notes = list(getlist("link_note")) if getlist is not None else []
     row_count = max(len(raw_urls), len(raw_notes))
     rows: list[dict[str, str]] = []
     for index in range(row_count):
@@ -239,7 +271,7 @@ def compute_sort_key(year: int, month: int, day: int | None) -> int:
     return (year * 10000) + (month * 100) + (day or 0)
 
 
-def save_entry(connection: Any, payload: EntryPayload) -> int:
+def save_entry(connection: sqlite3.Connection, payload: EntryPayload) -> int:
     now = utc_now_iso()
     cursor = connection.execute(
         """
@@ -274,6 +306,8 @@ def save_entry(connection: Any, payload: EntryPayload) -> int:
             now,
         ),
     )
+    if cursor.lastrowid is None:
+        raise RuntimeError("Failed to determine the new entry id.")
     entry_id = int(cursor.lastrowid)
     sync_entry_tags(connection, entry_id, payload.tags)
     sync_entry_links(connection, entry_id, payload.links)
@@ -281,7 +315,9 @@ def save_entry(connection: Any, payload: EntryPayload) -> int:
     return entry_id
 
 
-def update_entry(connection: Any, entry_id: int, payload: EntryPayload) -> None:
+def update_entry(
+    connection: sqlite3.Connection, entry_id: int, payload: EntryPayload
+) -> None:
     connection.execute(
         """
         UPDATE entries
@@ -318,7 +354,9 @@ def update_entry(connection: Any, entry_id: int, payload: EntryPayload) -> None:
     _sync_embedding_without_failing(connection, entry_id, payload.final_text)
 
 
-def sync_entry_tags(connection: Any, entry_id: int, tags: list[str]) -> None:
+def sync_entry_tags(
+    connection: sqlite3.Connection, entry_id: int, tags: list[str]
+) -> None:
     connection.execute("DELETE FROM entry_tags WHERE entry_id = ?", (entry_id,))
     for tag_name in tags:
         connection.execute("INSERT OR IGNORE INTO tags(name) VALUES (?)", (tag_name,))
@@ -334,7 +372,9 @@ def sync_entry_tags(connection: Any, entry_id: int, tags: list[str]) -> None:
 
 
 def sync_entry_links(
-    connection: Any, entry_id: int, links: list[EntryLinkPayload]
+    connection: sqlite3.Connection,
+    entry_id: int,
+    links: list[EntryLinkPayload],
 ) -> None:
     connection.execute("DELETE FROM entry_links WHERE entry_id = ?", (entry_id,))
     now = utc_now_iso()
@@ -349,7 +389,7 @@ def sync_entry_links(
 
 
 def _sync_embedding_without_failing(
-    connection: Any, entry_id: int, final_text: str
+    connection: sqlite3.Connection, entry_id: int, final_text: str
 ) -> None:
     try:
         sync_entry_embedding(connection, entry_id, final_text)
@@ -361,7 +401,9 @@ def _sync_embedding_without_failing(
         logger.warning("Embedding sync failed for entry %s: %s", entry_id, exc)
 
 
-def list_timeline_entries(connection: Any, group_id: int | None = None) -> list[Entry]:
+def list_timeline_entries(
+    connection: sqlite3.Connection, group_id: int | None = None
+) -> list[Entry]:
     rows = connection.execute(
         f"""
         SELECT
@@ -442,14 +484,14 @@ def decode_timeline_cursor(cursor: str) -> tuple[int, str, int]:
 
 
 def list_timeline_entries_page(
-    connection: Any,
+    connection: sqlite3.Connection,
     *,
     group_id: int | None = None,
     page_size: int | None = None,
     cursor: tuple[int, str, int] | None = None,
 ) -> tuple[list[Entry], str | None, bool]:
     normalized_page_size = normalize_timeline_page_size(page_size)
-    parameters: list[Any] = []
+    parameters: list[int | str] = []
     where_clauses: list[str] = []
 
     if group_id is not None:
@@ -539,7 +581,7 @@ def paginate_entries_in_memory(
     return page_entries, next_cursor, has_more
 
 
-def get_entry(connection: Any, entry_id: int) -> Entry | None:
+def get_entry(connection: sqlite3.Connection, entry_id: int) -> Entry | None:
     row = connection.execute(
         """
         SELECT
@@ -574,10 +616,10 @@ def get_entry(connection: Any, entry_id: int) -> Entry | None:
     return entry_from_row(row)
 
 
-def build_timeline_groups(entries: list[Entry]) -> list[dict[str, Any]]:
-    groups: list[dict[str, Any]] = []
+def build_timeline_groups(entries: list[Entry]) -> list[TimelineEntryGroup]:
+    groups: list[TimelineEntryGroup] = []
     current_key: tuple[int, int] | None = None
-    current_group: dict[str, Any] | None = None
+    current_group: TimelineEntryGroup | None = None
 
     for entry in entries:
         key = (entry.event_year, entry.event_month)
@@ -588,28 +630,29 @@ def build_timeline_groups(entries: list[Entry]) -> list[dict[str, Any]]:
                 "entries": [],
             }
             groups.append(current_group)
+        assert current_group is not None
         current_group["entries"].append(entry)
 
     return groups
 
 
-def list_timeline_year_buckets(entries: list[Entry]) -> list[dict[str, Any]]:
-    buckets: list[dict[str, Any]] = []
-    bucket_map: dict[int, dict[str, Any]] = {}
+def list_timeline_year_buckets(entries: list[Entry]) -> list[TimelineYearBucket]:
+    buckets: list[TimelineYearBucket] = []
+    bucket_map: dict[int, TimelineYearBucket] = {}
 
     for entry in entries:
         bucket = bucket_map.get(entry.event_year)
         if bucket is None:
-            bucket = {
-                "key": str(entry.event_year),
-                "label": str(entry.event_year),
-                "event_year": entry.event_year,
-                "count": 0,
-                "focus_key": f"year-{entry.event_year}",
-                "drill_view": "months",
-                "drill_year": entry.event_year,
-                "drill_month": None,
-            }
+            bucket = TimelineYearBucket(
+                key=str(entry.event_year),
+                label=str(entry.event_year),
+                event_year=entry.event_year,
+                count=0,
+                focus_key=f"year-{entry.event_year}",
+                drill_view="months",
+                drill_year=entry.event_year,
+                drill_month=None,
+            )
             bucket_map[entry.event_year] = bucket
             buckets.append(bucket)
         bucket["count"] += 1
@@ -619,9 +662,9 @@ def list_timeline_year_buckets(entries: list[Entry]) -> list[dict[str, Any]]:
 
 def list_timeline_month_buckets(
     entries: list[Entry], *, year: int | None = None
-) -> list[dict[str, Any]]:
-    buckets: list[dict[str, Any]] = []
-    bucket_map: dict[tuple[int, int], dict[str, Any]] = {}
+) -> list[TimelineMonthBucket]:
+    buckets: list[TimelineMonthBucket] = []
+    bucket_map: dict[tuple[int, int], TimelineMonthBucket] = {}
 
     for entry in entries:
         if year is not None and entry.event_year != year:
@@ -630,17 +673,17 @@ def list_timeline_month_buckets(
         key = (entry.event_year, entry.event_month)
         bucket = bucket_map.get(key)
         if bucket is None:
-            bucket = {
-                "key": f"{entry.event_year}-{entry.event_month:02d}",
-                "label": f"{MONTH_NAMES[entry.event_month - 1]} {entry.event_year}",
-                "event_year": entry.event_year,
-                "event_month": entry.event_month,
-                "count": 0,
-                "focus_key": f"month-{entry.event_year}-{entry.event_month:02d}",
-                "drill_view": "events",
-                "drill_year": entry.event_year,
-                "drill_month": entry.event_month,
-            }
+            bucket = TimelineMonthBucket(
+                key=f"{entry.event_year}-{entry.event_month:02d}",
+                label=f"{MONTH_NAMES[entry.event_month - 1]} {entry.event_year}",
+                event_year=entry.event_year,
+                event_month=entry.event_month,
+                count=0,
+                focus_key=f"month-{entry.event_year}-{entry.event_month:02d}",
+                drill_view="events",
+                drill_year=entry.event_year,
+                drill_month=entry.event_month,
+            )
             bucket_map[key] = bucket
             buckets.append(bucket)
         bucket["count"] += 1
@@ -653,7 +696,7 @@ def list_timeline_summary_groups(
     *,
     year: int | None = None,
     month: int | None = None,
-) -> list[dict[str, Any]]:
+) -> list[TimelineEntryGroup]:
     scoped_entries = [
         entry
         for entry in entries
@@ -663,7 +706,7 @@ def list_timeline_summary_groups(
     return build_timeline_groups(scoped_entries)
 
 
-def list_timeline_groups(connection: Any) -> list[TimelineGroup]:
+def list_timeline_groups(connection: sqlite3.Connection) -> list[TimelineGroup]:
     rows = connection.execute(
         """
         SELECT
@@ -690,7 +733,9 @@ def list_timeline_groups(connection: Any) -> list[TimelineGroup]:
     ]
 
 
-def get_timeline_group(connection: Any, group_id: int) -> TimelineGroup | None:
+def get_timeline_group(
+    connection: sqlite3.Connection, group_id: int
+) -> TimelineGroup | None:
     row = connection.execute(
         "SELECT id, name, web_search_query, is_default FROM timeline_groups WHERE id = ?",
         (group_id,),
@@ -705,7 +750,9 @@ def get_timeline_group(connection: Any, group_id: int) -> TimelineGroup | None:
     )
 
 
-def get_default_timeline_group(connection: Any) -> TimelineGroup | None:
+def get_default_timeline_group(
+    connection: sqlite3.Connection,
+) -> TimelineGroup | None:
     row = connection.execute(
         "SELECT id, name, web_search_query, is_default FROM timeline_groups WHERE is_default = 1 ORDER BY id ASC LIMIT 1"
     ).fetchone()
@@ -720,7 +767,7 @@ def get_default_timeline_group(connection: Any) -> TimelineGroup | None:
 
 
 def create_timeline_group(
-    connection: Any,
+    connection: sqlite3.Connection,
     raw_name: str,
     raw_web_search_query: str = "",
     *,
@@ -741,6 +788,8 @@ def create_timeline_group(
             "name", "A group with that name already exists."
         ) from exc
 
+    if cursor.lastrowid is None:
+        raise RuntimeError("Failed to determine the new timeline group id.")
     group_id = int(cursor.lastrowid)
     if is_default:
         set_default_timeline_group(connection, group_id)
@@ -754,7 +803,7 @@ def create_timeline_group(
 
 
 def rename_timeline_group(
-    connection: Any,
+    connection: sqlite3.Connection,
     group_id: int,
     raw_name: str,
     raw_web_search_query: str = "",
@@ -785,7 +834,7 @@ def rename_timeline_group(
         clear_default_timeline_group(connection, group_id)
 
 
-def delete_timeline_group(connection: Any, group_id: int) -> None:
+def delete_timeline_group(connection: sqlite3.Connection, group_id: int) -> None:
     row = connection.execute(
         """
         SELECT
@@ -814,7 +863,7 @@ def delete_timeline_group(connection: Any, group_id: int) -> None:
     connection.execute("DELETE FROM timeline_groups WHERE id = ?", (group_id,))
 
 
-def set_default_timeline_group(connection: Any, group_id: int) -> None:
+def set_default_timeline_group(connection: sqlite3.Connection, group_id: int) -> None:
     row = connection.execute(
         "SELECT id FROM timeline_groups WHERE id = ?",
         (group_id,),
@@ -831,7 +880,7 @@ def set_default_timeline_group(connection: Any, group_id: int) -> None:
     )
 
 
-def clear_default_timeline_group(connection: Any, group_id: int) -> None:
+def clear_default_timeline_group(connection: sqlite3.Connection, group_id: int) -> None:
     connection.execute(
         "UPDATE timeline_groups SET is_default = 0 WHERE id = ?",
         (group_id,),
@@ -880,7 +929,7 @@ def sanitize_search_snippet(value: str) -> str:
     return _sanitize_html(value, ALLOWED_SEARCH_SNIPPET_TAGS)
 
 
-def entry_from_row(row: Any) -> Entry:
+def entry_from_row(row: sqlite3.Row) -> Entry:
     tags_csv = row["tags_csv"] or ""
     tags = [tag for tag in tags_csv.split(",") if tag]
     links = parse_links_json(row["links_json"] if "links_json" in row.keys() else None)
@@ -968,6 +1017,8 @@ def _sanitize_html(value: str, allowed_tags: set[str]) -> str:
 
     soup = BeautifulSoup(value, "html.parser")
     for tag in soup.find_all(True):
+        if not isinstance(tag, Tag):
+            continue
         if tag.name in {"script", "style"}:
             tag.decompose()
             continue

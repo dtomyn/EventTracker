@@ -437,6 +437,12 @@ Run the test suite with:
 uv run python -m unittest discover -s tests -p "test_*.py"
 ```
 
+Run the static type check with:
+
+```powershell
+uv run pyright
+```
+
 Current automated coverage includes:
 
 - app startup

@@ -3,11 +3,11 @@ from __future__ import annotations
 import base64
 import json
 import re
-from typing import Any
+import sqlite3
 
 from app.models import Entry, SearchResult
 from app.services.entries import entry_from_row, preview_text
-from app.services.embeddings import search_semantic_matches
+from app.services.embeddings import SemanticMatch, search_semantic_matches
 
 
 TOKEN_RE = re.compile(r"[\w-]+")
@@ -63,7 +63,7 @@ def paginate_search_results(
 
 
 def search_entries(
-    connection: Any, raw_query: str, group_id: int | None = None
+    connection: sqlite3.Connection, raw_query: str, group_id: int | None = None
 ) -> list[SearchResult]:
     normalized_query = raw_query.strip()
     if not normalized_query:
@@ -120,7 +120,7 @@ def search_entries(
 
 
 def filter_timeline_entries(
-    connection: Any, raw_query: str, group_id: int | None = None
+    connection: sqlite3.Connection, raw_query: str, group_id: int | None = None
 ) -> list[Entry]:
     normalized_query = raw_query.strip()
     if not normalized_query:
@@ -153,14 +153,14 @@ def build_fts_query(raw_query: str) -> str:
 
 
 def _search_fts_rows(
-    connection: Any, raw_query: str, group_id: int | None = None
-) -> list[Any]:
+    connection: sqlite3.Connection, raw_query: str, group_id: int | None = None
+) -> list[sqlite3.Row]:
     query = build_fts_query(raw_query)
     if not query:
         return []
 
     where_clauses = ["entries_fts MATCH ?"]
-    parameters: list[Any] = [query]
+    parameters: list[str | int] = [query]
     if group_id is not None:
         where_clauses.append("e.group_id = ?")
         parameters.append(group_id)
@@ -208,7 +208,9 @@ def _search_fts_rows(
     ).fetchall()
 
 
-def _get_entries_by_id(connection: Any, entry_ids: list[int]) -> dict[int, Any]:
+def _get_entries_by_id(
+    connection: sqlite3.Connection, entry_ids: list[int]
+) -> dict[int, sqlite3.Row]:
     placeholders = ", ".join("?" for _ in entry_ids)
     rows = connection.execute(
         f"""
@@ -247,8 +249,10 @@ def _rrf_score(index: int, k: int = 60) -> float:
 
 
 def _filter_semantic_matches_by_group(
-    connection: Any, semantic_matches: list[Any], group_id: int | None = None
-) -> list[Any]:
+    connection: sqlite3.Connection,
+    semantic_matches: list[SemanticMatch],
+    group_id: int | None = None,
+) -> list[SemanticMatch]:
     if group_id is None or not semantic_matches:
         return semantic_matches
 

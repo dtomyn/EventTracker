@@ -20,6 +20,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "playwright>=1.52,<2",
+    "pyright>=1.1.404,<2",
     "pytest>=8.4,<9",
 ]
 
@@ -28,4 +29,34 @@ package = false
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "basic"
+include = [
+    "app/db.py",
+    "app/env.py",
+    "app/main.py",
+    "app/models.py",
+    "app/schemas.py",
+    "app/services/entries.py",
+    "app/services/ai_generate.py",
+    "app/services/embeddings.py",
+    "app/services/group_web_search.py",
+    "app/services/copilot_runtime.py",
+    "app/services/search.py",
+    "scripts/run_dev.py",
+    "scripts/import_entries.py",
+    "scripts/init_db.py",
+    "tests/test_ai_generate.py",
+    "tests/test_db.py",
+    "tests/test_group_web_search.py",
+    "tests/test_entries.py",
+    "tests/test_init_db.py",
+    "tests/test_import_entries.py",
+    "tests/test_run_dev.py",
+    "tests/test_search.py",
+    "tests/test_smoke.py",
+]
+reportMissingTypeStubs = false
 

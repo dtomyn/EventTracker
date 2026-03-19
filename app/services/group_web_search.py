@@ -2,30 +2,54 @@ from __future__ import annotations
 
 from contextlib import AsyncExitStack
 from dataclasses import asdict, dataclass
-import asyncio
+from collections.abc import Mapping
 from datetime import datetime
 import json
 import logging
 import os
 import re
 import time
-from typing import Any, Callable
+from typing import Callable, TypeAlias, TypedDict
 from urllib.parse import urlparse
 
 from app.env import load_app_env
+from app.services import copilot_runtime
 from app.services.ai_generate import (
     DraftGenerationConfigurationError,
-    _extract_copilot_message_content,
-    _instantiate_copilot_client,
-    _prepare_copilot_client,
-    _prepare_copilot_resource,
-    _resolve_copilot_permission_handler,
     load_ai_provider,
     load_copilot_settings,
 )
+from app.services.copilot_runtime import COPILOT_CLIENT_SETTINGS_MESSAGE
+from app.services.copilot_runtime import COPILOT_SDK_REQUIRED_MESSAGE
 
 
 logger = logging.getLogger(__name__)
+
+JsonValue: TypeAlias = (
+    None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
+)
+
+
+class GroupWebSearchItemPayload(TypedDict):
+    title: str
+    url: str
+    snippet: str
+    source: str | None
+    article_date: str | None
+
+
+class GroupWebSearchResponsePayload(TypedDict):
+    query: str
+    items: list[GroupWebSearchItemPayload]
+
+
+class GroupWebSearchEventPayload(TypedDict, total=False):
+    kind: str
+    phase: str
+    message: str | None
+    eventType: str
+    raw: JsonValue
+
 
 MAX_GROUP_WEB_RESULTS = 5
 MIN_GROUP_WEB_RESULTS = 3
@@ -130,10 +154,19 @@ class GroupWebSearchResponse:
     query: str
     items: list[GroupWebSearchItem]
 
-    def to_payload(self) -> dict[str, Any]:
+    def to_payload(self) -> GroupWebSearchResponsePayload:
         return {
             "query": self.query,
-            "items": [asdict(item) for item in self.items],
+            "items": [
+                {
+                    "title": item.title,
+                    "url": item.url,
+                    "snippet": item.snippet,
+                    "source": item.source,
+                    "article_date": item.article_date,
+                }
+                for item in self.items
+            ],
         }
 
 
@@ -144,7 +177,7 @@ class _CachedGroupWebSearchResponse:
 
 
 _GROUP_WEB_SEARCH_CACHE: dict[str, _CachedGroupWebSearchResponse] = {}
-GroupWebSearchEventSink = Callable[[dict[str, Any]], None]
+GroupWebSearchEventSink = Callable[[GroupWebSearchEventPayload], None]
 
 
 async def search_group_web(
@@ -187,7 +220,12 @@ async def search_group_web(
         return cached_response
 
     settings = load_copilot_settings()
-    client = _instantiate_copilot_client(settings)
+    client = copilot_runtime.instantiate_copilot_client(
+        settings,
+        configuration_error_type=DraftGenerationConfigurationError,
+        missing_sdk_message=COPILOT_SDK_REQUIRED_MESSAGE,
+        invalid_settings_message=COPILOT_CLIENT_SETTINGS_MESSAGE,
+    )
     _emit_group_web_search_event(
         event_sink,
         {
@@ -199,13 +237,17 @@ async def search_group_web(
 
     try:
         async with AsyncExitStack() as exit_stack:
-            active_client = await _prepare_copilot_client(exit_stack, client)
+            active_client = await copilot_runtime.prepare_copilot_client(
+                exit_stack, client
+            )
             session = await _create_search_session(
                 active_client,
                 settings.model_id,
                 streaming=event_sink is not None,
             )
-            active_session = await _prepare_copilot_resource(exit_stack, session)
+            active_session = await copilot_runtime.prepare_copilot_resource(
+                exit_stack, session
+            )
             response = await _send_search_prompt(
                 active_session,
                 normalized_query,
@@ -213,10 +255,6 @@ async def search_group_web(
                 phase="initial",
             )
     except TimeoutError as exc:
-        raise GroupWebSearchTimeoutError(
-            "GitHub Copilot web search timed out before completing."
-        ) from exc
-    except asyncio.TimeoutError as exc:
         raise GroupWebSearchTimeoutError(
             "GitHub Copilot web search timed out before completing."
         ) from exc
@@ -230,7 +268,7 @@ async def search_group_web(
             "Copilot SDK and ensure the Copilot CLI is available."
         ) from exc
 
-    content = _extract_copilot_message_content(response)
+    content = copilot_runtime.extract_copilot_message_content(response)
     if not content:
         raise GroupWebSearchError(
             "The AI provider returned an empty web search response."
@@ -265,51 +303,33 @@ async def search_group_web(
 
 
 async def _create_search_session(
-    client: Any, model_id: str, *, streaming: bool = False
-) -> Any:
-    method = getattr(client, "create_session", None)
-    if method is None:
-        raise GroupWebSearchConfigurationError(
-            "The installed GitHub Copilot SDK does not expose create_session(...)."
-        )
-
-    config = {
-        "model": model_id,
-        "reasoning_effort": "low",
-        "on_permission_request": _resolve_copilot_permission_handler(),
-        "system_message": {
-            "mode": "append",
-            "content": GROUP_WEB_SEARCH_SYSTEM_PROMPT,
-        },
-    }
-    if streaming:
-        config["streaming"] = True
-    return await method(config)
+    client: copilot_runtime.CopilotClient, model_id: str, *, streaming: bool = False
+) -> copilot_runtime.CopilotSession:
+    return await copilot_runtime.create_copilot_session(
+        client,
+        model_id=model_id,
+        system_message=GROUP_WEB_SEARCH_SYSTEM_PROMPT,
+        reasoning_effort="low",
+        streaming=streaming,
+    )
 
 
 async def _send_search_prompt(
-    session: Any,
+    session: copilot_runtime.CopilotSession,
     query: str,
     *,
     event_sink: GroupWebSearchEventSink | None = None,
     phase: str,
-) -> Any:
-    method = getattr(session, "send_and_wait", None)
-    if method is None:
-        raise GroupWebSearchConfigurationError(
-            "The installed GitHub Copilot SDK does not expose send_and_wait(...)."
-        )
-
+) -> object:
     unsubscribe = _subscribe_to_group_web_search_events(
         session,
         event_sink=event_sink,
         phase=phase,
     )
     try:
-        return await method(
-            {
-                "prompt": _build_search_prompt(query),
-            },
+        return await copilot_runtime.send_copilot_prompt(
+            session,
+            _build_search_prompt(query),
             timeout=get_group_web_search_timeout_seconds(),
         )
     finally:
@@ -324,17 +344,26 @@ async def _broaden_group_web_search(
     event_sink: GroupWebSearchEventSink | None = None,
 ) -> GroupWebSearchResponse:
     settings = load_copilot_settings()
-    client = _instantiate_copilot_client(settings)
+    client = copilot_runtime.instantiate_copilot_client(
+        settings,
+        configuration_error_type=DraftGenerationConfigurationError,
+        missing_sdk_message=COPILOT_SDK_REQUIRED_MESSAGE,
+        invalid_settings_message=COPILOT_CLIENT_SETTINGS_MESSAGE,
+    )
 
     try:
         async with AsyncExitStack() as exit_stack:
-            active_client = await _prepare_copilot_client(exit_stack, client)
+            active_client = await copilot_runtime.prepare_copilot_client(
+                exit_stack, client
+            )
             session = await _create_search_session(
                 active_client,
                 model_id,
                 streaming=event_sink is not None,
             )
-            active_session = await _prepare_copilot_resource(exit_stack, session)
+            active_session = await copilot_runtime.prepare_copilot_resource(
+                exit_stack, session
+            )
             response = await _send_broadened_search_prompt(
                 active_session,
                 query,
@@ -347,7 +376,7 @@ async def _broaden_group_web_search(
         )
         return initial_response
 
-    content = _extract_copilot_message_content(response)
+    content = copilot_runtime.extract_copilot_message_content(response)
     if not content:
         return initial_response
 
@@ -366,28 +395,21 @@ async def _broaden_group_web_search(
 
 
 async def _send_broadened_search_prompt(
-    session: Any,
+    session: copilot_runtime.CopilotSession,
     query: str,
     *,
     event_sink: GroupWebSearchEventSink | None = None,
     phase: str,
-) -> Any:
-    method = getattr(session, "send_and_wait", None)
-    if method is None:
-        raise GroupWebSearchConfigurationError(
-            "The installed GitHub Copilot SDK does not expose send_and_wait(...)."
-        )
-
+) -> object:
     unsubscribe = _subscribe_to_group_web_search_events(
         session,
         event_sink=event_sink,
         phase=phase,
     )
     try:
-        return await method(
-            {
-                "prompt": _build_broadened_search_prompt(query),
-            },
+        return await copilot_runtime.send_copilot_prompt(
+            session,
+            _build_broadened_search_prompt(query),
             timeout=get_group_web_search_broadened_timeout_seconds(),
         )
     finally:
@@ -395,7 +417,7 @@ async def _send_broadened_search_prompt(
 
 
 def _subscribe_to_group_web_search_events(
-    session: Any,
+    session: copilot_runtime.CopilotSession,
     *,
     event_sink: GroupWebSearchEventSink | None,
     phase: str,
@@ -403,24 +425,17 @@ def _subscribe_to_group_web_search_events(
     if event_sink is None:
         return lambda: None
 
-    on_method = getattr(session, "on", None)
-    if not callable(on_method):
-        return lambda: None
-
-    def handle_event(event: Any) -> None:
+    def handle_event(event: object) -> None:
         payload = _build_group_web_search_session_event_payload(event, phase=phase)
         if payload is not None:
             _emit_group_web_search_event(event_sink, payload)
 
-    unsubscribe = on_method(handle_event)
-    if callable(unsubscribe):
-        return unsubscribe
-    return lambda: None
+    return copilot_runtime.subscribe_to_session_events(session, handle_event)
 
 
 def _build_group_web_search_session_event_payload(
-    event: Any, *, phase: str
-) -> dict[str, Any] | None:
+    event: object, *, phase: str
+) -> GroupWebSearchEventPayload | None:
     event_type = _normalize_group_web_search_event_type(getattr(event, "type", None))
     if not event_type:
         return None
@@ -434,7 +449,7 @@ def _build_group_web_search_session_event_payload(
     }
 
 
-def _normalize_group_web_search_event_type(value: Any) -> str:
+def _normalize_group_web_search_event_type(value: object) -> str:
     if value is None:
         return ""
     enum_value = getattr(value, "value", None)
@@ -443,7 +458,7 @@ def _normalize_group_web_search_event_type(value: Any) -> str:
     return str(value)
 
 
-def _summarize_group_web_search_session_event(event: Any) -> str | None:
+def _summarize_group_web_search_session_event(event: object) -> str | None:
     data = getattr(event, "data", None)
     for attr_name in (
         "delta_content",
@@ -466,12 +481,14 @@ def _summarize_group_web_search_session_event(event: Any) -> str | None:
     return None
 
 
-def _serialize_group_web_search_event_value(value: Any, *, depth: int = 0) -> Any:
+def _serialize_group_web_search_event_value(
+    value: object, *, depth: int = 0
+) -> JsonValue:
     if depth >= 5:
         return str(value)
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         return {
             str(key): _serialize_group_web_search_event_value(item, depth=depth + 1)
             for key, item in value.items()
@@ -486,10 +503,11 @@ def _serialize_group_web_search_event_value(value: Any, *, depth: int = 0) -> An
     if isinstance(enum_value, (str, int, float, bool)):
         return enum_value
 
-    if hasattr(value, "to_dict") and callable(value.to_dict):
+    to_dict = getattr(value, "to_dict", None)
+    if callable(to_dict):
         try:
             return _serialize_group_web_search_event_value(
-                value.to_dict(),
+                to_dict(),
                 depth=depth + 1,
             )
         except Exception:
@@ -518,7 +536,8 @@ def _serialize_group_web_search_event_value(value: Any, *, depth: int = 0) -> An
 
 
 def _emit_group_web_search_event(
-    event_sink: GroupWebSearchEventSink | None, payload: dict[str, Any]
+    event_sink: GroupWebSearchEventSink | None,
+    payload: GroupWebSearchEventPayload,
 ) -> None:
     if event_sink is None:
         return
@@ -618,8 +637,8 @@ def _parse_group_web_search_response(
     )
 
 
-def _parse_group_web_search_item(raw_item: Any) -> GroupWebSearchItem | None:
-    if not isinstance(raw_item, dict):
+def _parse_group_web_search_item(raw_item: object) -> GroupWebSearchItem | None:
+    if not isinstance(raw_item, Mapping):
         return None
 
     title = " ".join(str(raw_item.get("title") or "").split())
@@ -642,7 +661,7 @@ def _parse_group_web_search_item(raw_item: Any) -> GroupWebSearchItem | None:
     )
 
 
-def _normalize_article_date(value: Any) -> str | None:
+def _normalize_article_date(value: object) -> str | None:
     candidate = " ".join(str(value or "").strip().split())
     if not candidate:
         return None
@@ -657,7 +676,7 @@ def _normalize_article_date(value: Any) -> str | None:
     return None
 
 
-def _normalize_http_url(value: Any) -> str | None:
+def _normalize_http_url(value: object) -> str | None:
     candidate = str(value or "").strip()
     if not candidate:
         return None

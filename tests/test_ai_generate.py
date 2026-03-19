@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+from collections.abc import Coroutine
 import json
 import os
 from pathlib import Path
 import tempfile
 from threading import Thread
 from types import SimpleNamespace
+from typing import Any, TypeVar, cast
 import unittest
 from unittest.mock import AsyncMock, patch
 
 from app.env import load_app_env
+from app.services import copilot_runtime
 from app.services.ai_generate import (
     CopilotChatDraftGenerator,
     CopilotSettings,
@@ -23,24 +26,32 @@ from app.services.ai_generate import (
 )
 
 
-def _run_async(coro):
-    result: dict[str, object] = {}
+T = TypeVar("T")
+_UNSET = object()
+
+
+def _run_async(coro: Coroutine[Any, Any, T]) -> T:
+    value: T | object = _UNSET
+    error: BaseException | None = None
 
     def runner() -> None:
+        nonlocal error, value
         import asyncio
 
         try:
-            result["value"] = asyncio.run(coro)
+            value = asyncio.run(coro)
         except BaseException as exc:  # pragma: no cover - re-raised in caller.
-            result["error"] = exc
+            error = exc
 
     thread = Thread(target=runner)
     thread.start()
     thread.join()
 
-    if "error" in result:
-        raise result["error"]
-    return result.get("value")
+    if error is not None:
+        raise error
+    if value is _UNSET:
+        raise AssertionError("Expected coroutine to produce a result.")
+    return cast(T, value)
 
 
 class _FakeCopilotSession:
@@ -59,6 +70,14 @@ class _FakeCopilotSession:
 
     async def close(self) -> None:
         self.closed = True
+
+
+class _FakeDisconnectOnlySession:
+    def __init__(self) -> None:
+        self.disconnected = False
+
+    async def disconnect(self) -> None:
+        self.disconnected = True
 
 
 class _FakeCopilotClient:
@@ -80,6 +99,21 @@ class _FakeCopilotClient:
     async def create_session(self, config: dict[str, object]) -> _FakeCopilotSession:
         self.config = config
         return self.session
+
+
+class _FakeStartStopClient:
+    def __init__(self) -> None:
+        self.started = False
+        self.stopped = False
+
+    async def start(self) -> None:
+        self.started = True
+
+    async def stop(self) -> None:
+        self.stopped = True
+
+    async def create_session(self, config: dict[str, object]) -> _FakeCopilotSession:
+        return _FakeCopilotSession(response=config)
 
 
 class TestDraftGeneratorSelection(unittest.TestCase):
@@ -202,7 +236,10 @@ class TestOpenAIChatDraftGenerator(unittest.TestCase):
         self.assertEqual(suggestion.event_year, 2026)
         self.assertEqual(suggestion.event_month, 3)
         self.assertEqual(suggestion.event_day, 16)
-        self.assertNotIn("temperature", create.await_args.kwargs)
+        await_args = create.await_args
+        self.assertIsNotNone(await_args)
+        assert await_args is not None
+        self.assertNotIn("temperature", await_args.kwargs)
 
 
 class TestGeneratedDraftNormalization(unittest.TestCase):
@@ -224,6 +261,52 @@ class TestGeneratedDraftNormalization(unittest.TestCase):
         self.assertEqual(suggestion.draft_html, "<p>Release update for Café</p>")
 
 
+class TestCopilotSdkWrapper(unittest.TestCase):
+    def test_wrapper_exposes_installed_copilot_sdk_symbols(self) -> None:
+        from app.services import copilot_sdk
+
+        self.assertEqual(copilot_sdk.CopilotClient.__module__, "copilot.client")
+        self.assertEqual(
+            copilot_sdk.PermissionHandler.__module__,
+            "copilot.types",
+        )
+
+    def test_prepare_copilot_client_supports_start_stop_lifecycle(self) -> None:
+        client = _FakeStartStopClient()
+
+        async def exercise() -> None:
+            async with AsyncExitStack() as exit_stack:
+                prepared = await copilot_runtime.prepare_copilot_client(
+                    exit_stack, client
+                )
+                self.assertIs(prepared, client)
+                self.assertTrue(client.started)
+                self.assertFalse(client.stopped)
+
+        from contextlib import AsyncExitStack
+
+        _run_async(exercise())
+
+        self.assertTrue(client.stopped)
+
+    def test_prepare_copilot_resource_supports_disconnect_cleanup(self) -> None:
+        session = _FakeDisconnectOnlySession()
+
+        async def exercise() -> None:
+            async with AsyncExitStack() as exit_stack:
+                prepared = await copilot_runtime.prepare_copilot_resource(
+                    exit_stack, session
+                )
+                self.assertIs(prepared, session)
+                self.assertFalse(session.disconnected)
+
+        from contextlib import AsyncExitStack
+
+        _run_async(exercise())
+
+        self.assertTrue(session.disconnected)
+
+
 class TestCopilotChatDraftGenerator(unittest.TestCase):
     def test_generate_suggestion_parses_copilot_response(self) -> None:
         fake_client = _FakeCopilotClient(
@@ -242,11 +325,11 @@ class TestCopilotChatDraftGenerator(unittest.TestCase):
 
         with (
             patch(
-                "app.services.ai_generate._instantiate_copilot_client",
+                "app.services.copilot_runtime.instantiate_copilot_client",
                 return_value=fake_client,
             ),
             patch(
-                "app.services.ai_generate._resolve_copilot_permission_handler",
+                "app.services.copilot_runtime.get_permission_handler",
                 return_value="approve-all",
             ),
         ):
@@ -300,11 +383,11 @@ class TestCopilotChatDraftGenerator(unittest.TestCase):
 
         with (
             patch(
-                "app.services.ai_generate._instantiate_copilot_client",
+                "app.services.copilot_runtime.instantiate_copilot_client",
                 return_value=fake_client,
             ),
             patch(
-                "app.services.ai_generate._resolve_copilot_permission_handler",
+                "app.services.copilot_runtime.get_permission_handler",
                 return_value="approve-all",
             ),
         ):

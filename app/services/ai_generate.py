@@ -1,18 +1,23 @@
 from __future__ import annotations
 
-import importlib
 import json
 import os
 import unicodedata
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any
+from typing import cast
 from typing import Protocol
 
 from openai import AsyncOpenAI
+from openai.types.chat import ChatCompletionMessageParam
+from openai.types.chat import ChatCompletionSystemMessageParam
+from openai.types.chat import ChatCompletionUserMessageParam
 
 from app.env import load_app_env
+from app.services import copilot_runtime
+from app.services.copilot_runtime import COPILOT_CLIENT_SETTINGS_MESSAGE
+from app.services.copilot_runtime import COPILOT_SDK_REQUIRED_MESSAGE
 from app.services.extraction import ExtractionResult
 
 
@@ -86,9 +91,11 @@ class OpenAIChatDraftGenerator:
         if not normalized_title and extraction is None:
             raise ValueError("Provide a title or source URL to generate a draft.")
 
+        prompt = _build_user_prompt(normalized_title, extraction)
+
         response = await self._client.chat.completions.create(
             model=self._settings.model_id,
-            messages=_build_generation_messages(normalized_title, extraction),
+            messages=_build_generation_messages(prompt),
         )
         message = response.choices[0].message.content if response.choices else None
         return _finalize_suggestion(message or "", normalized_title, extraction)
@@ -105,21 +112,36 @@ class CopilotChatDraftGenerator:
         if not normalized_title and extraction is None:
             raise ValueError("Provide a title or source URL to generate a draft.")
 
-        response_content = await self._generate_response_content(
-            _build_generation_messages(normalized_title, extraction)
-        )
+        prompt = _build_user_prompt(normalized_title, extraction)
+
+        response_content = await self._generate_response_content(prompt)
         return _finalize_suggestion(response_content, normalized_title, extraction)
 
-    async def _generate_response_content(self, messages: list[dict[str, str]]) -> str:
-        client = _instantiate_copilot_client(self._settings)
+    async def _generate_response_content(self, prompt: str) -> str:
+        client = copilot_runtime.instantiate_copilot_client(
+            self._settings,
+            configuration_error_type=DraftGenerationConfigurationError,
+            missing_sdk_message=COPILOT_SDK_REQUIRED_MESSAGE,
+            invalid_settings_message=COPILOT_CLIENT_SETTINGS_MESSAGE,
+        )
         try:
             async with AsyncExitStack() as exit_stack:
-                active_client = await _prepare_copilot_client(exit_stack, client)
-                session = await _create_copilot_session(
-                    active_client, self._settings.model_id
+                active_client = await copilot_runtime.prepare_copilot_client(
+                    exit_stack, client
                 )
-                active_session = await _prepare_copilot_resource(exit_stack, session)
-                response = await _send_copilot_messages(active_session, messages)
+                session = await copilot_runtime.create_copilot_session(
+                    active_client,
+                    model_id=self._settings.model_id,
+                    system_message=GENERATION_SYSTEM_PROMPT,
+                )
+                active_session = await copilot_runtime.prepare_copilot_resource(
+                    exit_stack, session
+                )
+                response = await copilot_runtime.send_copilot_prompt(
+                    active_session,
+                    prompt,
+                    timeout=60.0,
+                )
         except DraftGenerationError:
             raise
         except Exception as exc:
@@ -130,7 +152,7 @@ class CopilotChatDraftGenerator:
                 "COPILOT_CLI_URL blank unless you intentionally need an override."
             ) from exc
 
-        content = _extract_copilot_message_content(response)
+        content = copilot_runtime.extract_copilot_message_content(response)
         if not content:
             raise DraftGenerationError("The AI provider returned an empty draft.")
         return content
@@ -199,19 +221,16 @@ def load_copilot_settings() -> CopilotSettings:
     )
 
 
-def _build_generation_messages(
-    title: str, extraction: ExtractionResult | None
-) -> list[dict[str, str]]:
-    return [
-        {
-            "role": "system",
-            "content": GENERATION_SYSTEM_PROMPT,
-        },
-        {
-            "role": "user",
-            "content": _build_user_prompt(title, extraction),
-        },
-    ]
+def _build_generation_messages(prompt: str) -> list[ChatCompletionMessageParam]:
+    system_message: ChatCompletionSystemMessageParam = {
+        "role": "system",
+        "content": GENERATION_SYSTEM_PROMPT,
+    }
+    user_message: ChatCompletionUserMessageParam = {
+        "role": "user",
+        "content": prompt,
+    }
+    return cast(list[ChatCompletionMessageParam], [system_message, user_message])
 
 
 def _finalize_suggestion(
@@ -220,7 +239,8 @@ def _finalize_suggestion(
     suggestion = _parse_generation_response(value)
     if not suggestion.title:
         suggestion = GeneratedEntrySuggestion(
-            title=title or _normalize_text(extraction.title if extraction else ""),
+            title=title
+            or _normalize_text((extraction.title or "") if extraction else ""),
             draft_html=suggestion.draft_html,
             event_year=suggestion.event_year,
             event_month=suggestion.event_month,
@@ -229,164 +249,6 @@ def _finalize_suggestion(
     if not suggestion.title:
         raise DraftGenerationError("The AI provider returned an empty title.")
     return suggestion
-
-
-def _resolve_copilot_client_class() -> type[Any]:
-    module = _resolve_copilot_module()
-    client_class = getattr(module, "CopilotClient", None)
-    if client_class is None:
-        raise DraftGenerationConfigurationError(
-            "The installed GitHub Copilot SDK does not expose CopilotClient."
-        )
-    return client_class
-
-
-def _resolve_copilot_module() -> Any:
-    module = None
-    import_errors: list[ImportError] = []
-    for module_name in ("copilot", "github_copilot_sdk"):
-        try:
-            module = importlib.import_module(module_name)
-            break
-        except ImportError as exc:
-            import_errors.append(exc)
-
-    if module is None:
-        raise DraftGenerationConfigurationError(
-            "GitHub Copilot draft generation requires the github-copilot-sdk package."
-        ) from import_errors[-1]
-
-    return module
-
-
-def _resolve_copilot_permission_handler() -> Any:
-    module = _resolve_copilot_module()
-    permission_handler = getattr(module, "PermissionHandler", None)
-    if permission_handler is None or not hasattr(permission_handler, "approve_all"):
-        raise DraftGenerationConfigurationError(
-            "The installed GitHub Copilot SDK does not expose PermissionHandler.approve_all."
-        )
-    return permission_handler.approve_all
-
-
-def _instantiate_copilot_client(settings: CopilotSettings) -> Any:
-    client_class = _resolve_copilot_client_class()
-    options = {
-        "cli_path": settings.cli_path,
-        "cli_url": settings.cli_url,
-    }
-    filtered_options = {
-        key: value for key, value in options.items() if value is not None
-    }
-    try:
-        return client_class(filtered_options or None)
-    except TypeError as exc:
-        raise DraftGenerationConfigurationError(
-            "Unable to initialize the GitHub Copilot client with the current settings. "
-            "Most setups should leave COPILOT_CLI_PATH and COPILOT_CLI_URL unset."
-        ) from exc
-
-
-async def _create_copilot_session(client: Any, model_id: str) -> Any:
-    method = getattr(client, "create_session", None)
-    if method is None:
-        raise DraftGenerationConfigurationError(
-            "The installed GitHub Copilot SDK does not expose create_session(...)."
-        )
-
-    return await method(
-        {
-            "model": model_id,
-            "on_permission_request": _resolve_copilot_permission_handler(),
-            "system_message": {
-                "mode": "append",
-                "content": GENERATION_SYSTEM_PROMPT,
-            },
-        }
-    )
-
-
-async def _prepare_copilot_resource(exit_stack: AsyncExitStack, resource: Any) -> Any:
-    if hasattr(resource, "__aenter__") and hasattr(resource, "__aexit__"):
-        return await exit_stack.enter_async_context(resource)
-
-    for method_name in ("destroy", "aclose", "close", "stop", "shutdown"):
-        method = getattr(resource, method_name, None)
-        if callable(method):
-            exit_stack.push_async_callback(_invoke_cleanup_method, method)
-            break
-    return resource
-
-
-async def _prepare_copilot_client(exit_stack: AsyncExitStack, client: Any) -> Any:
-    if hasattr(client, "__aenter__") and hasattr(client, "__aexit__"):
-        return await exit_stack.enter_async_context(client)
-
-    start = getattr(client, "start", None)
-    if callable(start):
-        await _invoke_cleanup_method(start)
-
-    for method_name in ("force_stop", "stop", "aclose", "close", "shutdown"):
-        method = getattr(client, method_name, None)
-        if callable(method):
-            exit_stack.push_async_callback(_invoke_cleanup_method, method)
-            break
-
-    return client
-
-
-async def _send_copilot_messages(session: Any, messages: list[dict[str, str]]) -> Any:
-    method = getattr(session, "send_and_wait", None)
-    if method is None:
-        raise DraftGenerationConfigurationError(
-            "The installed GitHub Copilot SDK does not expose send_and_wait(...)."
-        )
-
-    return await method(
-        {
-            "prompt": messages[-1]["content"],
-        },
-        timeout=60.0,
-    )
-
-
-def _extract_copilot_message_content(response: Any) -> str:
-    if response is None:
-        return ""
-    if isinstance(response, str):
-        return response
-    if isinstance(response, dict):
-        for key in ("content", "text", "message", "response", "output", "data"):
-            extracted = _extract_copilot_message_content(response.get(key))
-            if extracted:
-                return extracted
-        for key in ("messages", "events", "items"):
-            items = response.get(key)
-            if isinstance(items, list):
-                for item in reversed(items):
-                    extracted = _extract_copilot_message_content(item)
-                    if extracted:
-                        return extracted
-        return ""
-    if isinstance(response, (list, tuple)):
-        for item in reversed(response):
-            extracted = _extract_copilot_message_content(item)
-            if extracted:
-                return extracted
-        return ""
-
-    for attr_name in ("content", "text", "message", "response", "output", "data"):
-        if hasattr(response, attr_name):
-            extracted = _extract_copilot_message_content(getattr(response, attr_name))
-            if extracted:
-                return extracted
-    return ""
-
-
-async def _invoke_cleanup_method(method: Any) -> None:
-    result = method()
-    if hasattr(result, "__await__"):
-        await result
 
 
 def _build_user_prompt(title: str, extraction: ExtractionResult | None) -> str:
@@ -471,10 +333,23 @@ def _parse_generation_response(value: str) -> GeneratedEntrySuggestion:
 def _coerce_optional_int(value: object, *, minimum: int, maximum: int) -> int | None:
     if value in (None, ""):
         return None
-    try:
-        coerced = int(value)
-    except (TypeError, ValueError):
+
+    if isinstance(value, bool):
         return None
+    if isinstance(value, int):
+        coerced = value
+    elif isinstance(value, float):
+        if not value.is_integer():
+            return None
+        coerced = int(value)
+    elif isinstance(value, str):
+        try:
+            coerced = int(value)
+        except ValueError:
+            return None
+    else:
+        return None
+
     if coerced < minimum or coerced > maximum:
         return None
     return coerced

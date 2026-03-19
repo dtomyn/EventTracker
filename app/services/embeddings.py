@@ -6,7 +6,6 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import lru_cache
-from typing import Any
 
 from openai import OpenAI
 
@@ -56,7 +55,9 @@ class SemanticMatch:
     distance: float
 
 
-def sync_entry_embedding(connection: Any, entry_id: int, final_text: str) -> bool:
+def sync_entry_embedding(
+    connection: sqlite3.Connection, entry_id: int, final_text: str
+) -> bool:
     if (
         not final_text.strip()
         or not is_sqlite_vec_enabled(connection)
@@ -83,7 +84,7 @@ def sync_entry_embedding(connection: Any, entry_id: int, final_text: str) -> boo
 
 
 def search_semantic_matches(
-    connection: Any, raw_query: str, limit: int = 25
+    connection: sqlite3.Connection, raw_query: str, limit: int = 25
 ) -> list[SemanticMatch]:
     query = raw_query.strip()
     if not query or not is_sqlite_vec_enabled(connection) or sqlite_vec is None:
@@ -129,7 +130,7 @@ def search_semantic_matches(
     ]
 
 
-def reindex_all_embeddings(connection: Any) -> tuple[int, str]:
+def reindex_all_embeddings(connection: sqlite3.Connection) -> tuple[int, str]:
     if not is_sqlite_vec_enabled(connection) or sqlite_vec is None:
         return (
             0,
@@ -160,7 +161,9 @@ def reindex_all_embeddings(connection: Any) -> tuple[int, str]:
     return len(embeddings), f"Rebuilt embeddings for {len(embeddings)} entries."
 
 
-def get_embedding_index_state(connection: Any) -> EmbeddingIndexState | None:
+def get_embedding_index_state(
+    connection: sqlite3.Connection,
+) -> EmbeddingIndexState | None:
     row = connection.execute(
         "SELECT model_id, dimensions, updated_utc FROM embedding_index_meta WHERE singleton = 1"
     ).fetchone()
@@ -215,7 +218,9 @@ def _generate_embedding(text: str, settings: OpenAIEmbeddingSettings) -> list[fl
     return [float(value) for value in response.data[0].embedding]
 
 
-def _recreate_embedding_index(connection: Any, model_id: str, dimensions: int) -> None:
+def _recreate_embedding_index(
+    connection: sqlite3.Connection, model_id: str, dimensions: int
+) -> None:
     connection.execute(f"DROP TABLE IF EXISTS {INDEX_TABLE_NAME}")
     connection.execute(
         f"CREATE VIRTUAL TABLE {INDEX_TABLE_NAME} USING vec0(embedding float[{dimensions}])"
@@ -223,7 +228,10 @@ def _recreate_embedding_index(connection: Any, model_id: str, dimensions: int) -
     _touch_embedding_index_state(connection, model_id, dimensions)
 
 
-def _store_embedding(connection: Any, entry_id: int, embedding: list[float]) -> None:
+def _store_embedding(
+    connection: sqlite3.Connection, entry_id: int, embedding: list[float]
+) -> None:
+    assert sqlite_vec is not None
     connection.execute(f"DELETE FROM {INDEX_TABLE_NAME} WHERE rowid = ?", (entry_id,))
     connection.execute(
         f"INSERT INTO {INDEX_TABLE_NAME}(rowid, embedding) VALUES (?, ?)",
@@ -232,7 +240,7 @@ def _store_embedding(connection: Any, entry_id: int, embedding: list[float]) -> 
 
 
 def _touch_embedding_index_state(
-    connection: Any, model_id: str, dimensions: int
+    connection: sqlite3.Connection, model_id: str, dimensions: int
 ) -> None:
     connection.execute(
         """

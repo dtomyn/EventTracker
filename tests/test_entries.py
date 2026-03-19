@@ -1,0 +1,109 @@
+from __future__ import annotations
+
+import unittest
+
+from app.models import Entry
+from app.services.entries import (
+    build_timeline_groups,
+    list_timeline_month_buckets,
+    list_timeline_summary_groups,
+    list_timeline_year_buckets,
+)
+
+
+def _entry(
+    entry_id: int,
+    *,
+    year: int,
+    month: int,
+    day: int | None,
+    title: str,
+) -> Entry:
+    return Entry(
+        id=entry_id,
+        event_year=year,
+        event_month=month,
+        event_day=day,
+        sort_key=(year * 10000) + (month * 100) + (day or 0),
+        group_id=1,
+        group_name="Agentic Coding",
+        title=title,
+        source_url=None,
+        generated_text=None,
+        final_text=f"<p>{title}</p>",
+        created_utc="2026-03-18T00:00:00+00:00",
+        updated_utc="2026-03-18T00:00:00+00:00",
+    )
+
+
+class TestTimelineViewModels(unittest.TestCase):
+    def test_build_timeline_groups_preserves_month_order_and_entries(self) -> None:
+        entries = [
+            _entry(3, year=2026, month=3, day=18, title="March latest"),
+            _entry(2, year=2026, month=3, day=12, title="March earlier"),
+            _entry(1, year=2026, month=2, day=25, title="February event"),
+        ]
+
+        groups = build_timeline_groups(entries)
+
+        self.assertEqual(
+            [group["label"] for group in groups], ["March 2026", "February 2026"]
+        )
+        self.assertEqual(
+            [[entry.title for entry in group["entries"]] for group in groups],
+            [["March latest", "March earlier"], ["February event"]],
+        )
+
+    def test_timeline_bucket_builders_count_entries_by_year_and_month(self) -> None:
+        entries = [
+            _entry(4, year=2026, month=3, day=18, title="March latest"),
+            _entry(3, year=2026, month=3, day=12, title="March earlier"),
+            _entry(2, year=2026, month=2, day=25, title="February event"),
+            _entry(1, year=2025, month=12, day=31, title="Prior year"),
+        ]
+
+        year_buckets = list_timeline_year_buckets(entries)
+        month_buckets = list_timeline_month_buckets(entries)
+        filtered_month_buckets = list_timeline_month_buckets(entries, year=2026)
+
+        self.assertEqual(
+            [
+                (bucket["event_year"], bucket["count"], bucket["drill_view"])
+                for bucket in year_buckets
+            ],
+            [(2026, 3, "months"), (2025, 1, "months")],
+        )
+        self.assertEqual(
+            [
+                (
+                    bucket["event_year"],
+                    bucket["event_month"],
+                    bucket["count"],
+                    bucket["drill_view"],
+                )
+                for bucket in month_buckets
+            ],
+            [(2026, 3, 2, "events"), (2026, 2, 1, "events"), (2025, 12, 1, "events")],
+        )
+        self.assertEqual(
+            [
+                (bucket["event_year"], bucket["event_month"])
+                for bucket in filtered_month_buckets
+            ],
+            [(2026, 3), (2026, 2)],
+        )
+
+    def test_timeline_summary_groups_apply_year_and_month_filters(self) -> None:
+        entries = [
+            _entry(3, year=2026, month=3, day=18, title="March latest"),
+            _entry(2, year=2026, month=2, day=25, title="February event"),
+            _entry(1, year=2025, month=12, day=31, title="Prior year"),
+        ]
+
+        groups = list_timeline_summary_groups(entries, year=2026, month=3)
+
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0]["label"], "March 2026")
+        self.assertEqual(
+            [entry.title for entry in groups[0]["entries"]], ["March latest"]
+        )

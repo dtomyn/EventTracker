@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Coroutine
 import json
 import os
 import sqlite3
@@ -8,6 +9,7 @@ from threading import Thread
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, TypeVar, cast
 from unittest.mock import patch
 
 from app.db import init_db
@@ -24,29 +26,38 @@ from app.services.group_web_search import (
     _select_diverse_group_web_search_items,
     _parse_group_web_search_response,
     get_group_web_search_request_timeout_ms,
+    GroupWebSearchEventPayload,
     GroupWebSearchItem,
     search_group_web,
 )
 
 
-def _run_async(coro):
-    result: dict[str, object] = {}
+T = TypeVar("T")
+_UNSET = object()
+
+
+def _run_async(coro: Coroutine[Any, Any, T]) -> T:
+    value: T | object = _UNSET
+    error: BaseException | None = None
 
     def runner() -> None:
+        nonlocal error, value
         import asyncio
 
         try:
-            result["value"] = asyncio.run(coro)
+            value = asyncio.run(coro)
         except BaseException as exc:  # pragma: no cover - re-raised in caller.
-            result["error"] = exc
+            error = exc
 
     thread = Thread(target=runner)
     thread.start()
     thread.join()
 
-    if "error" in result:
-        raise result["error"]
-    return result.get("value")
+    if error is not None:
+        raise error
+    if value is _UNSET:
+        raise AssertionError("Expected coroutine to produce a result.")
+    return cast(T, value)
 
 
 class _FakeCopilotSession:
@@ -58,7 +69,7 @@ class _FakeCopilotSession:
         self.closed = False
         self.send_calls: list[dict[str, object]] = []
         self.timeouts: list[float | None] = []
-        self._handlers: list[object] = []
+        self._handlers: list[Callable[[object], None]] = []
 
     async def send_and_wait(
         self, options: dict[str, object], timeout: float | None = None
@@ -72,7 +83,7 @@ class _FakeCopilotSession:
             return self.response.pop(0)
         return self.response
 
-    def on(self, handler: object):
+    def on(self, handler: Callable[[object], None]) -> Callable[[], None]:
         self._handlers.append(handler)
 
         def unsubscribe() -> None:
@@ -351,11 +362,11 @@ class TestGroupWebSearchService(unittest.TestCase):
                 return_value=CopilotSettings(model_id="gpt-5"),
             ),
             patch(
-                "app.services.group_web_search._instantiate_copilot_client",
+                "app.services.copilot_runtime.instantiate_copilot_client",
                 return_value=fake_client,
             ),
             patch(
-                "app.services.group_web_search._resolve_copilot_permission_handler",
+                "app.services.copilot_runtime.get_permission_handler",
                 return_value="approve-all",
             ),
         ):
@@ -428,11 +439,11 @@ class TestGroupWebSearchService(unittest.TestCase):
                 return_value=CopilotSettings(model_id="gpt-5"),
             ),
             patch(
-                "app.services.group_web_search._instantiate_copilot_client",
+                "app.services.copilot_runtime.instantiate_copilot_client",
                 return_value=first_client,
             ) as instantiate_client,
             patch(
-                "app.services.group_web_search._resolve_copilot_permission_handler",
+                "app.services.copilot_runtime.get_permission_handler",
                 return_value="approve-all",
             ),
             patch.dict(
@@ -523,11 +534,11 @@ class TestGroupWebSearchService(unittest.TestCase):
                 return_value=CopilotSettings(model_id="gpt-5"),
             ),
             patch(
-                "app.services.group_web_search._instantiate_copilot_client",
+                "app.services.copilot_runtime.instantiate_copilot_client",
                 side_effect=[first_client, refreshed_client],
             ) as instantiate_client,
             patch(
-                "app.services.group_web_search._resolve_copilot_permission_handler",
+                "app.services.copilot_runtime.get_permission_handler",
                 return_value="approve-all",
             ),
             patch.dict(
@@ -601,11 +612,11 @@ class TestGroupWebSearchService(unittest.TestCase):
                 return_value=CopilotSettings(model_id="gpt-5"),
             ),
             patch(
-                "app.services.group_web_search._instantiate_copilot_client",
+                "app.services.copilot_runtime.instantiate_copilot_client",
                 return_value=fake_client,
             ),
             patch(
-                "app.services.group_web_search._resolve_copilot_permission_handler",
+                "app.services.copilot_runtime.get_permission_handler",
                 return_value="approve-all",
             ),
             patch.dict(
@@ -654,7 +665,7 @@ class TestGroupWebSearchService(unittest.TestCase):
                 ),
             ],
         )
-        emitted_payloads: list[dict[str, object]] = []
+        emitted_payloads: list[GroupWebSearchEventPayload] = []
 
         with (
             patch(
@@ -665,11 +676,11 @@ class TestGroupWebSearchService(unittest.TestCase):
                 return_value=CopilotSettings(model_id="gpt-5"),
             ),
             patch(
-                "app.services.group_web_search._instantiate_copilot_client",
+                "app.services.copilot_runtime.instantiate_copilot_client",
                 return_value=fake_client,
             ),
             patch(
-                "app.services.group_web_search._resolve_copilot_permission_handler",
+                "app.services.copilot_runtime.get_permission_handler",
                 return_value="approve-all",
             ),
         ):
@@ -748,11 +759,11 @@ class TestGroupWebSearchService(unittest.TestCase):
                 return_value=CopilotSettings(model_id="gpt-5"),
             ),
             patch(
-                "app.services.group_web_search._instantiate_copilot_client",
+                "app.services.copilot_runtime.instantiate_copilot_client",
                 return_value=fake_client,
             ),
             patch(
-                "app.services.group_web_search._resolve_copilot_permission_handler",
+                "app.services.copilot_runtime.get_permission_handler",
                 return_value="approve-all",
             ),
             patch.dict(

@@ -47,6 +47,16 @@
 				"scripts.run_dev"
 			],
 			"isBackground": true
+		},
+		{
+			"label": "Type Check EventTracker",
+			"type": "shell",
+			"command": "uv",
+			"args": [
+				"run",
+				"pyright"
+			],
+			"problemMatcher": []
 		}
 	]
 }
