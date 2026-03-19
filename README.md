@@ -2,6 +2,8 @@
 
 EventTracker is a local-first timeline application built with FastAPI, SQLite, Jinja2, Bootstrap, SQLite FTS5, and optional sqlite-vec embeddings. It is a single-process, server-rendered app: entries are stored in one SQLite file, pages are rendered on the server, and the browser layer is limited to lightweight JavaScript for view switching, pagination, previews, and AI-assisted workflows.
 
+If you want a simpler, child-friendly version of what this app does, see [README_EXPLAIN_IT_TO_ME_LIKE_I_AM_5.md](README_EXPLAIN_IT_TO_ME_LIKE_I_AM_5.md).
+
 ## Demo
 
 ![EventTracker demo](EventTracker-demo-web-generate.gif)
