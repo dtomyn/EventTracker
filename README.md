@@ -56,6 +56,7 @@ The harness will:
 - Exports all saved entries as JSON from `/entries/export`.
 - Imports legacy HTML lists or prior JSON exports with `scripts/import_entries.py`.
 - Shows a Copilot-backed `On the web` sidebar for the selected group when that group has a stored web search query.
+- Supports dark mode with automatic system preference detection and a manual toggle in the navbar.
 
 ## Current architecture
 
@@ -64,6 +65,7 @@ The harness will:
 - Backend: FastAPI.
 - Templates: Jinja2.
 - Styling: Bootstrap plus custom CSS in `app/static/styles.css`.
+- Theming: dark mode via Bootstrap 5.3 `data-bs-theme` attribute, CSS custom properties, `localStorage` persistence, and `prefers-color-scheme` detection.
 - Persistence: SQLite in `data/EventTracker.db` by default.
 - Search: SQLite FTS5 for keyword search and optional sqlite-vec for semantic recall.
 - AI draft generation: provider abstraction in `app/services/ai_generate.py`.

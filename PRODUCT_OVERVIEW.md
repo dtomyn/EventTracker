@@ -35,6 +35,7 @@ The shipped application includes:
 - optional semantic search using sqlite-vec
 - optional OpenAI-compatible or GitHub Copilot draft generation
 - optional Copilot-backed per-group web search results
+- dark mode with system preference detection and manual toggle
 
 ## Architectural requirements
 
@@ -44,6 +45,8 @@ The shipped application includes:
 - The backend framework must be FastAPI.
 - HTML must be rendered on the server with Jinja2.
 - The browser layer must remain lightweight and use page-level JavaScript only.
+- Dark mode must use the Bootstrap 5.3 `data-bs-theme` attribute with CSS custom properties for custom styles.
+- Theme preference must be persisted in `localStorage` and must respect the operating system `prefers-color-scheme` setting when no explicit choice is stored.
 - Static assets must be served from `app/static`.
 - Database initialization must run on startup through `init_db()`.
 

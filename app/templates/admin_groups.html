@@ -53,7 +53,7 @@
                             {% for timeline_filter in timeline_filters %}
                                 {% set group_errors = edit_group_errors.get(timeline_filter.id, {}) %}
                                 {% set group_values = edit_group_values.get(timeline_filter.id, {}) %}
-                                <form method="post" action="/admin/groups/{{ timeline_filter.id }}" class="border rounded-4 p-3 bg-white">
+                                <form method="post" action="/admin/groups/{{ timeline_filter.id }}" class="border rounded-4 p-3 bg-body">
                                     <div class="vstack gap-3">
                                         <div class="flex-grow-1">
                                             <label class="form-label" for="group-{{ timeline_filter.id }}">Group name</label>
