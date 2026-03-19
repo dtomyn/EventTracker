@@ -102,7 +102,12 @@ from app.services.search import (
     paginate_search_results,
     search_entries,
 )
-from app.services.story_mode import get_story, list_story_entries, resolve_story_scope, save_story
+from app.services.story_mode import (
+    get_story,
+    list_story_entries,
+    resolve_story_scope,
+    save_story,
+)
 
 
 load_app_env()
@@ -1079,7 +1084,9 @@ async def generate_story_page(
         )
 
     try:
-        generated_story = await generate_timeline_story(story_scope, story_format, entries)
+        generated_story = await generate_timeline_story(
+            story_scope, story_format, entries
+        )
     except StoryGenerationConfigurationError as exc:
         context = _build_story_page_context(
             request,
@@ -1199,7 +1206,9 @@ def save_story_page(
         current_entries = list_story_entries(connection, story_scope)
 
         try:
-            source_entry_count_value = _parse_story_source_entry_count(source_entry_count)
+            source_entry_count_value = _parse_story_source_entry_count(
+                source_entry_count
+            )
             citations = _parse_story_citation_payloads(citations_json)
             payload = TimelineStorySavePayload(
                 scope_type=story_scope.scope_type,
@@ -1273,7 +1282,11 @@ def saved_story_page(request: Request, story_id: int) -> HTMLResponse:
         selected_group_name = (
             selected_group.name
             if selected_group is not None
-            else (f"Group {story.group_id}" if story.group_id is not None else "All groups")
+            else (
+                f"Group {story.group_id}"
+                if story.group_id is not None
+                else "All groups"
+            )
         )
         citations = _build_story_citation_contexts(
             story.citations,
@@ -2017,8 +2030,13 @@ def _load_story_page_scope(
         )
     except ValueError as exc:
         message = str(exc)
-        if message == "Timeline group not found." or message == "Timeline group not found":
-            raise HTTPException(status_code=404, detail="Timeline group not found") from exc
+        if (
+            message == "Timeline group not found."
+            or message == "Timeline group not found"
+        ):
+            raise HTTPException(
+                status_code=404, detail="Timeline group not found"
+            ) from exc
         raise HTTPException(status_code=400, detail=message) from exc
     return group_scope, story_scope
 
@@ -2030,7 +2048,9 @@ def _parse_story_format(raw_value: str) -> StoryFormat:
     return cast(StoryFormat, normalized)
 
 
-def _build_story_format_options(selected_format: StoryFormat) -> list[StoryFormatOption]:
+def _build_story_format_options(
+    selected_format: StoryFormat,
+) -> list[StoryFormatOption]:
     return [
         {
             "value": value,
@@ -2075,7 +2095,9 @@ def _build_story_scope_details(
 
     return {
         "scope_type": story_scope.scope_type,
-        "scope_label": "Search scope" if story_scope.scope_type == "search" else "Timeline scope",
+        "scope_label": "Search scope"
+        if story_scope.scope_type == "search"
+        else "Timeline scope",
         "group_name": selected_group_name,
         "query": story_scope.query_text or "",
         "year": story_scope.year,
@@ -2202,7 +2224,9 @@ def _build_posted_story_result(
                 quote_text=item.quote_text,
                 note=item.note,
             )
-            for item in _parse_story_citation_payloads(citations_json, fail_silently=True)
+            for item in _parse_story_citation_payloads(
+                citations_json, fail_silently=True
+            )
         ],
         entry_lookup,
     )
@@ -2214,7 +2238,9 @@ def _build_posted_story_result(
         "narrative_text": narrative_text.strip() or None,
         "generated_utc": generated_utc.strip() or utc_now_iso(),
         "provider_name": provider_name.strip() or None,
-        "source_entry_count": _parse_story_source_entry_count(source_entry_count, default=0),
+        "source_entry_count": _parse_story_source_entry_count(
+            source_entry_count, default=0
+        ),
         "truncated_input": _parse_story_bool_value(truncated_input),
         "error_text": error_text.strip() or None,
         "is_saved": False,
@@ -2234,7 +2260,9 @@ def _build_story_citation_contexts(
             {
                 "citation_order": citation.citation_order,
                 "entry_id": citation.entry_id,
-                "entry_title": entry.title if entry is not None else f"Entry #{citation.entry_id}",
+                "entry_title": entry.title
+                if entry is not None
+                else f"Entry #{citation.entry_id}",
                 "entry_url": (
                     f"/entries/{citation.entry_id}/view" if entry is not None else None
                 ),
@@ -2250,14 +2278,12 @@ def _render_generated_story(
     story: GeneratedTimelineStory,
     citations: list[StoryCitationContext],
 ) -> tuple[str, str]:
-    citation_lookup = {
-        citation["citation_order"]: citation for citation in citations
-    }
+    citation_lookup = {citation["citation_order"]: citation for citation in citations}
     html_parts: list[str] = []
     text_parts: list[str] = []
     for section in story.sections:
         html_parts.append('<section class="story-section mb-4">')
-        html_parts.append(f"<h2 class=\"h5 mb-2\">{escape(section.heading)}</h2>")
+        html_parts.append(f'<h2 class="h5 mb-2">{escape(section.heading)}</h2>')
         for paragraph in _split_story_paragraphs(section.body):
             html_parts.append(f"<p>{escape(paragraph)}</p>")
         if section.citation_orders:
@@ -2274,7 +2300,9 @@ def _render_generated_story(
         text_parts.append(section.heading)
         text_parts.append(section.body.strip())
 
-    return _sanitize_story_html("".join(html_parts)), "\n\n".join(part for part in text_parts if part)
+    return _sanitize_story_html("".join(html_parts)), "\n\n".join(
+        part for part in text_parts if part
+    )
 
 
 def _render_story_inline_citation_link(
@@ -2340,14 +2368,18 @@ def _is_safe_story_href(value: str) -> bool:
 
 
 def _split_story_paragraphs(value: str) -> list[str]:
-    paragraphs = [paragraph.strip() for paragraph in value.split("\n\n") if paragraph.strip()]
+    paragraphs = [
+        paragraph.strip() for paragraph in value.split("\n\n") if paragraph.strip()
+    ]
     if paragraphs:
         return paragraphs
     stripped = value.strip()
     return [stripped] if stripped else []
 
 
-def _parse_story_source_entry_count(raw_value: str, *, default: int | None = None) -> int:
+def _parse_story_source_entry_count(
+    raw_value: str, *, default: int | None = None
+) -> int:
     normalized = raw_value.strip()
     if not normalized:
         if default is not None:

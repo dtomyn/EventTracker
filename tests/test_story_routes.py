@@ -125,8 +125,8 @@ class TestStoryRoutes(unittest.TestCase):
         self.assertIn('action="/story/save"', response.text)
         self.assertIn(f'href="/entries/{earliest_id}/view"', response.text)
         self.assertIn(f'href="/entries/{latest_id}/view"', response.text)
-        self.assertIn('data-story-progress', response.text)
-        self.assertIn('Generating...', response.text)
+        self.assertIn("data-story-progress", response.text)
+        self.assertIn("Generating...", response.text)
         self.assertRegex(
             response.text,
             r'<a[^>]+href="#citation-1"[^>]*>\[1\]</a>',
@@ -227,7 +227,9 @@ class TestStoryRoutes(unittest.TestCase):
         assert story is not None
         self.assertEqual(story.title, "Saved scope story")
         self.assertEqual(story.format, "executive_summary")
-        self.assertEqual([citation.entry_id for citation in story.citations], [entry_id])
+        self.assertEqual(
+            [citation.entry_id for citation in story.citations], [entry_id]
+        )
 
     def test_story_route_workflow_covers_launch_generate_save_and_reload(self) -> None:
         with connection_context() as connection:
@@ -286,7 +288,9 @@ class TestStoryRoutes(unittest.TestCase):
                     params={"q": "milestone", "group_id": "1"},
                 )
                 self.assertEqual(launch_response.status_code, 200)
-                self.assertIn("Build a narrative from the current scope", launch_response.text)
+                self.assertIn(
+                    "Build a narrative from the current scope", launch_response.text
+                )
                 self.assertIn("Search: milestone", launch_response.text)
 
                 generate_response = client.post(
@@ -299,12 +303,18 @@ class TestStoryRoutes(unittest.TestCase):
                 )
 
                 self.assertEqual(generate_response.status_code, 200)
-                self.assertIn("Story generated for the current scope.", generate_response.text)
+                self.assertIn(
+                    "Story generated for the current scope.", generate_response.text
+                )
                 self.assertIn('action="/story/save"', generate_response.text)
                 self.assertIn("Milestone narrative", generate_response.text)
                 self.assertIn("Momentum built steadily", generate_response.text)
-                self.assertIn(f'href="/entries/{earliest_id}/view"', generate_response.text)
-                self.assertIn(f'href="/entries/{latest_id}/view"', generate_response.text)
+                self.assertIn(
+                    f'href="/entries/{earliest_id}/view"', generate_response.text
+                )
+                self.assertIn(
+                    f'href="/entries/{latest_id}/view"', generate_response.text
+                )
                 self.assertRegex(
                     generate_response.text,
                     r'<a[^>]+href="#citation-1"[^>]*>\[1\]</a>',
@@ -351,7 +361,10 @@ class TestStoryRoutes(unittest.TestCase):
         self.assertEqual(story.format, "detailed_chronology")
         self.assertEqual(story.query_text, "milestone")
         self.assertEqual(story.group_id, 1)
-        self.assertEqual([citation.entry_id for citation in story.citations], [earliest_id, latest_id])
+        self.assertEqual(
+            [citation.entry_id for citation in story.citations],
+            [earliest_id, latest_id],
+        )
 
     def test_timeline_and_search_surfaces_link_into_story_mode(self) -> None:
         with connection_context() as connection:
@@ -390,13 +403,13 @@ class TestStoryRoutes(unittest.TestCase):
 
         self.assertEqual(years_response.status_code, 200)
         self.assertIn(
-            '/story?group_id=1&q=milestone&year=2024',
+            "/story?group_id=1&q=milestone&year=2024",
             years_response.json()["items_html"],
         )
 
         self.assertEqual(months_response.status_code, 200)
         self.assertIn(
-            '/story?group_id=1&q=milestone&year=2024&month=2',
+            "/story?group_id=1&q=milestone&year=2024&month=2",
             months_response.json()["items_html"],
         )
 
