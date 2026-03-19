@@ -2,6 +2,17 @@
 
 EventTracker is a local-first timeline application built with FastAPI, SQLite, Jinja2, Bootstrap, SQLite FTS5, and optional sqlite-vec embeddings. It is a single-process, server-rendered app: entries are stored in one SQLite file, pages are rendered on the server, and the browser layer is limited to lightweight JavaScript for view switching, pagination, previews, and AI-assisted workflows.
 
+## Demo
+
+![EventTracker demo](EventTracker-demo-web-generate.gif)
+
+This demo shows the main AI-assisted workflow in EventTracker, from live web discovery to source-backed entry generation.
+
+- Expanding the `Recent Developments` panel and loading Copilot-backed web results.
+- Browsing the rendered results grid for recent, source-linked updates.
+- Entering a source URL in `New Entry` and generating a suggested summary, title, and date.
+- Reviewing the rendered preview before saving the entry.
+
 ## Quick start
 
 Run these commands from the repository root:
