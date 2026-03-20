@@ -17,6 +17,24 @@ This demo shows the main AI-assisted workflow in EventTracker, from live web dis
 
 Timeline Story Mode is also available in the current app. It lets you launch a narrative view from the timeline, a search scope, or drilled year/month buckets, generate a story over the current scope, save that story as a snapshot, and follow inline citations down to a linked reference list.
 
+### Refreshing Demo Assets
+
+With the app running locally, regenerate the screenshot set and the main demo GIF with:
+
+```powershell
+uv run --with pillow python .\generate_demo_assets.py
+```
+
+This writes refreshed PNG screenshots into `demo_images/` and rebuilds `EventTracker-demo-web-generate.gif`.
+
+**Note:** The script drives a real browser session and waits up to 180 seconds for the Story Mode generation step to complete, so the full run can take two to three minutes. Let it finish without interruption.
+
+To also build the alternate GIF that omits the filter and search action frames:
+
+```powershell
+uv run --with pillow python .\generate_demo_assets.py --also-no-search-actions
+```
+
 ## Quick start
 
 Run these commands from the repository root:
