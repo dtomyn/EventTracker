@@ -82,3 +82,6 @@ DS_Store
 
 .env
 .eventtracker-dev-reload.pid
+
+# Ignore all runtime data files
+data/
