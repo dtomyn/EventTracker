@@ -2,11 +2,11 @@
 
 EventTracker is a local-first timeline application built with FastAPI, SQLite, Jinja2, Bootstrap, SQLite FTS5, and optional sqlite-vec embeddings. It is a single-process, server-rendered app: entries are stored in one SQLite file, pages are rendered on the server, and the browser layer is limited to lightweight JavaScript for view switching, pagination, previews, and AI-assisted workflows.
 
-If you want a simpler, child-friendly version of what this app does, see [README_EXPLAIN_IT_TO_ME_LIKE_I_AM_5.md](README_EXPLAIN_IT_TO_ME_LIKE_I_AM_5.md).
+If you want a simpler version of what this app does, see [README_EXPLAIN_IT_TO_ME_LIKE_I_AM_5.md](README_EXPLAIN_IT_TO_ME_LIKE_I_AM_5.md).
 
 ## Demo
 
-![EventTracker demo](EventTracker-demo-web-generate.gif)
+![EventTracker demo](docs/demo-assets/EventTracker-demo-web-generate.gif)
 
 This demo shows the main AI-assisted workflow in EventTracker, from live web discovery to source-backed entry generation.
 
@@ -22,17 +22,17 @@ Timeline Story Mode is also available in the current app. It lets you launch a n
 With the app running locally, regenerate the screenshot set and the main demo GIF with:
 
 ```powershell
-uv run --with pillow python .\generate_demo_assets.py
+uv run --with pillow python .\scripts\generate_demo_assets.py
 ```
 
-This writes refreshed PNG screenshots into `demo_images/` and rebuilds `EventTracker-demo-web-generate.gif`.
+This writes refreshed PNG screenshots into `docs/demo-assets/screenshots/` and rebuilds `docs/demo-assets/EventTracker-demo-web-generate.gif`.
 
 **Note:** The script drives a real browser session and waits up to 180 seconds for the Story Mode generation step to complete, so the full run can take two to three minutes. Let it finish without interruption.
 
 To also build the alternate GIF that omits the filter and search action frames:
 
 ```powershell
-uv run --with pillow python .\generate_demo_assets.py --also-no-search-actions
+uv run --with pillow python .\scripts\generate_demo_assets.py --also-no-search-actions
 ```
 
 ## Quick start
@@ -46,6 +46,12 @@ uv run python -m scripts.run_dev --reload
 ```
 
 Then open `http://127.0.0.1:35231/` in your browser.
+
+## Requirements documents
+
+The canonical product requirements for the repository live in the split requirement sets under `docs/functional-requirements/` and `docs/non-functional-requirements/`.
+
+Use this README as a high-level product and architecture overview. Use the requirement documents for implementation-aligned behavioral and operational contracts.
 
 ## Playwright end-to-end tests
 
@@ -94,6 +100,102 @@ The harness will:
 
 ## Current architecture
 
+### Python code setup evaluation
+
+The Python setup is coherent for a local-first product: it favors a small deployment footprint, direct execution, and low operational overhead over framework layering or packaging formality.
+
+Strengths:
+
+- `uv` plus `pyproject.toml` keeps dependency management, scripts, and type-check settings in one place.
+- `[tool.uv] package = false` is a good fit for an application repo that is run directly rather than published as a distributable package.
+- `scripts/run_dev.py` and `scripts/init_db.py` make operational entry points explicit instead of burying them in ad hoc shell commands.
+- `app/main.py` acts as a clear composition root for FastAPI, Jinja, filters, and route wiring.
+- `app/db.py` centralizes schema bootstrapping, SQLite feature enablement, FTS rebuilds, and sqlite-vec setup, which reduces hidden persistence behavior.
+- The service layer is split by capability, not by framework artifact, which fits the product surface well: entries, search, story mode, extraction, embeddings, and AI integrations are easy to locate.
+- Server-rendered templates keep the frontend simple and aligned with the single-process SQLite architecture.
+
+Tradeoffs and risks:
+
+- The app is intentionally not packaged as an installable Python project, which keeps it simple locally but makes reuse as a library or more formal distribution harder.
+- Route handlers, page assembly, and orchestration are concentrated in `app/main.py`; that is pragmatic now, but it can become harder to navigate as feature count grows.
+- Schema evolution is guarded in code rather than managed by a dedicated migration framework, which is lightweight but puts more pressure on startup-time compatibility checks.
+- AI and embeddings are optional at runtime, which is a strength for graceful degradation, but it also means behavior can vary significantly across developer environments depending on `.env` configuration and installed capabilities.
+- Pyright coverage is curated to selected files instead of the full tree, so some future regressions can still land outside the typed surface.
+
+Improvement opportunities:
+
+- Split larger route groups from `app/main.py` into feature routers once route density starts slowing maintenance.
+- Introduce a lightweight migration story if schema changes become more frequent or need stronger upgrade guarantees across existing databases.
+- Expand static analysis coverage to more modules and tests as the codebase grows.
+- Document environment modes more explicitly around `openai`, `copilot`, FTS-only search, and embeddings-enabled search so contributors can predict feature availability faster.
+
+### Python architecture diagram
+
+```mermaid
+flowchart TD
+  DevTools["uv + scripts\nrun_dev.py\ninit_db.py"]
+  FastAPI["FastAPI app\napp/main.py"]
+  Services["Service layer\nentries, search, story, AI, extraction"]
+  Templates["Jinja templates\nserver-rendered UI"]
+  SQLite[("SQLite\nFTS5 + optional sqlite-vec")]
+  Providers["External AI providers\nOpenAI / GitHub Copilot"]
+  Browser["Browser"]
+
+  DevTools --> FastAPI
+  Browser --> FastAPI
+  FastAPI --> Templates
+  FastAPI --> Services
+  Services --> SQLite
+  Services --> Providers
+```
+
+### Request flow diagram
+
+```mermaid
+flowchart TD
+  Browser["Browser"]
+  Main["app/main.py\nFastAPI routes"]
+  Templates["Jinja templates\nand partials"]
+  EntriesSvc["entries.py"]
+  SearchSvc["search.py"]
+  StorySvc["story_mode.py"]
+  ExtractSvc["extraction.py"]
+  DraftSvc["ai_generate.py\nai_story_mode.py"]
+  GroupWebSvc["group_web_search.py"]
+  EmbedSvc["embeddings.py"]
+  DB["app/db.py"]
+  SQLite[("SQLite DB")]
+  AI["OpenAI / GitHub Copilot"]
+
+  Browser -->|Timeline, search, story, entry forms| Main
+
+  Main -->|Render page| Templates
+
+  Main -->|Create/edit entry| EntriesSvc
+  EntriesSvc -->|Validate + persist| DB
+  EntriesSvc -->|Best-effort sync| EmbedSvc
+  EmbedSvc --> DB
+  EmbedSvc --> AI
+
+  Main -->|Timeline filter / ranked search| SearchSvc
+  SearchSvc --> DB
+  SearchSvc -->|Semantic recall when enabled| EmbedSvc
+
+  Main -->|Story scope / save snapshot| StorySvc
+  StorySvc --> DB
+  Main -->|Generate story| DraftSvc
+  DraftSvc --> AI
+
+  Main -->|Generate entry draft from URL/title| ExtractSvc
+  ExtractSvc -->|Fetched source text| DraftSvc
+
+  Main -->|On the web sidebar| GroupWebSvc
+  GroupWebSvc --> AI
+
+  DB --> SQLite
+  Main -->|HTML response / partial / JSON| Browser
+```
+
 ### App shape
 
 - Backend: FastAPI.
@@ -130,6 +232,106 @@ Important implementation details:
 - URL extraction fetches remote content server-side and is intended only for local or otherwise trusted deployments.
 - Embeddings are derived only from `final_text`.
 - FTS indexes `final_text` only.
+
+### Database ER diagram
+
+```mermaid
+erDiagram
+  TIMELINE_GROUPS {
+    int id PK
+    string name
+    string web_search_query
+    bool is_default
+  }
+
+  ENTRIES {
+    int id PK
+    int event_year
+    int event_month
+    int event_day
+    int sort_key
+    int group_id
+    string title
+    string source_url
+    string generated_text
+    string final_text
+    string created_utc
+    string updated_utc
+  }
+
+  ENTRY_LINKS {
+    int id PK
+    int entry_id
+    string url
+    string note
+    string created_utc
+  }
+
+  TAGS {
+    int id PK
+    string name
+  }
+
+  ENTRY_TAGS {
+    int entry_id
+    int tag_id
+  }
+
+  TIMELINE_STORIES {
+    int id PK
+    string scope_type
+    int group_id
+    string query_text
+    int year
+    int month
+    string format
+    string title
+    string narrative_html
+    string narrative_text
+    string generated_utc
+    string updated_utc
+    string provider_name
+    int source_entry_count
+    bool truncated_input
+    string error_text
+  }
+
+  TIMELINE_STORY_ENTRIES {
+    int story_id
+    int entry_id
+    int citation_order
+    string quote_text
+    string note
+  }
+
+  ENTRIES_FTS {
+    int rowid PK
+    string final_text
+  }
+
+  EMBEDDING_INDEX_META {
+    int singleton PK
+    string model_id
+    int dimensions
+    string updated_utc
+  }
+
+  ENTRY_EMBEDDINGS {
+    int rowid PK
+    string embedding
+  }
+
+  TIMELINE_GROUPS ||--o{ ENTRIES : contains
+  ENTRIES ||--o{ ENTRY_LINKS : has
+  ENTRIES ||--o{ ENTRY_TAGS : maps
+  TAGS ||--o{ ENTRY_TAGS : maps
+  TIMELINE_GROUPS ||--o{ TIMELINE_STORIES : scopes
+  TIMELINE_STORIES ||--o{ TIMELINE_STORY_ENTRIES : cites
+  ENTRIES ||--o{ TIMELINE_STORY_ENTRIES : referenced_by
+  ENTRIES ||--|| ENTRIES_FTS : indexed_as
+  ENTRIES ||--o| ENTRY_EMBEDDINGS : embedded_as
+  EMBEDDING_INDEX_META ||--|| ENTRY_EMBEDDINGS : configures
+```
 
 ## Routes and workflows
 
