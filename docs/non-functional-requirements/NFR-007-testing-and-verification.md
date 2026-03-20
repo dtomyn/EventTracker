@@ -9,10 +9,10 @@
 
 - NFR-007-01 The repository shall maintain automated test coverage for database behavior, entry workflows, search, AI services, group web search, Story Mode, import utilities, and smoke-level application startup.
 - NFR-007-02 The repository shall maintain browser end-to-end coverage under `tests/e2e` against an isolated temporary database rather than the live database file.
-- NFR-007-03 End-to-end runs shall use an isolated local server instance, a dedicated test group, and disposable test data per run.
+- NFR-007-03 The repository shall use an isolated local server instance, a dedicated test group, and disposable test data per run for end-to-end runs.
 - NFR-007-04 The repository shall maintain static type checking through Pyright in basic mode over the explicit include set defined in `pyproject.toml`.
-- NFR-007-05 Async service tests shall follow the current repository convention of `unittest.TestCase` plus `asyncio.run(...)` when needed.
-- NFR-007-06 Known toolchain constraints shall be documented when they materially affect validation workflows.
+- NFR-007-05 The repository shall use the `unittest.TestCase` plus `asyncio.run(...)` convention for async service tests when needed.
+- NFR-007-06 The repository shall document known toolchain constraints when they materially affect validation workflows.
 
 ## Acceptance Notes
 

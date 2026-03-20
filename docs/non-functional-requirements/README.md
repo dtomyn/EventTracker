@@ -3,13 +3,13 @@
 - Category: Non-Functional
 - Status: Baseline
 - Scope: Index of the non-functional requirement documents derived from the implemented EventTracker repository as of 2026-03-19.
-- Primary Sources: `README.md`, `PRODUCT_OVERVIEW.md`, `pyproject.toml`, `app/db.py`, `app/env.py`, `app/services/*`, `scripts/*`, `tests/*`
+- Primary Sources: `README.md`, `pyproject.toml`, `app/db.py`, `app/env.py`, `app/services/*`, `scripts/*`, `tests/*`
 
 ## Requirement Statements
 
 - NFR-INDEX-01 The repository shall keep non-functional requirements split into small-scope markdown documents under this folder.
-- NFR-INDEX-02 Each non-functional requirement document shall use the standard template defined in `docs/requirements-template.md`.
-- NFR-INDEX-03 Non-functional requirements shall describe observable operational, quality, security, and maintenance characteristics evidenced by the current implementation.
+- NFR-INDEX-02 The repository shall require each non-functional requirement document to use the standard template defined in `docs/requirements-template.md`.
+- NFR-INDEX-03 The repository shall describe observable operational, quality, security, and maintenance characteristics evidenced by the current implementation in non-functional requirements.
 
 ## Acceptance Notes
 

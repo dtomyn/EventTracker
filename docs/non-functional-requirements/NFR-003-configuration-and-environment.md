@@ -8,16 +8,16 @@
 ## Requirement Statements
 
 - NFR-003-01 The application shall load environment variables from the repository `.env` file through `app/env.py`.
-- NFR-003-02 Application modules shall not rely on `scripts/run_dev.py` to load `.env` before configuration-backed code executes.
-- NFR-003-03 Repository-level CLI scripts may load `.env` directly when preparing standalone command execution.
-- NFR-003-04 The AI provider selection setting shall be `EVENTTRACKER_AI_PROVIDER` and shall support `openai` and `copilot`.
-- NFR-003-05 The default AI provider shall be `openai`.
-- NFR-003-06 OpenAI draft and story generation shall require `OPENAI_API_KEY` and `OPENAI_CHAT_MODEL_ID`.
-- NFR-003-07 Semantic embeddings shall require `OPENAI_API_KEY` and `OPENAI_EMBEDDING_MODEL_ID`.
-- NFR-003-08 OpenAI-based integrations shall support an optional `OPENAI_BASE_URL` for compatible endpoints.
-- NFR-003-09 Copilot-backed integrations shall default `COPILOT_CHAT_MODEL_ID` to `gpt-5` and may accept optional CLI path or URL overrides.
-- NFR-003-10 Logging shall default to `INFO` unless `LOG_LEVEL` is set explicitly.
-- NFR-003-11 Development-server host and port shall be configurable through CLI arguments or `EVENTTRACKER_HOST` and `EVENTTRACKER_PORT`.
+- NFR-003-02 The application shall not rely on `scripts/run_dev.py` to load `.env` before configuration-backed code executes.
+- NFR-003-03 The repository shall load `.env` with override semantics in `scripts/run_dev.py` and `scripts/import_entries.py` when preparing standalone command execution.
+- NFR-003-04 The application shall use `EVENTTRACKER_AI_PROVIDER` as the AI provider selection setting and shall support `openai` and `copilot`.
+- NFR-003-05 The application shall default the AI provider to `openai`.
+- NFR-003-06 The application shall require `OPENAI_API_KEY` and `OPENAI_CHAT_MODEL_ID` for OpenAI draft and story generation.
+- NFR-003-07 The application shall require `OPENAI_API_KEY` and `OPENAI_EMBEDDING_MODEL_ID` for semantic embeddings.
+- NFR-003-08 The application shall support an optional `OPENAI_BASE_URL` for compatible OpenAI-based endpoints.
+- NFR-003-09 The application shall default `COPILOT_CHAT_MODEL_ID` to `gpt-5` for Copilot-backed integrations and may accept optional CLI path or URL overrides.
+- NFR-003-10 The application shall default logging to `INFO` unless `LOG_LEVEL` is set explicitly.
+- NFR-003-11 The application shall allow configuration of development-server host and port through CLI arguments or `EVENTTRACKER_HOST` and `EVENTTRACKER_PORT`.
 
 ## Acceptance Notes
 

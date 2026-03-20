@@ -9,7 +9,7 @@ try:
     from PIL import Image
 except ImportError as exc:  # pragma: no cover - runtime guidance
     raise SystemExit(
-        "Pillow is required. Run this script with: uv run --with pillow python generate_demo_assets.py"
+        "Pillow is required. Run this script with: uv run --with pillow python .\\scripts\\generate_demo_assets.py"
     ) from exc
 
 from playwright.sync_api import Page
@@ -20,9 +20,14 @@ from playwright.sync_api import sync_playwright
 VIEWPORT_WIDTH = 1200
 VIEWPORT_HEIGHT = 800
 DEFAULT_BASE_URL = "http://127.0.0.1:35231"
-DEFAULT_OUTPUT_DIR = "demo_images"
-DEFAULT_GIF_NAME = "EventTracker-demo-web-generate.gif"
-DEFAULT_NO_SEARCH_GIF_NAME = "EventTracker-demo-web-generate-no-search-actions.gif"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_OUTPUT_DIR = Path("docs") / "demo-assets" / "screenshots"
+DEFAULT_GIF_NAME = Path("docs") / "demo-assets" / "EventTracker-demo-web-generate.gif"
+DEFAULT_NO_SEARCH_GIF_NAME = (
+    Path("docs")
+    / "demo-assets"
+    / "EventTracker-demo-web-generate-no-search-actions.gif"
+)
 SCREEN_HOLD_MS = 1500
 TRANSITION_STEPS = 2
 TRANSITION_STEP_MS = 100
@@ -67,12 +72,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
     parser.add_argument(
         "--output-dir",
-        default=DEFAULT_OUTPUT_DIR,
+        default=str(DEFAULT_OUTPUT_DIR),
         help="Folder where PNG screenshots will be stored.",
     )
     parser.add_argument(
         "--gif-name",
-        default=DEFAULT_GIF_NAME,
+        default=str(DEFAULT_GIF_NAME),
         help="Path for the rebuilt GIF artifact.",
     )
     parser.add_argument(
@@ -82,7 +87,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--no-search-gif-name",
-        default=DEFAULT_NO_SEARCH_GIF_NAME,
+        default=str(DEFAULT_NO_SEARCH_GIF_NAME),
         help="Path for the no-search-actions GIF artifact.",
     )
     parser.add_argument(
@@ -198,6 +203,13 @@ def resolve_frame_paths(output_dir: Path, frame_names: list[str]) -> list[Path]:
     return [output_dir / frame_name for frame_name in frame_names]
 
 
+def resolve_repo_path(path_value: str) -> Path:
+    candidate = Path(path_value)
+    if candidate.is_absolute():
+        return candidate
+    return REPO_ROOT / candidate
+
+
 def capture_assets(page: Page, base_url: str, output_dir: Path) -> list[Path]:
     page.set_viewport_size({"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT})
 
@@ -270,9 +282,9 @@ def remove_existing_pngs(output_dir: Path) -> None:
 
 def main() -> int:
     args = parse_args()
-    output_dir = Path(args.output_dir)
-    gif_path = Path(args.gif_name)
-    no_search_gif_path = Path(args.no_search_gif_name)
+    output_dir = resolve_repo_path(args.output_dir)
+    gif_path = resolve_repo_path(args.gif_name)
+    no_search_gif_path = resolve_repo_path(args.no_search_gif_name)
 
     remove_existing_pngs(output_dir)
 

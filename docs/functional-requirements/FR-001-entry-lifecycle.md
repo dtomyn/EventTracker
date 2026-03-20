@@ -18,7 +18,7 @@
 - FR-001-09 The system shall replace tag associations and additional-link associations on every successful update.
 - FR-001-10 The system shall redirect successful create and update requests to `/entries/{id}/view` with a `303` response.
 - FR-001-11 The system shall return `404` for edit and view requests targeting a non-existent entry.
-- FR-001-12 The read-only entry page shall display the saved content, date, group name, tags, source URL, and additional links.
+- FR-001-12 The system shall display the saved content, date, group name, tags, source URL, and additional links on the read-only entry page.
 
 ## Acceptance Notes
 

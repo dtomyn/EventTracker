@@ -3,13 +3,13 @@
 - Category: Functional
 - Status: Baseline
 - Scope: Index of the functional requirement documents derived from the implemented EventTracker repository as of 2026-03-19.
-- Primary Sources: `PRODUCT_OVERVIEW.md`, `README.md`, `app/main.py`, `app/services/*`, `scripts/*`, `tests/*`
+- Primary Sources: `README.md`, `app/main.py`, `app/services/*`, `scripts/*`, `tests/*`
 
 ## Requirement Statements
 
 - FR-INDEX-01 The repository shall keep functional requirements split into small-scope markdown documents under this folder.
-- FR-INDEX-02 Each functional requirement document shall use the standard template defined in `docs/requirements-template.md`.
-- FR-INDEX-03 Functional requirements shall describe current implemented behavior, not aspirational roadmap items.
+- FR-INDEX-02 The repository shall require each functional requirement document to use the standard template defined in `docs/requirements-template.md`.
+- FR-INDEX-03 The repository shall describe current implemented behavior rather than aspirational roadmap items in functional requirements.
 
 ## Acceptance Notes
 
