@@ -603,6 +603,98 @@ If you want a PowerShell session with the virtual environment activated:
 
 ## Configuration
 
+### Capability matrix
+
+The table below maps each configuration mode to the features it enables. Core features—timeline browsing, entry creation and editing, and keyword search (FTS5)—are always available regardless of mode.
+
+| Mode | Draft generation | Story Mode | Group web search | Semantic search |
+|------|:---:|:---:|:---:|:---:|
+| No AI configuration | ✗ | ✗ | ✗ | ✗ |
+| OpenAI – drafts only | ✓ | ✓ | ✗ | ✗ |
+| OpenAI – drafts + embeddings | ✓ | ✓ | ✗ | ✓ |
+| Copilot | ✓ | ✓ | ✓ | ✗ |
+| Copilot + OpenAI embeddings | ✓ | ✓ | ✓ | ✓ |
+
+**Group web search** requires `EVENTTRACKER_AI_PROVIDER=copilot` and a stored `web_search_query` on the timeline group.
+
+**Semantic search** requires `OPENAI_API_KEY` and `OPENAI_EMBEDDING_MODEL_ID` regardless of the draft provider. When embeddings are not configured, ranked search falls back to keyword-only results without surfacing an error.
+
+**`OPENAI_BASE_URL`** is optional in any mode that uses OpenAI settings. Omit it to use the standard OpenAI API, or set it to point at any OpenAI-compatible endpoint (Ollama, LM Studio, Azure, etc.).
+
+### Common local setups
+
+#### No AI (keyword search only)
+
+No AI-specific variables are required. Timeline browsing, entry management, and keyword search (FTS) work without any AI configuration.
+
+```env
+# No AI configuration — timeline, entries, and keyword search work out of the box.
+```
+
+#### OpenAI – drafts and Story Mode
+
+```env
+EVENTTRACKER_AI_PROVIDER=openai
+OPENAI_API_KEY=your-api-key
+OPENAI_CHAT_MODEL_ID=gpt-4o
+```
+
+#### OpenAI – drafts, Story Mode, and semantic search
+
+```env
+EVENTTRACKER_AI_PROVIDER=openai
+OPENAI_API_KEY=your-api-key
+OPENAI_CHAT_MODEL_ID=gpt-4o
+OPENAI_EMBEDDING_MODEL_ID=text-embedding-3-small
+```
+
+After first run, rebuild embeddings for existing entries:
+
+```powershell
+uv run python -m scripts.init_db --reindex-embeddings
+```
+
+#### Local OpenAI-compatible endpoint (Ollama, LM Studio, etc.)
+
+```env
+EVENTTRACKER_AI_PROVIDER=openai
+OPENAI_API_KEY=anything
+OPENAI_BASE_URL=http://localhost:11434/v1
+OPENAI_CHAT_MODEL_ID=llama3
+# Optional: set an embedding model to enable semantic search
+# OPENAI_EMBEDDING_MODEL_ID=nomic-embed-text
+```
+
+#### GitHub Copilot – drafts, Story Mode, and group web search
+
+```env
+EVENTTRACKER_AI_PROVIDER=copilot
+COPILOT_CHAT_MODEL_ID=gpt-5
+```
+
+Requires the `github-copilot-sdk` Python package. Group web search also requires a stored `web_search_query` on the timeline group (set via `/admin/groups`).
+
+#### GitHub Copilot + OpenAI embeddings – all features
+
+```env
+EVENTTRACKER_AI_PROVIDER=copilot
+COPILOT_CHAT_MODEL_ID=gpt-5
+OPENAI_API_KEY=your-api-key
+OPENAI_EMBEDDING_MODEL_ID=text-embedding-3-small
+```
+
+### Fallback and degraded behavior
+
+| Condition | Behavior |
+|-----------|----------|
+| No AI provider configured | Draft generation and Story Mode return a configuration error if triggered; the rest of the app is unaffected |
+| `OPENAI_CHAT_MODEL_ID` or `OPENAI_API_KEY` missing (`openai` mode) | Draft generation raises a configuration error listing the missing variables |
+| `OPENAI_EMBEDDING_MODEL_ID` not set | `entry_embeddings` table is never populated; ranked search silently falls back to FTS-only results |
+| `sqlite-vec` extension unavailable | Semantic indexing is skipped at save time (logged as a warning); search falls back to FTS-only |
+| `EVENTTRACKER_AI_PROVIDER=openai` (default) | Group web search panel is not shown regardless of group configuration |
+| `EVENTTRACKER_AI_PROVIDER=copilot` but SDK not installed | Draft generation and Story Mode raise a configuration error; group web search is also unavailable |
+| Group has no `web_search_query` stored | Group web search panel is not shown even when Copilot mode is active |
+
 ### Core settings
 
 ```env

@@ -18,8 +18,55 @@
 - NFR-003-09 The application shall default `COPILOT_CHAT_MODEL_ID` to `gpt-5` for Copilot-backed integrations and may accept optional CLI path or URL overrides.
 - NFR-003-10 The application shall default logging to `INFO` unless `LOG_LEVEL` is set explicitly.
 - NFR-003-11 The application shall allow configuration of development-server host and port through CLI arguments or `EVENTTRACKER_HOST` and `EVENTTRACKER_PORT`.
+- NFR-003-12 The application shall operate in a no-AI mode when no AI provider variables are set, keeping timeline browsing, entry management, and FTS keyword search fully functional.
+- NFR-003-13 The application shall treat `OPENAI_EMBEDDING_MODEL_ID` as optional: when absent or when sqlite-vec is unavailable, ranked search shall silently fall back to FTS-only results without surfacing an error to the user.
+- NFR-003-14 Group web search shall be unavailable and the panel shall not be rendered when `EVENTTRACKER_AI_PROVIDER` is not `copilot` or when the timeline group has no stored `web_search_query`.
+- NFR-003-15 Semantic embeddings shall be independent of the draft-generation provider, allowing Copilot to supply draft generation while OpenAI supplies the embedding model.
+
+## Capability Matrix
+
+The following table summarizes which capabilities each configuration mode enables. Core features (timeline browsing, entry management, FTS keyword search) are always available.
+
+| Mode | Draft generation | Story Mode | Group web search | Semantic search |
+|------|:---:|:---:|:---:|:---:|
+| No AI configuration | ✗ | ✗ | ✗ | ✗ |
+| OpenAI – drafts only | ✓ | ✓ | ✗ | ✗ |
+| OpenAI – drafts + embeddings | ✓ | ✓ | ✗ | ✓ |
+| Copilot | ✓ | ✓ | ✓ | ✗ |
+| Copilot + OpenAI embeddings | ✓ | ✓ | ✓ | ✓ |
+
+## Environment Variables Reference
+
+### Required variables per mode
+
+| Variable | No AI | OpenAI drafts | OpenAI + embeddings | Copilot | Copilot + embeddings |
+|----------|:-----:|:-------------:|:-------------------:|:-------:|:--------------------:|
+| `EVENTTRACKER_AI_PROVIDER` | — | `openai` (default) | `openai` (default) | `copilot` | `copilot` |
+| `OPENAI_API_KEY` | — | Required | Required | — | Required |
+| `OPENAI_CHAT_MODEL_ID` | — | Required | Required | — | — |
+| `OPENAI_EMBEDDING_MODEL_ID` | — | — | Required | — | Required |
+| `OPENAI_BASE_URL` | — | Optional | Optional | — | Optional |
+| `COPILOT_CHAT_MODEL_ID` | — | — | — | Optional (defaults to `gpt-5`) | Optional (defaults to `gpt-5`) |
+| `COPILOT_CLI_PATH` | — | — | — | Optional | Optional |
+| `COPILOT_CLI_URL` | — | — | — | Optional | Optional |
+
+### Optional variables (all modes)
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `EVENTTRACKER_HOST` | `127.0.0.1` | Development server host |
+| `EVENTTRACKER_PORT` | `35231` | Development server port |
+| `EVENTTRACKER_DB_PATH` | `data/EventTracker.db` | SQLite database file path |
+| `LOG_LEVEL` | `INFO` | Python logging level |
+| `EVENTTRACKER_GROUP_WEB_SEARCH_TIMEOUT_SECONDS` | `60` | Copilot web search backend timeout |
+| `EVENTTRACKER_GROUP_WEB_SEARCH_BROADENED_TIMEOUT_SECONDS` | `45` | Copilot web search broadened-retry timeout |
+| `EVENTTRACKER_GROUP_WEB_SEARCH_REQUEST_TIMEOUT_MS` | backend timeout + 5000 | Browser-side request timeout for web search |
+| `EVENTTRACKER_GROUP_WEB_SEARCH_CACHE_TTL_SECONDS` | `300` | Web search results cache TTL |
 
 ## Acceptance Notes
 
 - Invalid provider values fail with explicit configuration errors.
 - Invalid port values fail before server startup.
+- Missing required OpenAI variables raise `DraftGenerationConfigurationError` listing the absent variable names.
+- Missing embedding configuration causes ranked search to return FTS-only results; no error is surfaced to the user.
+- Group web search raises `GroupWebSearchConfigurationError` when `EVENTTRACKER_AI_PROVIDER` is not `copilot`.
