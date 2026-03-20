@@ -724,23 +724,69 @@ Current automated coverage includes:
 ## Project layout
 
 ```text
-app/
+pyproject.toml
+README.md
+README_EXPLAIN_IT_TO_ME_LIKE_I_AM_5.md
+app/  # FastAPI application package
+  __init__.py
   db.py
+  env.py
   main.py
   models.py
   schemas.py
-  services/
+  services/  # Domain services and provider adapters
+    __init__.py
     ai_generate.py
+    ai_story_mode.py
+    copilot_runtime.py
+    copilot_sdk.py
     embeddings.py
     entries.py
     extraction.py
     group_web_search.py
     search.py
-  static/
-  templates/
-scripts/
+    story_mode.py
+  static/  # Static web assets
+    styles.css
+  templates/  # Server-rendered Jinja templates
+    admin_groups.html
+    base.html
+    entry_detail.html
+    entry_form.html
+    search.html
+    story.html
+    timeline.html
+    partials/  # Reusable template fragments
+      entry_card.html
+      generated_preview.html
+      html_preview_content.html
+      search_results.html
+      story_links.html
+      timeline_bucket_cards.html
+      timeline_detail_groups.html
+      timeline_summary_groups.html
+data/  # Local SQLite database and runtime data
+docs/  # Requirements and demo assets
+scripts/  # Developer and maintenance entry points
+  generate_demo_assets.py
   import_entries.py
   init_db.py
   run_dev.py
-tests/
+tests/  # Unit and integration tests
+  e2e/  # Playwright end-to-end browser tests
+    conftest.py
+    test_core_workflows.py
+    test_optional_mocked_workflows.py
+  test_ai_generate.py
+  test_ai_story_mode.py
+  test_db.py
+  test_entries.py
+  test_group_web_search.py
+  test_import_entries.py
+  test_init_db.py
+  test_run_dev.py
+  test_search.py
+  test_smoke.py
+  test_story_mode.py
+  test_story_routes.py
 ```
