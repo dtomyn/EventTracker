@@ -95,15 +95,24 @@
 
     {% if timeline_groups %}
         <div class="visualization-toolbar" aria-label="Timeline view controls">
-            <div>
-                <div class="visualization-toolbar-label">View</div>
-                <p class="visualization-toolbar-copy mb-0">Switch between detailed entries and summary views. Click a year card to drill into its months, then click a month card to open its event summaries.</p>
-            </div>
             <div class="visualization-segmented-controls" role="group" aria-label="Timeline views">
                 <button class="visualization-view-button" type="button" data-zoom-target="details" aria-pressed="true">Details</button>
                 <button class="visualization-view-button" type="button" data-zoom-target="events" aria-pressed="false">Summaries</button>
                 <button class="visualization-view-button" type="button" data-zoom-target="months" aria-pressed="false">Months</button>
                 <button class="visualization-view-button" type="button" data-zoom-target="years" aria-pressed="false">Years</button>
+            </div>
+            <div class="timeline-playback-panel" data-playback-panel data-playback-state="idle" hidden>
+                <div class="timeline-playback-controls" role="group" aria-label="Timeline playback controls">
+                    <button class="timeline-playback-button" type="button" data-playback-action="play" aria-label="Play summaries replay" title="Play summaries replay">
+                        <span class="timeline-playback-icon timeline-playback-icon-play" aria-hidden="true"></span>
+                    </button>
+                    <button class="timeline-playback-button" type="button" data-playback-action="pause" aria-label="Pause summaries replay" title="Pause summaries replay" disabled>
+                        <span class="timeline-playback-icon timeline-playback-icon-pause" aria-hidden="true"></span>
+                    </button>
+                    <button class="timeline-playback-button" type="button" data-playback-action="restart" aria-label="Restart summaries replay" title="Restart summaries replay">
+                        <span class="timeline-playback-icon timeline-playback-icon-restart" aria-hidden="true"></span>
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -112,6 +121,7 @@
                 <span class="visualization-status-label">Current view</span>
                 <strong data-current-view-label>Details</strong>
                 <span class="visualization-status-context" data-current-view-context>{% if details_has_more %}Showing first batch{% else %}All loaded{% endif %}</span>
+                <span class="visualization-status-context timeline-playback-status" data-playback-status hidden></span>
             </div>
             <nav class="visualization-history" aria-label="Drill path" data-view-history hidden></nav>
             <div class="visualization-shell">
@@ -611,6 +621,9 @@
                 const summaryPanel = document.getElementById("visualization-content");
                 const statusLabel = document.querySelector("[data-current-view-label]");
                 const statusContext = document.querySelector("[data-current-view-context]");
+                const playbackPanel = document.querySelector("[data-playback-panel]");
+                const playbackStatusNode = document.querySelector("[data-playback-status]");
+                const playbackActionButtons = Array.from(document.querySelectorAll("[data-playback-action]"));
                 const controls = Array.from(document.querySelectorAll("[data-zoom-target]"));
                 const stateNode = document.getElementById("timeline-state");
                 const detailGroupsNode = detailPanel?.querySelector("[data-detail-groups]");
@@ -641,6 +654,16 @@
                     nextCursor: timelineState.nextCursor || null,
                     hasMore: Boolean(timelineState.hasMore),
                     loading: false,
+                };
+                const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+                const playback = {
+                    status: "idle",
+                    timeoutId: 0,
+                    steps: [],
+                    index: -1,
+                    runId: 0,
+                    currentLabel: "",
+                    currentBurstLevel: "steady",
                 };
 
                 const escapeHtml = (value) => String(value)
@@ -798,10 +821,94 @@
                     summaryPanel.hidden = state.view === "details";
                     statusLabel.textContent = viewLabels[state.view];
                     statusContext.textContent = describeState(state);
+                    if (playbackPanel) {
+                        playbackPanel.hidden = state.view !== "events";
+                    }
+                    syncPlaybackStatusVisibility();
                     for (const control of controls) {
                         const pressed = control.dataset.zoomTarget === state.view;
                         control.setAttribute("aria-pressed", String(pressed));
                     }
+                };
+
+                const clearPlaybackTimer = () => {
+                    if (playback.timeoutId) {
+                        window.clearTimeout(playback.timeoutId);
+                        playback.timeoutId = 0;
+                    }
+                };
+
+                const clearPlaybackHighlights = () => {
+                    for (const node of summaryContentNode.querySelectorAll(".is-playback-current, .is-playback-burst, .is-playback-current-entry, .is-playback-revealed")) {
+                        node.classList.remove(
+                            "is-playback-current",
+                            "is-playback-burst",
+                            "is-playback-current-entry",
+                            "is-playback-revealed",
+                        );
+                    }
+                };
+
+                const restorePlaybackScene = () => {
+                    clearPlaybackHighlights();
+                    for (const groupNode of summaryContentNode.querySelectorAll("[data-playback-group]")) {
+                        groupNode.classList.remove("is-playback-hidden");
+                    }
+                    for (const entryNode of summaryContentNode.querySelectorAll("[data-playback-entry]")) {
+                        entryNode.classList.remove("is-playback-hidden");
+                    }
+                };
+
+                const setPlaybackStatus = (message, burstLevel = "steady") => {
+                    playback.currentBurstLevel = burstLevel;
+                    if (playbackStatusNode) {
+                        playbackStatusNode.textContent = message;
+                    }
+                    if (playbackPanel) {
+                        playbackPanel.dataset.playbackState = playback.status;
+                        playbackPanel.dataset.playbackBurstLevel = burstLevel;
+                    }
+                };
+
+                const syncPlaybackStatusVisibility = () => {
+                    if (!playbackStatusNode) {
+                        return;
+                    }
+                    playbackStatusNode.hidden = state.view !== "events"
+                        || playback.status === "idle"
+                        || !playbackStatusNode.textContent.trim();
+                };
+
+                const syncPlaybackButtons = () => {
+                    const isPlaying = playback.status === "playing";
+                    const isPaused = playback.status === "paused";
+                    const isBusy = playback.status === "loading";
+
+                    playbackActionButtons.forEach((button) => {
+                        const action = button.dataset.playbackAction;
+                        if (action === "play") {
+                            const playLabel = isPaused
+                                ? "Resume summaries replay"
+                                : "Play summaries replay";
+                            button.setAttribute("aria-label", playLabel);
+                            button.setAttribute("title", playLabel);
+                            button.disabled = isPlaying || isBusy;
+                            return;
+                        }
+                        if (action === "pause") {
+                            button.disabled = !isPlaying;
+                            return;
+                        }
+                        button.disabled = isBusy;
+                    });
+                };
+
+                const syncPlaybackUi = () => {
+                    syncPlaybackButtons();
+                    if (playback.status === "idle") {
+                        setPlaybackStatus("");
+                    }
+                    syncPlaybackStatusVisibility();
                 };
 
                 const buildRequestUrl = (endpoint, extraParams = {}) => {
@@ -861,7 +968,7 @@
 
                 const loadMoreDetails = async () => {
                     if (state.view !== "details" || details.loading || !details.hasMore) {
-                        return;
+                        return true;
                     }
 
                     details.loading = true;
@@ -889,11 +996,222 @@
                         details.hasMore = Boolean(payload.has_more);
                         details.loading = false;
                         syncDetailStates();
+                        return true;
                     } catch (_error) {
                         details.loading = false;
                         detailLoadingNode.hidden = true;
                         detailErrorNode.hidden = false;
+                        return false;
                     }
+                };
+
+                const collectPlaybackGroups = () => Array.from(summaryContentNode.querySelectorAll("[data-playback-group]"))
+                    .filter((node) => node instanceof HTMLElement)
+                    .map((groupNode) => {
+                        const element = groupNode;
+                        const entryNodes = Array.from(element.querySelectorAll("[data-playback-entry]"))
+                            .filter((node) => node instanceof HTMLElement)
+                            .reverse();
+                        return {
+                            node: element,
+                            label: element.dataset.playbackLabel || "Timeline period",
+                            count: Number(element.dataset.playbackCount || entryNodes.length || "0"),
+                            burstLevel: element.dataset.playbackBurstLevel || "steady",
+                            introDelayMs: Number(element.dataset.playbackIntroMs || "240"),
+                            entryDelayMs: Number(element.dataset.playbackEntryMs || "180"),
+                            outroDelayMs: Number(element.dataset.playbackOutroMs || "240"),
+                            entryNodes,
+                        };
+                    })
+                    .reverse();
+
+                const buildMonthPlaybackSteps = (groups) => groups.flatMap((group) => {
+                    const steps = [{
+                        kind: "group",
+                        group,
+                        delayAfter: group.introDelayMs,
+                    }];
+                    group.entryNodes.forEach((entryNode, index) => {
+                        steps.push({
+                            kind: "entry",
+                            group,
+                            entryNode,
+                            entryLabel: entryNode.dataset.entryLabel || entryNode.dataset.entryDate || `Entry ${index + 1}`,
+                            delayAfter: index === group.entryNodes.length - 1
+                                ? group.outroDelayMs
+                                : group.entryDelayMs,
+                        });
+                    });
+                    return steps;
+                });
+
+                const preparePlaybackScene = (groups) => {
+                    restorePlaybackScene();
+                    groups.forEach((group) => {
+                        group.node.classList.add("is-playback-hidden");
+                        group.entryNodes.forEach((entryNode) => {
+                            entryNode.classList.add("is-playback-hidden");
+                        });
+                    });
+                };
+
+                const scrollPlaybackTargetIntoView = (element) => {
+                    if (!(element instanceof HTMLElement) || motionQuery.matches) {
+                        return;
+                    }
+                    window.requestAnimationFrame(() => {
+                        element.scrollIntoView({ behavior: "smooth", block: "center" });
+                    });
+                };
+
+                const setActivePlaybackGroup = (group) => {
+                    for (const groupNode of summaryContentNode.querySelectorAll("[data-playback-group]")) {
+                        groupNode.classList.remove("is-playback-current", "is-playback-burst");
+                    }
+                    group.node.classList.add("is-playback-current", "is-playback-revealed");
+                    if (group.burstLevel !== "steady") {
+                        group.node.classList.add("is-playback-burst");
+                    }
+                    group.node.classList.remove("is-playback-hidden");
+                    scrollPlaybackTargetIntoView(group.node);
+                };
+
+                const setActivePlaybackEntry = (entryNode) => {
+                    for (const node of summaryContentNode.querySelectorAll("[data-playback-entry].is-playback-current-entry")) {
+                        node.classList.remove("is-playback-current-entry");
+                    }
+                    entryNode.classList.remove("is-playback-hidden");
+                    entryNode.classList.add("is-playback-current-entry", "is-playback-revealed");
+                };
+
+                const finishPlayback = () => {
+                    clearPlaybackTimer();
+                    playback.status = "complete";
+                    restorePlaybackScene();
+                    setPlaybackStatus("Summaries replay complete.", "steady");
+                    syncPlaybackButtons();
+                };
+
+                const stopPlayback = ({ resetMessage = true } = {}) => {
+                    playback.runId += 1;
+                    clearPlaybackTimer();
+                    playback.status = "idle";
+                    playback.steps = [];
+                    playback.index = -1;
+                    playback.currentLabel = "";
+                    restorePlaybackScene();
+                    syncPlaybackButtons();
+                    if (resetMessage && state.view === "events") {
+                        setPlaybackStatus("");
+                    }
+                    syncPlaybackStatusVisibility();
+                };
+
+                const pausePlayback = () => {
+                    if (playback.status !== "playing") {
+                        return;
+                    }
+                    clearPlaybackTimer();
+                    playback.status = "paused";
+                    const pausedLabel = playback.currentLabel || "timeline replay";
+                    setPlaybackStatus(`Paused during ${pausedLabel}.`, playback.currentBurstLevel);
+                    syncPlaybackButtons();
+                };
+
+                const runPlaybackStep = (step) => {
+                    if (step.kind === "group") {
+                        playback.currentLabel = step.group.label;
+                        setActivePlaybackGroup(step.group);
+                        setPlaybackStatus(
+                            step.group.burstLevel === "steady"
+                                ? `Playing ${step.group.label} oldest first.`
+                                : `Playing ${step.group.label} with a ${step.group.burstLevel === "surge" ? "surge" : "burst"} cadence.`,
+                            step.group.burstLevel,
+                        );
+                        return;
+                    }
+
+                    playback.currentLabel = `${step.group.label} · ${step.entryLabel}`;
+                    setActivePlaybackGroup(step.group);
+                    setActivePlaybackEntry(step.entryNode);
+                    setPlaybackStatus(
+                        step.group.burstLevel === "steady"
+                            ? `${step.group.label}: ${step.entryLabel}`
+                            : `${step.group.label}: ${step.entryLabel} during a ${step.group.burstLevel === "surge" ? "surge" : "burst"}.`,
+                        step.group.burstLevel,
+                    );
+                };
+
+                const scheduleNextPlaybackStep = (delay = 120, runId = playback.runId) => {
+                    clearPlaybackTimer();
+                    playback.timeoutId = window.setTimeout(() => {
+                        if (runId !== playback.runId || playback.status !== "playing") {
+                            return;
+                        }
+                        playback.index += 1;
+                        const step = playback.steps[playback.index];
+                        if (!step) {
+                            finishPlayback();
+                            return;
+                        }
+                        runPlaybackStep(step);
+                        scheduleNextPlaybackStep(step.delayAfter, runId);
+                    }, motionQuery.matches ? 0 : delay);
+                };
+
+                const resumePlayback = () => {
+                    if (playback.status !== "paused") {
+                        return;
+                    }
+                    playback.status = "playing";
+                    setPlaybackStatus(`Resuming ${playback.currentLabel || "summaries replay"}.`, playback.currentBurstLevel);
+                    syncPlaybackButtons();
+                    scheduleNextPlaybackStep(150, playback.runId);
+                };
+
+                const startPlayback = async ({ restart = false } = {}) => {
+                    if (playback.status === "paused" && !restart) {
+                        resumePlayback();
+                        return;
+                    }
+
+                    stopPlayback({ resetMessage: false });
+                    playback.status = "loading";
+                    syncPlaybackButtons();
+                    setPlaybackStatus("Preparing summaries replay…", "steady");
+                    const runId = playback.runId;
+
+                    if (state.view !== "events") {
+                        playback.status = "idle";
+                        syncPlaybackButtons();
+                        return;
+                    }
+
+                    if (!summaryContentNode.innerHTML.trim()) {
+                        await loadSummaryView(state);
+                    }
+
+                    if (runId !== playback.runId) {
+                        playback.status = "idle";
+                        syncPlaybackButtons();
+                        return;
+                    }
+
+                    const groups = collectPlaybackGroups();
+                    if (groups.length === 0) {
+                        playback.status = "idle";
+                        setPlaybackStatus("No entries available to replay.", "steady");
+                        syncPlaybackButtons();
+                        return;
+                    }
+
+                    preparePlaybackScene(groups);
+                    playback.steps = buildMonthPlaybackSteps(groups);
+                    playback.index = -1;
+                    playback.status = "playing";
+                    setPlaybackStatus("Starting a month-by-month replay from the oldest month.", "steady");
+                    syncPlaybackButtons();
+                    scheduleNextPlaybackStep(180, runId);
                 };
 
                 const summaryCacheKey = (nextState) => JSON.stringify({
@@ -909,6 +1227,7 @@
                         summaryLoadingNode.hidden = true;
                         summaryErrorNode.hidden = true;
                         summaryContentNode.hidden = false;
+                        syncPlaybackUi();
                         syncFocusedElement(focusKey);
                         return;
                     }
@@ -945,6 +1264,7 @@
                         summaryLoadingNode.hidden = true;
                         summaryErrorNode.hidden = true;
                         summaryContentNode.hidden = false;
+                        syncPlaybackUi();
                         syncFocusedElement(focusKey);
                     } catch (_error) {
                         if (requestId !== activeSummaryRequestId) {
@@ -980,7 +1300,18 @@
 
                 const setState = async (nextState, options = {}) => {
                     const normalizedState = normalizeState(nextState);
-                    const { clearHistory = false, pushSnapshot = null, replaceHistory = null, focusKey = null } = options;
+                    const {
+                        clearHistory = false,
+                        pushSnapshot = null,
+                        replaceHistory = null,
+                        focusKey = null,
+                        suppressPlaybackReset = false,
+                    } = options;
+
+                    const hasStateChanged = !statesEqual(normalizedState, state);
+                    if (!suppressPlaybackReset && hasStateChanged && playback.status !== "idle") {
+                        stopPlayback();
+                    }
 
                     if (clearHistory) {
                         history = [];
@@ -990,7 +1321,6 @@
                         history = [...history, pushSnapshot];
                     }
 
-                    const hasChanged = !statesEqual(normalizedState, state);
                     state = normalizedState;
 
                     syncControls();
@@ -998,7 +1328,7 @@
 
                     if (state.view === "details") {
                         syncFocusedElement(focusKey);
-                    } else if (hasChanged || !summaryContentNode.innerHTML.trim()) {
+                    } else if (hasStateChanged || !summaryContentNode.innerHTML.trim()) {
                         await loadSummaryView(state, focusKey);
                     } else {
                         syncFocusedElement(focusKey);
@@ -1010,6 +1340,7 @@
                 syncControls();
                 renderHistory();
                 syncDetailStates();
+                syncPlaybackUi();
 
                 for (const control of controls) {
                     control.addEventListener("click", async () => {
@@ -1091,6 +1422,28 @@
                 summaryRetryButton?.addEventListener("click", () => {
                     summaryErrorNode.hidden = true;
                     void loadSummaryView(state);
+                });
+
+                playbackActionButtons.forEach((button) => {
+                    button.addEventListener("click", () => {
+                        const action = button.dataset.playbackAction;
+                        if (action === "pause") {
+                            pausePlayback();
+                            return;
+                        }
+                        if (action === "restart") {
+                            void startPlayback({ restart: true });
+                            return;
+                        }
+                        void startPlayback();
+                    });
+                });
+
+                motionQuery.addEventListener?.("change", () => {
+                    if (playback.status !== "idle") {
+                        stopPlayback();
+                    }
+                    syncPlaybackUi();
                 });
 
                 const observer = new IntersectionObserver((entries) => {

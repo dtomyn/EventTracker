@@ -1,6 +1,17 @@
 {% if timeline_groups %}
     {% for group in timeline_groups %}
-        <section class="visualization-group">
+        <section
+            class="visualization-group"
+            data-playback-group
+            data-group-key="{{ group.key }}"
+            data-focus-key="{{ group.focus_key }}"
+            data-playback-label="{{ group.label }}"
+            data-playback-count="{{ group.count }}"
+            data-playback-burst-level="{{ group.playback_burst_level }}"
+            data-playback-intro-ms="{{ group.playback_intro_delay_ms }}"
+            data-playback-entry-ms="{{ group.playback_entry_interval_ms }}"
+            data-playback-outro-ms="{{ group.playback_outro_delay_ms }}"
+        >
             <div class="visualization-heading">
                 <h2 class="h5 mb-0">
                     <button
@@ -17,7 +28,12 @@
             </div>
             <ol class="visualization-list list-unstyled mb-0">
                 {% for entry in group.entries %}
-                    <li class="visualization-item">
+                    <li
+                        class="visualization-item"
+                        data-playback-entry
+                        data-entry-label="{{ entry.title or entry.display_date }}"
+                        data-entry-date="{{ entry.display_date }}"
+                    >
                         <div class="visualization-node" aria-hidden="true"></div>
                         <div class="visualization-content">
                             <div class="visualization-date">{{ entry.display_date }}</div>

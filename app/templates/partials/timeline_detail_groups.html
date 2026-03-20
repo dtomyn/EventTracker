@@ -1,7 +1,7 @@
 {% for group in timeline_groups %}
     <section
         class="timeline-group mb-5"
-        data-group-key="{{ group.entries[0].event_year }}-{{ '%02d' | format(group.entries[0].event_month) }}"
+        data-group-key="{{ group.key }}"
     >
         <div class="timeline-heading">
             <h2 class="h5 mb-0">

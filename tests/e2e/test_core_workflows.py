@@ -33,7 +33,9 @@ def _ensure_group_id(db_path: Path, group_name: str) -> int:
             (group_name,),
         )
         connection.commit()
-        return int(cursor.lastrowid)
+        lastrowid = cursor.lastrowid
+        assert lastrowid is not None
+        return int(lastrowid)
 
 
 def _seed_entry(
@@ -66,10 +68,22 @@ def _seed_entry(
             )
             VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?)
             """,
-            (year, month, day, sort_key, group_id, title, final_text, timestamp, timestamp),
+            (
+                year,
+                month,
+                day,
+                sort_key,
+                group_id,
+                title,
+                final_text,
+                timestamp,
+                timestamp,
+            ),
         )
         connection.commit()
-        return int(cursor.lastrowid)
+        lastrowid = cursor.lastrowid
+        assert lastrowid is not None
+        return int(lastrowid)
 
 
 def test_create_dedicated_group_and_validate_admin_rules(
@@ -110,13 +124,17 @@ def test_entry_form_validation_rejects_missing_fields_invalid_urls_and_partial_l
     expect(page).to_have_url(re.compile(r".*/entries/new$"))
     expect(page.locator("#group_id")).to_have_class(re.compile(r".*\bis-invalid\b.*"))
     expect(page.locator("#event_year")).to_have_class(re.compile(r".*\bis-invalid\b.*"))
-    expect(page.locator("#event_month")).to_have_class(re.compile(r".*\bis-invalid\b.*"))
+    expect(page.locator("#event_month")).to_have_class(
+        re.compile(r".*\bis-invalid\b.*")
+    )
     expect(page.locator("#title")).to_have_class(re.compile(r".*\bis-invalid\b.*"))
     expect(page.locator("#source_url")).to_have_class(re.compile(r".*\bis-invalid\b.*"))
     expect(page.locator("#final_text")).to_have_class(re.compile(r".*\bis-invalid\b.*"))
     expect(page.locator("#link_url_0")).to_have_class(re.compile(r".*\bis-invalid\b.*"))
     expect(page.locator("#link_url_1")).to_have_class(re.compile(r".*\bis-invalid\b.*"))
-    expect(page.locator("#link_note_2")).to_have_class(re.compile(r".*\bis-invalid\b.*"))
+    expect(page.locator("#link_note_2")).to_have_class(
+        re.compile(r".*\bis-invalid\b.*")
+    )
 
     expect(page.get_by_text("This field is required.")).to_have_count(3)
     expect(page.get_by_text("Title is required.")).to_be_visible()
@@ -139,7 +157,9 @@ def test_entry_form_validation_rejects_missing_fields_invalid_urls_and_partial_l
     expect(page.locator("#link_note_0")).to_have_value("Missing URL")
     expect(page.locator("#link_url_1")).to_have_value("ftp://example.com/reference")
     expect(page.locator("#link_note_1")).to_have_value("Invalid protocol")
-    expect(page.locator("#link_url_2")).to_have_value("https://example.com/without-note")
+    expect(page.locator("#link_url_2")).to_have_value(
+        "https://example.com/without-note"
+    )
 
 
 def test_create_edit_filter_search_and_export_entry(
@@ -176,7 +196,9 @@ def test_create_edit_filter_search_and_export_entry(
     expect(page).to_have_url(re.compile(r".*/entries/\d+/view$"))
     entry_id = _extract_entry_id(page.url)
     expect(page.get_by_role("heading", name=created_title)).to_be_visible()
-    expect(page.get_by_text("Playwright captured the first browser workflow")).to_be_visible()
+    expect(
+        page.get_by_text("Playwright captured the first browser workflow")
+    ).to_be_visible()
     expect(page.get_by_text("Release checklist")).to_be_visible()
     expect(page.get_by_text("Retrospective notes")).to_be_visible()
     expect(page.get_by_text("playwright", exact=True)).to_be_visible()
@@ -203,7 +225,9 @@ def test_create_edit_filter_search_and_export_entry(
     expect(page.get_by_text("Retrospective notes")).not_to_be_visible()
 
     page.goto(f"/?group_id={group_id}")
-    expect(page.get_by_role("heading", name=f"{e2e_session.group_name} Timeline")).to_be_visible()
+    expect(
+        page.get_by_role("heading", name=f"{e2e_session.group_name} Timeline")
+    ).to_be_visible()
     page.get_by_role("searchbox").fill(query_text)
     page.get_by_role("button", name="Filter").click()
     expect(page).to_have_url(re.compile(rf".*/\?group_id={group_id}&q=.*"))
@@ -299,6 +323,11 @@ def test_timeline_views_and_drill_down_cover_details_summaries_months_and_years(
     detail_panel = page.locator("#timeline-details-view")
     summary_panel = page.locator("#visualization-content")
     history = page.locator("[data-view-history]")
+    playback_controls = page.locator("[data-playback-panel]")
+    playback_status = page.locator("[data-playback-status]")
+    play_button = page.locator("[data-playback-action='play']")
+    pause_button = page.locator("[data-playback-action='pause']")
+    restart_button = page.locator("[data-playback-action='restart']")
     details_button = page.locator("[data-zoom-target='details']")
     summaries_button = page.locator("[data-zoom-target='events']")
     months_button = page.locator("[data-zoom-target='months']")
@@ -313,6 +342,7 @@ def test_timeline_views_and_drill_down_cover_details_summaries_months_and_years(
     expect(detail_panel.get_by_text(prior_year_title)).to_be_visible()
     expect(detail_panel.get_by_role("link", name="View").first).to_be_visible()
     expect(detail_panel.get_by_role("link", name="Edit").first).to_be_visible()
+    expect(playback_controls).to_have_attribute("hidden", "")
 
     summaries_button.click()
     expect(current_view).to_have_text("Summaries")
@@ -321,33 +351,65 @@ def test_timeline_views_and_drill_down_cover_details_summaries_months_and_years(
     expect(summary_panel.get_by_text("March 2026")).to_be_visible()
     expect(summary_panel.get_by_text(march_primary_title)).to_be_visible()
     expect(summary_panel.get_by_text(march_secondary_title)).to_be_visible()
+    expect(playback_controls).not_to_have_attribute("hidden", "")
+    expect(playback_status).to_have_attribute("hidden", "")
+    expect(play_button).to_have_text("")
+    expect(play_button).to_have_attribute("aria-label", "Play summaries replay")
+    expect(pause_button).to_be_disabled()
+
+    play_button.click()
+    expect(play_button).to_be_disabled()
+    expect(pause_button).to_be_enabled()
+    expect(playback_status).to_have_text(
+        "Playing January 2025 oldest first.", timeout=5000
+    )
+
+    pause_button.click()
+    expect(play_button).to_be_enabled()
+    expect(pause_button).to_be_disabled()
+    expect(play_button).to_have_text("")
+    expect(play_button).to_have_attribute("aria-label", "Resume summaries replay")
+    expect(playback_status).to_contain_text("Paused during")
+
+    restart_button.click()
+    expect(play_button).to_be_disabled()
+    expect(pause_button).to_be_enabled()
+    expect(playback_status).to_have_text(
+        "Playing January 2025 oldest first.", timeout=5000
+    )
 
     months_button.click()
     expect(current_view).to_have_text("Months")
     expect(current_context).to_have_text("All months")
+    expect(playback_controls).to_have_attribute("hidden", "")
     expect(
-        summary_panel.locator(".visualization-summary-card", has_text="March 2026")
-        .locator(".visualization-summary-count")
+        summary_panel.locator(
+            ".visualization-summary-card", has_text="March 2026"
+        ).locator(".visualization-summary-count")
     ).to_have_text("2")
     expect(
-        summary_panel.locator(".visualization-summary-card", has_text="April 2026")
-        .locator(".visualization-summary-count")
+        summary_panel.locator(
+            ".visualization-summary-card", has_text="April 2026"
+        ).locator(".visualization-summary-count")
     ).to_have_text("1")
     expect(
-        summary_panel.locator(".visualization-summary-card", has_text="January 2025")
-        .locator(".visualization-summary-count")
+        summary_panel.locator(
+            ".visualization-summary-card", has_text="January 2025"
+        ).locator(".visualization-summary-count")
     ).to_have_text("1")
 
     years_button.click()
     expect(current_view).to_have_text("Years")
     expect(current_context).to_have_text("All years")
     expect(
-        summary_panel.locator(".visualization-summary-card", has_text="2026")
-        .locator(".visualization-summary-count")
+        summary_panel.locator(".visualization-summary-card", has_text="2026").locator(
+            ".visualization-summary-count"
+        )
     ).to_have_text("3")
     expect(
-        summary_panel.locator(".visualization-summary-card", has_text="2025")
-        .locator(".visualization-summary-count")
+        summary_panel.locator(".visualization-summary-card", has_text="2025").locator(
+            ".visualization-summary-count"
+        )
     ).to_have_text("1")
 
     summary_panel.get_by_role("button", name="Open 2026").click()
@@ -356,12 +418,14 @@ def test_timeline_views_and_drill_down_cover_details_summaries_months_and_years(
     expect(history).to_be_visible()
     expect(history).to_contain_text("2026")
     expect(
-        summary_panel.locator(".visualization-summary-card", has_text="March 2026")
-        .locator(".visualization-summary-count")
+        summary_panel.locator(
+            ".visualization-summary-card", has_text="March 2026"
+        ).locator(".visualization-summary-count")
     ).to_have_text("2")
     expect(
-        summary_panel.locator(".visualization-summary-card", has_text="April 2026")
-        .locator(".visualization-summary-count")
+        summary_panel.locator(
+            ".visualization-summary-card", has_text="April 2026"
+        ).locator(".visualization-summary-count")
     ).to_have_text("1")
     expect(summary_panel.get_by_text("January 2025")).not_to_be_visible()
 

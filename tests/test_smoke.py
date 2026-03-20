@@ -122,12 +122,25 @@ class TestAppSmokeTests(unittest.TestCase):
             self.assertIn("data-open-month-view", timeline_response.text)
             self.assertIn('data-target-year="2026"', timeline_response.text)
             self.assertIn('data-target-month="3"', timeline_response.text)
-            self.assertIn(
-                "Click a year card to drill into its months, then click a month card to open its event summaries.",
-                timeline_response.text,
-            )
             self.assertIn('data-zoom-target="months"', timeline_response.text)
             self.assertIn('data-zoom-target="years"', timeline_response.text)
+            self.assertIn('data-playback-action="play"', timeline_response.text)
+            self.assertIn('data-playback-action="pause"', timeline_response.text)
+            self.assertIn('data-playback-action="restart"', timeline_response.text)
+            self.assertIn("data-playback-status", timeline_response.text)
+            self.assertIn("data-playback-panel", timeline_response.text)
+            self.assertIn('aria-label="Play summaries replay"', timeline_response.text)
+            self.assertIn("hidden", timeline_response.text)
+            self.assertNotIn('data-playback-mode="year"', timeline_response.text)
+            self.assertNotIn("Replay summaries oldest first.", timeline_response.text)
+            self.assertNotIn(
+                "Replay the timeline oldest first. Busy months tighten the pacing so bursts of activity feel faster.",
+                timeline_response.text,
+            )
+            self.assertNotIn(
+                "Switch between detailed entries and summary views. Click a year card to drill into its months, then click a month card to open its event summaries.",
+                timeline_response.text,
+            )
             self.assertIn('id="timeline-state"', timeline_response.text)
             self.assertIn("data-detail-sentinel", timeline_response.text)
             self.assertIn("/timeline/details", timeline_response.text)

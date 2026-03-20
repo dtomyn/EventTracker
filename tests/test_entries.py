@@ -8,6 +8,7 @@ from app.services.entries import (
     list_timeline_month_buckets,
     list_timeline_summary_groups,
     list_timeline_year_buckets,
+    timeline_playback_profile,
 )
 
 
@@ -53,6 +54,27 @@ class TestTimelineViewModels(unittest.TestCase):
             [[entry.title for entry in group["entries"]] for group in groups],
             [["March latest", "March earlier"], ["February event"]],
         )
+        self.assertEqual(groups[0]["key"], "2026-03")
+        self.assertEqual(groups[0]["count"], 2)
+        self.assertEqual(groups[0]["focus_key"], "month-2026-03")
+        self.assertEqual(groups[0]["playback_burst_level"], "steady")
+
+    def test_timeline_playback_profile_accelerates_dense_months(self) -> None:
+        sparse_intro, sparse_interval, sparse_outro, sparse_level = (
+            timeline_playback_profile(1)
+        )
+        busy_intro, busy_interval, busy_outro, busy_level = timeline_playback_profile(4)
+        surge_intro, surge_interval, surge_outro, surge_level = (
+            timeline_playback_profile(9)
+        )
+
+        self.assertGreater(sparse_intro, busy_intro)
+        self.assertGreater(sparse_interval, busy_interval)
+        self.assertGreater(busy_interval, surge_interval)
+        self.assertGreaterEqual(sparse_outro, busy_outro)
+        self.assertEqual(sparse_level, "steady")
+        self.assertEqual(busy_level, "burst")
+        self.assertEqual(surge_level, "surge")
 
     def test_timeline_bucket_builders_count_entries_by_year_and_month(self) -> None:
         entries = [

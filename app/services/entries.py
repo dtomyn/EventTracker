@@ -76,7 +76,16 @@ class DuplicateEntrySourceUrlError(ValueError):
 
 
 class TimelineEntryGroup(TypedDict):
+    key: str
     label: str
+    event_year: int
+    event_month: int
+    count: int
+    focus_key: str
+    playback_intro_delay_ms: int
+    playback_entry_interval_ms: int
+    playback_outro_delay_ms: int
+    playback_burst_level: Literal["steady", "burst", "surge"]
     entries: list[Entry]
 
 
@@ -659,6 +668,23 @@ def get_entry(connection: sqlite3.Connection, entry_id: int) -> Entry | None:
     return entry_from_row(row)
 
 
+def timeline_playback_profile(
+    entry_count: int,
+) -> tuple[int, int, int, Literal["steady", "burst", "surge"]]:
+    normalized_count = max(1, entry_count)
+    entry_interval_ms = max(70, int(round(320 / (normalized_count**0.5))))
+    intro_delay_ms = max(160, 360 - (min(normalized_count, 6) - 1) * 35)
+    outro_delay_ms = 240 if normalized_count >= 4 else 320
+    burst_level: Literal["steady", "burst", "surge"]
+    if normalized_count >= 6:
+        burst_level = "surge"
+    elif normalized_count >= 3:
+        burst_level = "burst"
+    else:
+        burst_level = "steady"
+    return intro_delay_ms, entry_interval_ms, outro_delay_ms, burst_level
+
+
 def build_timeline_groups(entries: list[Entry]) -> list[TimelineEntryGroup]:
     groups: list[TimelineEntryGroup] = []
     current_key: tuple[int, int] | None = None
@@ -669,12 +695,30 @@ def build_timeline_groups(entries: list[Entry]) -> list[TimelineEntryGroup]:
         if key != current_key:
             current_key = key
             current_group = {
+                "key": f"{entry.event_year}-{entry.event_month:02d}",
                 "label": f"{MONTH_NAMES[entry.event_month - 1]} {entry.event_year}",
+                "event_year": entry.event_year,
+                "event_month": entry.event_month,
+                "count": 0,
+                "focus_key": f"month-{entry.event_year}-{entry.event_month:02d}",
+                "playback_intro_delay_ms": 0,
+                "playback_entry_interval_ms": 0,
+                "playback_outro_delay_ms": 0,
+                "playback_burst_level": "steady",
                 "entries": [],
             }
             groups.append(current_group)
         assert current_group is not None
         current_group["entries"].append(entry)
+        current_group["count"] += 1
+
+    for group in groups:
+        (
+            group["playback_intro_delay_ms"],
+            group["playback_entry_interval_ms"],
+            group["playback_outro_delay_ms"],
+            group["playback_burst_level"],
+        ) = timeline_playback_profile(group["count"])
 
     return groups
 
