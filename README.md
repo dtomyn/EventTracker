@@ -122,13 +122,6 @@ Tradeoffs and risks:
 - AI and embeddings are optional at runtime, which is a strength for graceful degradation, but it also means behavior can vary significantly across developer environments depending on `.env` configuration and installed capabilities.
 - Pyright coverage is curated to selected files instead of the full tree, so some future regressions can still land outside the typed surface.
 
-Improvement opportunities:
-
-- Split larger route groups from `app/main.py` into feature routers once route density starts slowing maintenance.
-- Introduce a lightweight migration story if schema changes become more frequent or need stronger upgrade guarantees across existing databases.
-- Expand static analysis coverage to more modules and tests as the codebase grows.
-- Document environment modes more explicitly around `openai`, `copilot`, FTS-only search, and embeddings-enabled search so contributors can predict feature availability faster.
-
 ### Python architecture diagram
 
 ```mermaid
