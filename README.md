@@ -17,24 +17,6 @@ This demo shows the main AI-assisted workflow in EventTracker, from live web dis
 
 Timeline Story Mode is also available in the current app. It lets you launch a narrative view from the timeline, a search scope, or drilled year/month buckets, generate a story over the current scope, save that story as a snapshot, and follow inline citations down to a linked reference list.
 
-### Refreshing Demo Assets
-
-With the app running locally, regenerate the screenshot set and the main demo GIF with:
-
-```powershell
-uv run --with pillow python .\scripts\generate_demo_assets.py
-```
-
-This writes refreshed PNG screenshots into `docs/demo-assets/screenshots/` and rebuilds `docs/demo-assets/EventTracker-demo-web-generate.gif`.
-
-**Note:** The script drives a real browser session and waits up to 180 seconds for the Story Mode generation step to complete, so the full run can take two to three minutes. Let it finish without interruption.
-
-To also build the alternate GIF that omits the filter and search action frames:
-
-```powershell
-uv run --with pillow python .\scripts\generate_demo_assets.py --also-no-search-actions
-```
-
 ## Quick start
 
 Run these commands from the repository root:
@@ -81,6 +63,24 @@ The harness will:
 - launch EventTracker on an isolated local port
 - give the suite a unique run id and dedicated Playwright group name
 - discard the temporary database when the run completes
+
+## Refreshing Demo Assets
+
+With the app running locally, regenerate the screenshot set and the main demo GIF with:
+
+```powershell
+uv run --with pillow python .\scripts\generate_demo_assets.py
+```
+
+This writes refreshed PNG screenshots into `docs/demo-assets/screenshots/` and rebuilds `docs/demo-assets/EventTracker-demo-web-generate.gif`.
+
+**Note:** The script drives a real browser session and waits up to 180 seconds for the Story Mode generation step to complete, so the full run can take two to three minutes. Let it finish without interruption.
+
+To also build the alternate GIF that omits the filter and search action frames:
+
+```powershell
+uv run --with pillow python .\scripts\generate_demo_assets.py --also-no-search-actions
+```
 
 ## What the application does today
 
@@ -582,22 +582,9 @@ Allowed tags in rich text:
 
 Search snippets additionally allow `mark`.
 
-## Running locally
+## Runtime notes
 
-Install dependencies and initialize the database:
-
-```powershell
-uv sync
-uv run python -m scripts.init_db
-```
-
-Start the development server:
-
-```powershell
-uv run python -m scripts.run_dev --reload
-```
-
-Then open `http://127.0.0.1:35231/` in your browser.
+Use the commands in [Quick start](#quick-start) to install dependencies, initialize the database, and start the development server. Then open `http://127.0.0.1:35231/` in your browser.
 
 Default host and port:
 
