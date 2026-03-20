@@ -668,6 +668,27 @@ def get_entry(connection: sqlite3.Connection, entry_id: int) -> Entry | None:
     return entry_from_row(row)
 
 
+def list_saved_entry_urls(connection: sqlite3.Connection) -> set[str]:
+    rows = connection.execute(
+        """
+        SELECT source_url AS url
+        FROM entries
+        WHERE source_url IS NOT NULL AND TRIM(source_url) != ''
+        UNION
+        SELECT url AS url
+        FROM entry_links
+        WHERE url IS NOT NULL AND TRIM(url) != ''
+        """
+    ).fetchall()
+
+    saved_urls: set[str] = set()
+    for row in rows:
+        value = str(row["url"] if "url" in row.keys() else row[0]).strip()
+        if value:
+            saved_urls.add(value)
+    return saved_urls
+
+
 def timeline_playback_profile(
     entry_count: int,
 ) -> tuple[int, int, int, Literal["steady", "burst", "surge"]]:

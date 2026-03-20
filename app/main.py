@@ -70,6 +70,7 @@ from app.services.entries import (
     list_timeline_groups,
     list_timeline_entries,
     plain_text_from_html,
+    list_saved_entry_urls,
     TimelineEntryGroup,
     list_timeline_month_buckets,
     list_timeline_summary_groups,
@@ -490,6 +491,7 @@ async def timeline_group_web_search(group_id: str = "") -> JSONResponse:
 
     with connection_context() as connection:
         group = get_timeline_group(connection, selected_group_id)
+        saved_entry_urls = list_saved_entry_urls(connection)
 
     if group is None:
         raise HTTPException(status_code=404, detail="Timeline group not found")
@@ -515,7 +517,10 @@ async def timeline_group_web_search(group_id: str = "") -> JSONResponse:
         )
 
     try:
-        result = await search_group_web(group.web_search_query)
+        result = await search_group_web(
+            group.web_search_query,
+            existing_urls=saved_entry_urls,
+        )
     except GroupWebSearchConfigurationError:
         logging.getLogger(__name__).exception("Group web search configuration failed")
         return JSONResponse(
@@ -581,6 +586,7 @@ async def timeline_group_web_search_stream(
 
     with connection_context() as connection:
         group = get_timeline_group(connection, selected_group_id)
+        saved_entry_urls = list_saved_entry_urls(connection)
 
     if group is None:
         raise HTTPException(status_code=404, detail="Timeline group not found")
@@ -622,6 +628,7 @@ async def timeline_group_web_search_stream(
                 result = await search_group_web(
                     web_search_query,
                     force_refresh=force_refresh,
+                    existing_urls=saved_entry_urls,
                     event_sink=on_event,
                 )
             except GroupWebSearchConfigurationError:
@@ -708,6 +715,7 @@ async def refresh_timeline_group_web_search(group_id: str = "") -> JSONResponse:
 
     with connection_context() as connection:
         group = get_timeline_group(connection, selected_group_id)
+        saved_entry_urls = list_saved_entry_urls(connection)
 
     if group is None:
         raise HTTPException(status_code=404, detail="Timeline group not found")
@@ -733,7 +741,11 @@ async def refresh_timeline_group_web_search(group_id: str = "") -> JSONResponse:
         )
 
     try:
-        result = await search_group_web(group.web_search_query, force_refresh=True)
+        result = await search_group_web(
+            group.web_search_query,
+            force_refresh=True,
+            existing_urls=saved_entry_urls,
+        )
     except GroupWebSearchConfigurationError:
         logging.getLogger(__name__).exception("Group web search configuration failed")
         return JSONResponse(

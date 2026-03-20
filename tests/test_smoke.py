@@ -1001,10 +1001,11 @@ class TestAppSmokeTests(unittest.TestCase):
                     )
 
         self.assertEqual(response.status_code, 200)
-        search_group_web_mock.assert_called_once_with(
-            "AI developer tools launches and benchmarks",
-            force_refresh=True,
-        )
+        search_group_web_mock.assert_called_once()
+        call_args, call_kwargs = search_group_web_mock.call_args
+        self.assertEqual(call_args, ("AI developer tools launches and benchmarks",))
+        self.assertTrue(call_kwargs.get("force_refresh"))
+        self.assertEqual(call_kwargs.get("existing_urls"), set())
 
     def test_timeline_group_web_search_stream_endpoint_emits_progress_and_result(
         self,
@@ -1013,10 +1014,12 @@ class TestAppSmokeTests(unittest.TestCase):
             query: str,
             *,
             force_refresh: bool = False,
+            existing_urls: set[str] | None = None,
             event_sink=None,
         ) -> GroupWebSearchResponse:
             self.assertEqual(query, "AI developer tools launches and benchmarks")
             self.assertFalse(force_refresh)
+            self.assertEqual(existing_urls, set())
             if event_sink is not None:
                 event_sink(
                     {

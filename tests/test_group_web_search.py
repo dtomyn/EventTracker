@@ -23,6 +23,7 @@ from app.services.group_web_search import (
     _clear_group_web_search_cache,
     _build_broadened_search_prompt,
     _build_search_prompt,
+    _is_group_web_search_url_reachable,
     _select_diverse_group_web_search_items,
     _parse_group_web_search_response,
     get_group_web_search_request_timeout_ms,
@@ -116,6 +117,32 @@ class _FakeCopilotClient:
     async def create_session(self, config: dict[str, object]) -> _FakeCopilotSession:
         self.config = config
         return self.session
+
+
+class _FakeHttpResponse:
+    def __init__(self, status_code: int) -> None:
+        self.status_code = status_code
+
+
+class _FakeUrlCheckClient:
+    def __init__(
+        self,
+        *,
+        head_statuses: dict[str, int] | None = None,
+        get_statuses: dict[str, int] | None = None,
+    ) -> None:
+        self.head_statuses = head_statuses or {}
+        self.get_statuses = get_statuses or {}
+        self.head_calls: list[str] = []
+        self.get_calls: list[str] = []
+
+    async def head(self, url: str) -> _FakeHttpResponse:
+        self.head_calls.append(url)
+        return _FakeHttpResponse(self.head_statuses.get(url, 404))
+
+    async def get(self, url: str) -> _FakeHttpResponse:
+        self.get_calls.append(url)
+        return _FakeHttpResponse(self.get_statuses.get(url, 404))
 
 
 class TestTimelineGroupWebSearchQueryValidation(unittest.TestCase):
@@ -330,7 +357,18 @@ class TestGroupWebSearchParsing(unittest.TestCase):
 
 
 class TestGroupWebSearchService(unittest.TestCase):
+    def setUp(self) -> None:
+        async def pass_through_exclude_unreachable_urls(response, *, event_sink, phase):
+            return response, []
+
+        self.exclude_unreachable_urls_patcher = patch(
+            "app.services.group_web_search._exclude_unreachable_urls",
+            side_effect=pass_through_exclude_unreachable_urls,
+        )
+        self.exclude_unreachable_urls_patcher.start()
+
     def tearDown(self) -> None:
+        self.exclude_unreachable_urls_patcher.stop()
         _clear_group_web_search_cache()
 
     def test_search_group_web_uses_copilot_session_and_parses_items(self) -> None:
@@ -785,10 +823,256 @@ class TestGroupWebSearchService(unittest.TestCase):
         self.assertEqual(
             fake_client.session.send_calls[1]["prompt"],
             _build_broadened_search_prompt(
-                "AI developer tools launches and benchmarks"
+                "AI developer tools launches and benchmarks",
+                existing_item_urls=["https://example.com/one"],
+                rejected_saved_urls=[],
+                unreachable_urls=[],
             ),
         )
         self.assertEqual(fake_client.session.timeouts[1], 45.0)
+
+    def test_search_group_web_filters_saved_urls_and_requests_alternatives(
+        self,
+    ) -> None:
+        fake_client = _FakeCopilotClient(
+            response=[
+                SimpleNamespace(
+                    content=json.dumps(
+                        {
+                            "query": "AI developer tools launches and benchmarks",
+                            "items": [
+                                {
+                                    "title": "Existing result",
+                                    "url": "https://example.com/existing",
+                                    "snippet": "Already saved.",
+                                    "source": "Example Existing",
+                                },
+                                {
+                                    "title": "Fresh result one",
+                                    "url": "https://example.com/new-one",
+                                    "snippet": "Fresh item one.",
+                                    "source": "Example One",
+                                },
+                                {
+                                    "title": "Fresh result two",
+                                    "url": "https://example.com/new-two",
+                                    "snippet": "Fresh item two.",
+                                    "source": "Example Two",
+                                },
+                                {
+                                    "title": "Fresh result three",
+                                    "url": "https://example.com/new-three",
+                                    "snippet": "Fresh item three.",
+                                    "source": "Example Three",
+                                },
+                            ],
+                        }
+                    )
+                ),
+                SimpleNamespace(
+                    content=json.dumps(
+                        {
+                            "query": "AI developer tools launches and benchmarks",
+                            "items": [
+                                {
+                                    "title": "Fresh result four",
+                                    "url": "https://example.com/new-four",
+                                    "snippet": "Fresh item four.",
+                                    "source": "Example Four",
+                                }
+                            ],
+                        }
+                    )
+                ),
+            ]
+        )
+
+        with (
+            patch(
+                "app.services.group_web_search.load_ai_provider", return_value="copilot"
+            ),
+            patch(
+                "app.services.group_web_search.load_copilot_settings",
+                return_value=CopilotSettings(model_id="gpt-5"),
+            ),
+            patch(
+                "app.services.copilot_runtime.instantiate_copilot_client",
+                return_value=fake_client,
+            ),
+            patch(
+                "app.services.copilot_runtime.get_permission_handler",
+                return_value="approve-all",
+            ),
+            patch.dict(
+                os.environ,
+                {"EVENTTRACKER_GROUP_WEB_SEARCH_CACHE_TTL_SECONDS": "0"},
+                clear=False,
+            ),
+        ):
+            response = _run_async(
+                search_group_web(
+                    "AI developer tools launches and benchmarks",
+                    existing_urls={"https://example.com/existing"},
+                )
+            )
+
+        self.assertEqual(len(fake_client.session.send_calls), 2)
+        self.assertEqual(
+            [item.url for item in response.items],
+            [
+                "https://example.com/new-one",
+                "https://example.com/new-two",
+                "https://example.com/new-three",
+                "https://example.com/new-four",
+            ],
+        )
+
+    def test_search_group_web_filters_unreachable_urls_and_requests_alternatives(
+        self,
+    ) -> None:
+        fake_client = _FakeCopilotClient(
+            response=[
+                SimpleNamespace(
+                    content=json.dumps(
+                        {
+                            "query": "AI developer tools launches and benchmarks",
+                            "items": [
+                                {
+                                    "title": "Dead result",
+                                    "url": "https://example.com/missing",
+                                    "snippet": "Dead item.",
+                                    "source": "Example Missing",
+                                },
+                                {
+                                    "title": "Fresh result one",
+                                    "url": "https://example.com/new-one",
+                                    "snippet": "Fresh item one.",
+                                    "source": "Example One",
+                                },
+                                {
+                                    "title": "Fresh result two",
+                                    "url": "https://example.com/new-two",
+                                    "snippet": "Fresh item two.",
+                                    "source": "Example Two",
+                                },
+                                {
+                                    "title": "Fresh result three",
+                                    "url": "https://example.com/new-three",
+                                    "snippet": "Fresh item three.",
+                                    "source": "Example Three",
+                                },
+                            ],
+                        }
+                    )
+                ),
+                SimpleNamespace(
+                    content=json.dumps(
+                        {
+                            "query": "AI developer tools launches and benchmarks",
+                            "items": [
+                                {
+                                    "title": "Fresh result four",
+                                    "url": "https://example.com/new-four",
+                                    "snippet": "Fresh item four.",
+                                    "source": "Example Four",
+                                }
+                            ],
+                        }
+                    )
+                ),
+            ]
+        )
+
+        async def fake_exclude_unreachable_urls(response, *, event_sink, phase):
+            filtered_items = [
+                item
+                for item in response.items
+                if item.url != "https://example.com/missing"
+            ]
+            unreachable_urls = (
+                ["https://example.com/missing"]
+                if len(filtered_items) != len(response.items)
+                else []
+            )
+            return type(response)(
+                query=response.query, items=filtered_items
+            ), unreachable_urls
+
+        with (
+            patch(
+                "app.services.group_web_search.load_ai_provider", return_value="copilot"
+            ),
+            patch(
+                "app.services.group_web_search.load_copilot_settings",
+                return_value=CopilotSettings(model_id="gpt-5"),
+            ),
+            patch(
+                "app.services.copilot_runtime.instantiate_copilot_client",
+                return_value=fake_client,
+            ),
+            patch(
+                "app.services.copilot_runtime.get_permission_handler",
+                return_value="approve-all",
+            ),
+            patch(
+                "app.services.group_web_search._exclude_unreachable_urls",
+                side_effect=fake_exclude_unreachable_urls,
+            ),
+            patch.dict(
+                os.environ,
+                {"EVENTTRACKER_GROUP_WEB_SEARCH_CACHE_TTL_SECONDS": "0"},
+                clear=False,
+            ),
+        ):
+            response = _run_async(
+                search_group_web("AI developer tools launches and benchmarks")
+            )
+
+        self.assertEqual(len(fake_client.session.send_calls), 2)
+        self.assertEqual(
+            [item.url for item in response.items],
+            [
+                "https://example.com/new-one",
+                "https://example.com/new-two",
+                "https://example.com/new-three",
+                "https://example.com/new-four",
+            ],
+        )
+
+
+class TestGroupWebSearchUrlReachability(unittest.TestCase):
+    def test_url_reachability_rejects_404_from_head(self) -> None:
+        client = _FakeUrlCheckClient(
+            head_statuses={"https://example.com/missing": 404},
+        )
+
+        result = _run_async(
+            _is_group_web_search_url_reachable(
+                cast(Any, client),
+                "https://example.com/missing",
+            )
+        )
+
+        self.assertFalse(result)
+        self.assertEqual(client.head_calls, ["https://example.com/missing"])
+        self.assertEqual(client.get_calls, [])
+
+    def test_url_reachability_falls_back_to_get_when_head_is_not_reliable(self) -> None:
+        client = _FakeUrlCheckClient(
+            head_statuses={"https://example.com/ok": 405},
+            get_statuses={"https://example.com/ok": 200},
+        )
+
+        result = _run_async(
+            _is_group_web_search_url_reachable(
+                cast(Any, client),
+                "https://example.com/ok",
+            )
+        )
+
+        self.assertTrue(result)
+        self.assertEqual(client.head_calls, ["https://example.com/ok"])
+        self.assertEqual(client.get_calls, ["https://example.com/ok"])
 
 
 class TestGroupWebSearchUiTimeoutConfiguration(unittest.TestCase):

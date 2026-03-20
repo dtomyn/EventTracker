@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import AsyncExitStack
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from collections.abc import Mapping
 from datetime import datetime
 import json
@@ -11,6 +12,8 @@ import re
 import time
 from typing import Callable, TypeAlias, TypedDict
 from urllib.parse import urlparse
+
+import httpx
 
 from app.env import load_app_env
 from app.services import copilot_runtime
@@ -57,6 +60,7 @@ DEFAULT_GROUP_WEB_SEARCH_CACHE_TTL_SECONDS = 300
 DEFAULT_GROUP_WEB_SEARCH_TIMEOUT_SECONDS = 60.0
 DEFAULT_GROUP_WEB_SEARCH_BROADENED_TIMEOUT_SECONDS = 45.0
 DEFAULT_GROUP_WEB_SEARCH_REQUEST_TIMEOUT_BUFFER_MS = 5000
+DEFAULT_GROUP_WEB_SEARCH_URL_CHECK_TIMEOUT_SECONDS = 5.0
 CACHE_KEY_VERSION = "v3"
 QUERY_DIVERSITY_STOPWORDS = {
     "agentic",
@@ -184,11 +188,13 @@ async def search_group_web(
     query: str,
     *,
     force_refresh: bool = False,
+    existing_urls: set[str] | None = None,
     event_sink: GroupWebSearchEventSink | None = None,
 ) -> GroupWebSearchResponse:
     normalized_query = " ".join(query.strip().split())
     if not normalized_query:
         raise ValueError("Web search query is required.")
+    normalized_existing_urls = _normalize_saved_urls_for_matching(existing_urls)
 
     provider = load_ai_provider()
     if provider != "copilot":
@@ -209,15 +215,41 @@ async def search_group_web(
         )
     cached_response = _get_cached_group_web_search(cache_key)
     if cached_response is not None:
+        filtered_cached_response, removed_cached_urls = _exclude_saved_urls(
+            cached_response,
+            saved_urls=normalized_existing_urls,
+        )
+        (
+            filtered_cached_response,
+            unreachable_cached_urls,
+        ) = await _exclude_unreachable_urls(
+            filtered_cached_response,
+            event_sink=event_sink,
+            phase="cache",
+        )
+        if not removed_cached_urls and not unreachable_cached_urls:
+            _emit_group_web_search_event(
+                event_sink,
+                {
+                    "kind": "status",
+                    "phase": "cache",
+                    "message": "Using cached web search result.",
+                },
+            )
+            return filtered_cached_response
+        cache_message = "Cached results included saved URLs. Requesting fresh links."
+        if unreachable_cached_urls:
+            cache_message = (
+                "Cached results included unreachable URLs. Requesting fresh links."
+            )
         _emit_group_web_search_event(
             event_sink,
             {
                 "kind": "status",
                 "phase": "cache",
-                "message": "Using cached web search result.",
+                "message": cache_message,
             },
         )
-        return cached_response
 
     settings = load_copilot_settings()
     client = copilot_runtime.instantiate_copilot_client(
@@ -251,6 +283,7 @@ async def search_group_web(
             response = await _send_search_prompt(
                 active_session,
                 normalized_query,
+                saved_urls=normalized_existing_urls,
                 event_sink=event_sink,
                 phase="initial",
             )
@@ -274,19 +307,47 @@ async def search_group_web(
             "The AI provider returned an empty web search response."
         )
     parsed_response = _parse_group_web_search_response(content, normalized_query)
-    if len(parsed_response.items) < MIN_GROUP_WEB_RESULTS:
+    parsed_response, rejected_saved_urls = _exclude_saved_urls(
+        parsed_response,
+        saved_urls=normalized_existing_urls,
+    )
+    parsed_response, unreachable_urls = await _exclude_unreachable_urls(
+        parsed_response,
+        event_sink=event_sink,
+        phase="initial",
+    )
+    should_request_alternatives = bool(rejected_saved_urls or unreachable_urls)
+    if (
+        len(parsed_response.items) < MIN_GROUP_WEB_RESULTS
+        or should_request_alternatives
+    ):
+        status_message = (
+            "Initial pass returned too few results. Starting broadened pass."
+        )
+        if unreachable_urls:
+            status_message = (
+                "Initial pass included unreachable URLs. Requesting different links."
+            )
+        elif rejected_saved_urls:
+            status_message = (
+                "Initial pass included URLs already saved in the database. "
+                "Requesting different links."
+            )
         _emit_group_web_search_event(
             event_sink,
             {
                 "kind": "status",
                 "phase": "broadened",
-                "message": "Initial pass returned too few results. Starting broadened pass.",
+                "message": status_message,
             },
         )
         parsed_response = await _broaden_group_web_search(
             settings.model_id,
             normalized_query,
             parsed_response,
+            saved_urls=normalized_existing_urls,
+            rejected_saved_urls=rejected_saved_urls,
+            unreachable_urls=unreachable_urls,
             event_sink=event_sink,
         )
 
@@ -318,6 +379,7 @@ async def _send_search_prompt(
     session: copilot_runtime.CopilotSession,
     query: str,
     *,
+    saved_urls: set[str],
     event_sink: GroupWebSearchEventSink | None = None,
     phase: str,
 ) -> object:
@@ -329,7 +391,7 @@ async def _send_search_prompt(
     try:
         return await copilot_runtime.send_copilot_prompt(
             session,
-            _build_search_prompt(query),
+            _build_search_prompt(query, saved_url_count=len(saved_urls)),
             timeout=get_group_web_search_timeout_seconds(),
         )
     finally:
@@ -341,6 +403,9 @@ async def _broaden_group_web_search(
     query: str,
     initial_response: GroupWebSearchResponse,
     *,
+    saved_urls: set[str],
+    rejected_saved_urls: list[str],
+    unreachable_urls: list[str],
     event_sink: GroupWebSearchEventSink | None = None,
 ) -> GroupWebSearchResponse:
     settings = load_copilot_settings()
@@ -367,6 +432,9 @@ async def _broaden_group_web_search(
             response = await _send_broadened_search_prompt(
                 active_session,
                 query,
+                existing_item_urls=[item.url for item in initial_response.items],
+                rejected_saved_urls=rejected_saved_urls,
+                unreachable_urls=unreachable_urls,
                 event_sink=event_sink,
                 phase="broadened",
             )
@@ -381,12 +449,22 @@ async def _broaden_group_web_search(
         return initial_response
 
     broadened_response = _parse_group_web_search_response(content, query)
+    broadened_response, _ = _exclude_saved_urls(
+        broadened_response,
+        saved_urls=saved_urls,
+    )
+    broadened_response, _ = await _exclude_unreachable_urls(
+        broadened_response,
+        event_sink=event_sink,
+        phase="broadened",
+    )
     merged_items: list[GroupWebSearchItem] = []
     seen_urls: set[str] = set()
     for item in [*initial_response.items, *broadened_response.items]:
-        if item.url in seen_urls:
+        dedup_key = _canonicalize_url_for_matching(item.url) or item.url
+        if dedup_key in seen_urls:
             continue
-        seen_urls.add(item.url)
+        seen_urls.add(dedup_key)
         merged_items.append(item)
         if len(merged_items) >= MAX_GROUP_WEB_RESULTS:
             break
@@ -398,6 +476,9 @@ async def _send_broadened_search_prompt(
     session: copilot_runtime.CopilotSession,
     query: str,
     *,
+    existing_item_urls: list[str],
+    rejected_saved_urls: list[str],
+    unreachable_urls: list[str],
     event_sink: GroupWebSearchEventSink | None = None,
     phase: str,
 ) -> object:
@@ -409,7 +490,12 @@ async def _send_broadened_search_prompt(
     try:
         return await copilot_runtime.send_copilot_prompt(
             session,
-            _build_broadened_search_prompt(query),
+            _build_broadened_search_prompt(
+                query,
+                existing_item_urls=existing_item_urls,
+                rejected_saved_urls=rejected_saved_urls,
+                unreachable_urls=unreachable_urls,
+            ),
             timeout=get_group_web_search_broadened_timeout_seconds(),
         )
     finally:
@@ -544,13 +630,17 @@ def _emit_group_web_search_event(
     event_sink(payload)
 
 
-def _build_search_prompt(query: str) -> str:
+def _build_search_prompt(query: str, *, saved_url_count: int = 0) -> str:
     lines = [
         "Topic query: " + query,
         "Find up to 5 recent and relevant public-web items for this topic.",
         "Use direct source URLs, keep snippets short, and include article_date when it is clearly available.",
         "Prefer multiple distinct sources instead of repeating one publisher when credible alternatives exist.",
     ]
+    if saved_url_count > 0:
+        lines.append(
+            "Avoid URLs that are already saved in the local timeline database; return different source links."
+        )
     focus_terms = _extract_query_focus_terms(query)
     if focus_terms:
         lines.append(
@@ -560,17 +650,43 @@ def _build_search_prompt(query: str) -> str:
     lines.append(
         "If you cannot verify enough results quickly, return fewer items or an empty items array."
     )
+    lines.append(
+        "Only return URLs that resolve successfully on the public web; do not return dead or 404 links."
+    )
     return "\n".join(lines)
 
 
-def _build_broadened_search_prompt(query: str) -> str:
+def _build_broadened_search_prompt(
+    query: str,
+    *,
+    existing_item_urls: list[str],
+    rejected_saved_urls: list[str],
+    unreachable_urls: list[str],
+) -> str:
     lines = [
-        "The first strict search likely returned too few results.",
+        "The first strict search likely returned too few usable results.",
         "Original topic query: " + query,
         "Broaden slightly to adjacent, recent agentic coding announcements that still fit the topic and timeframe.",
         "Aim for 3 to 5 distinct results from different credible sources when available.",
         "Use direct source URLs, keep snippets short, and include article_date when it is clearly available.",
+        "Return different URLs than the links that were already saved in the local timeline database.",
+        "Only return URLs that resolve successfully on the public web; do not return dead or 404 links.",
     ]
+    if existing_item_urls:
+        lines.append(
+            "Do not repeat URLs already returned in this run: "
+            + ", ".join(existing_item_urls[:5])
+        )
+    if rejected_saved_urls:
+        lines.append(
+            "These URLs were rejected because they already exist in the local timeline database: "
+            + ", ".join(rejected_saved_urls[:5])
+        )
+    if unreachable_urls:
+        lines.append(
+            "These URLs were rejected because they did not resolve successfully when checked: "
+            + ", ".join(unreachable_urls[:5])
+        )
     focus_terms = _extract_query_focus_terms(query)
     if focus_terms:
         lines.append(
@@ -620,9 +736,10 @@ def _parse_group_web_search_response(
         item = _parse_group_web_search_item(raw_item)
         if item is None:
             continue
-        if item.url in seen_urls:
+        dedup_key = _canonicalize_url_for_matching(item.url) or item.url
+        if dedup_key in seen_urls:
             continue
-        seen_urls.add(item.url)
+        seen_urls.add(dedup_key)
         items.append(item)
         if len(items) >= MAX_GROUP_WEB_RESULTS:
             break
@@ -685,6 +802,142 @@ def _normalize_http_url(value: object) -> str | None:
         logger.debug("Discarding non-http web search URL: %s", candidate)
         return None
     return candidate
+
+
+def _canonicalize_url_for_matching(value: object) -> str | None:
+    normalized = _normalize_http_url(value)
+    if normalized is None:
+        return None
+
+    parsed = urlparse(normalized)
+    scheme = parsed.scheme.casefold()
+    host = (parsed.hostname or "").casefold().strip()
+    if not host:
+        return None
+
+    port = parsed.port
+    netloc = host
+    if port is not None:
+        is_default_port = (scheme == "http" and port == 80) or (
+            scheme == "https" and port == 443
+        )
+        if not is_default_port:
+            netloc = f"{host}:{port}"
+
+    path = parsed.path or ""
+    if path != "/" and path.endswith("/"):
+        path = path[:-1]
+
+    canonical = f"{scheme}://{netloc}{path}"
+    if parsed.query:
+        canonical = f"{canonical}?{parsed.query}"
+    return canonical
+
+
+def _normalize_saved_urls_for_matching(saved_urls: set[str] | None) -> set[str]:
+    if not saved_urls:
+        return set()
+
+    normalized: set[str] = set()
+    for url in saved_urls:
+        canonical = _canonicalize_url_for_matching(url)
+        if canonical:
+            normalized.add(canonical)
+    return normalized
+
+
+def _exclude_saved_urls(
+    response: GroupWebSearchResponse,
+    *,
+    saved_urls: set[str],
+) -> tuple[GroupWebSearchResponse, list[str]]:
+    if not response.items or not saved_urls:
+        return response, []
+
+    filtered_items: list[GroupWebSearchItem] = []
+    rejected: list[str] = []
+
+    for item in response.items:
+        canonical = _canonicalize_url_for_matching(item.url)
+        if canonical is not None and canonical in saved_urls:
+            rejected.append(item.url)
+            continue
+        filtered_items.append(item)
+
+    deduped_rejected = list(dict.fromkeys(rejected))
+    return GroupWebSearchResponse(
+        query=response.query, items=filtered_items
+    ), deduped_rejected
+
+
+async def _exclude_unreachable_urls(
+    response: GroupWebSearchResponse,
+    *,
+    event_sink: GroupWebSearchEventSink | None,
+    phase: str,
+) -> tuple[GroupWebSearchResponse, list[str]]:
+    if not response.items:
+        return response, []
+
+    _emit_group_web_search_event(
+        event_sink,
+        {
+            "kind": "status",
+            "phase": phase,
+            "message": "Verifying returned URLs are reachable.",
+        },
+    )
+
+    async with httpx.AsyncClient(
+        follow_redirects=True,
+        timeout=get_group_web_search_url_check_timeout_seconds(),
+    ) as client:
+        checks = await _check_group_web_search_items(client, response.items)
+
+    reachable_items = [item for item, is_reachable in checks if is_reachable]
+    unreachable_urls = [item.url for item, is_reachable in checks if not is_reachable]
+    deduped_unreachable_urls = list(dict.fromkeys(unreachable_urls))
+
+    return (
+        GroupWebSearchResponse(query=response.query, items=reachable_items),
+        deduped_unreachable_urls,
+    )
+
+
+async def _check_group_web_search_items(
+    client: httpx.AsyncClient,
+    items: list[GroupWebSearchItem],
+) -> list[tuple[GroupWebSearchItem, bool]]:
+    checks = [_check_group_web_search_item_url(client, item) for item in items]
+    return await asyncio.gather(*checks)
+
+
+async def _check_group_web_search_item_url(
+    client: httpx.AsyncClient,
+    item: GroupWebSearchItem,
+) -> tuple[GroupWebSearchItem, bool]:
+    return item, await _is_group_web_search_url_reachable(client, item.url)
+
+
+async def _is_group_web_search_url_reachable(
+    client: httpx.AsyncClient,
+    url: str,
+) -> bool:
+    try:
+        response = await client.head(url)
+        if response.status_code < 400:
+            return True
+        if response.status_code in {403, 405, 429} or response.status_code >= 500:
+            response = await client.get(url)
+            return response.status_code < 400
+        return False
+    except httpx.HTTPError:
+        logger.debug(
+            "Group web search URL reachability check failed",
+            extra={"url": url},
+            exc_info=True,
+        )
+        return False
 
 
 def _select_diverse_group_web_search_items(
@@ -813,6 +1066,13 @@ def get_group_web_search_broadened_timeout_seconds() -> float:
     return _get_positive_float_env(
         "EVENTTRACKER_GROUP_WEB_SEARCH_BROADENED_TIMEOUT_SECONDS",
         DEFAULT_GROUP_WEB_SEARCH_BROADENED_TIMEOUT_SECONDS,
+    )
+
+
+def get_group_web_search_url_check_timeout_seconds() -> float:
+    return _get_positive_float_env(
+        "EVENTTRACKER_GROUP_WEB_SEARCH_URL_CHECK_TIMEOUT_SECONDS",
+        DEFAULT_GROUP_WEB_SEARCH_URL_CHECK_TIMEOUT_SECONDS,
     )
 
 

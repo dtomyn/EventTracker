@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+import tempfile
 import unittest
 
+from app.db import connection_context, init_db
 from app.models import Entry
+from app.schemas import EntryLinkPayload, EntryPayload
 from app.services.entries import (
     build_timeline_groups,
+    list_saved_entry_urls,
     list_timeline_month_buckets,
     list_timeline_summary_groups,
     list_timeline_year_buckets,
+    save_entry,
     timeline_playback_profile,
 )
 
@@ -128,4 +135,53 @@ class TestTimelineViewModels(unittest.TestCase):
         self.assertEqual(groups[0]["label"], "March 2026")
         self.assertEqual(
             [entry.title for entry in groups[0]["entries"]], ["March latest"]
+        )
+
+
+class TestSavedEntryUrls(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.previous_db_path = os.environ.get("EVENTTRACKER_DB_PATH")
+        os.environ["EVENTTRACKER_DB_PATH"] = str(
+            Path(self.temp_dir.name) / "EventTracker-test.db"
+        )
+        init_db()
+
+    def tearDown(self) -> None:
+        if self.previous_db_path is None:
+            os.environ.pop("EVENTTRACKER_DB_PATH", None)
+        else:
+            os.environ["EVENTTRACKER_DB_PATH"] = self.previous_db_path
+        self.temp_dir.cleanup()
+
+    def test_list_saved_entry_urls_includes_source_and_additional_links(self) -> None:
+        with connection_context() as connection:
+            save_entry(
+                connection,
+                EntryPayload(
+                    event_year=2026,
+                    event_month=3,
+                    event_day=20,
+                    group_id=1,
+                    title="Primary source entry",
+                    source_url="https://example.com/source",
+                    generated_text=None,
+                    final_text="<p>Primary source content.</p>",
+                    tags=[],
+                    links=[
+                        EntryLinkPayload(
+                            url="https://example.com/additional",
+                            note="Additional context",
+                        )
+                    ],
+                ),
+            )
+            saved_urls = list_saved_entry_urls(connection)
+
+        self.assertEqual(
+            saved_urls,
+            {
+                "https://example.com/source",
+                "https://example.com/additional",
+            },
         )
