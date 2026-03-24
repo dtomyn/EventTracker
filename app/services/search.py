@@ -126,6 +126,23 @@ def filter_timeline_entries(
     if not normalized_query:
         return []
 
+    tag_matched_ids = _find_exact_tag_entry_ids(
+        connection,
+        normalized_query,
+        group_id=group_id,
+    )
+    if tag_matched_ids:
+        rows_by_id = _get_entries_by_id(connection, tag_matched_ids)
+        sorted_ids = sorted(
+            tag_matched_ids,
+            key=lambda entry_id: (
+                rows_by_id[entry_id]["sort_key"],
+                rows_by_id[entry_id]["updated_utc"],
+            ),
+            reverse=True,
+        )
+        return [entry_from_row(rows_by_id[entry_id]) for entry_id in sorted_ids]
+
     matched_ids = [
         result.entry.id
         for result in search_entries(connection, normalized_query, group_id=group_id)
@@ -266,3 +283,33 @@ def _filter_semantic_matches_by_group(
         if match.entry_id in rows_by_id
         and rows_by_id[match.entry_id]["group_id"] == group_id
     ]
+
+
+def _find_exact_tag_entry_ids(
+    connection: sqlite3.Connection,
+    query: str,
+    *,
+    group_id: int | None = None,
+) -> list[int]:
+    normalized_query = " ".join(query.split())
+    if not normalized_query:
+        return []
+
+    where_clauses = ["LOWER(TRIM(t.name)) = LOWER(?)"]
+    parameters: list[str | int] = [normalized_query]
+    if group_id is not None:
+        where_clauses.append("e.group_id = ?")
+        parameters.append(group_id)
+
+    rows = connection.execute(
+        f"""
+        SELECT DISTINCT e.id
+        FROM entries e
+        JOIN entry_tags et ON et.entry_id = e.id
+        JOIN tags t ON t.id = et.tag_id
+        WHERE {' AND '.join(where_clauses)}
+        ORDER BY e.sort_key DESC, e.updated_utc DESC
+        """,
+        parameters,
+    ).fetchall()
+    return [int(row["id"]) for row in rows]

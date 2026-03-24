@@ -423,6 +423,33 @@ def sync_entry_tags(
         )
 
 
+def merge_entry_tags(
+    connection: sqlite3.Connection, entry_id: int, new_tags: list[str]
+) -> None:
+    """Add tags to an entry without removing existing ones. Skips tags already present (case-insensitive)."""
+    existing = {
+        row["name"].casefold()
+        for row in connection.execute(
+            "SELECT t.name FROM tags t JOIN entry_tags et ON t.id = et.tag_id WHERE et.entry_id = ?",
+            (entry_id,),
+        ).fetchall()
+    }
+    for tag_name in new_tags:
+        if tag_name.casefold() in existing:
+            continue
+        connection.execute("INSERT OR IGNORE INTO tags(name) VALUES (?)", (tag_name,))
+        tag_row = connection.execute(
+            "SELECT id FROM tags WHERE name = ?", (tag_name,)
+        ).fetchone()
+        if tag_row is None:
+            continue
+        connection.execute(
+            "INSERT OR IGNORE INTO entry_tags(entry_id, tag_id) VALUES (?, ?)",
+            (entry_id, tag_row["id"]),
+        )
+        existing.add(tag_name.casefold())
+
+
 def sync_entry_links(
     connection: sqlite3.Connection,
     entry_id: int,

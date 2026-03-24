@@ -25,7 +25,7 @@ from fastapi.responses import (
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.db import connection_context, init_db
+from app.db import connection_context, init_db, is_sqlite_vec_enabled
 from app.env import load_app_env
 from app.models import (
     Entry,
@@ -103,6 +103,7 @@ from app.services.search import (
     paginate_search_results,
     search_entries,
 )
+from app.services.topics import get_topic_clusters_from_cache
 from app.services.story_mode import (
     get_story,
     list_story_entries,
@@ -198,6 +199,7 @@ class TimelinePageContext(TypedDict):
     details_next_cursor: str | None
     timeline_web_search: TimelineWebSearchState
     timeline_scope: TimelineClientScope
+    embeddings_enabled: bool
 
 
 class SearchClientScope(TypedDict):
@@ -475,6 +477,7 @@ def timeline(request: Request, q: str = "", group_id: str = "") -> HTMLResponse:
             "details_next_cursor": next_cursor,
             "timeline_web_search": scope["timeline_web_search"],
             "timeline_scope": timeline_scope,
+            "embeddings_enabled": is_sqlite_vec_enabled(connection),
         }
     return templates.TemplateResponse(
         request,
@@ -1373,6 +1376,38 @@ def saved_story_page(request: Request, story_id: int) -> HTMLResponse:
 @app.get("/visualization", response_class=HTMLResponse)
 def timeline_visualization(request: Request) -> RedirectResponse:
     return RedirectResponse(url="/", status_code=307)
+
+
+@app.get("/api/groups/{group_id}/topics")
+def api_group_topics(group_id: int) -> JSONResponse:
+    with connection_context() as connection:
+        group = get_timeline_group(connection, group_id)
+        if group is None:
+            raise HTTPException(status_code=404, detail="Timeline group not found")
+
+        graph = get_topic_clusters_from_cache(connection, group_id)
+        return JSONResponse(asdict(graph))
+
+@app.get("/groups/{group_id}/topics/graph", response_class=HTMLResponse)
+async def group_topics_graph(request: Request, group_id: int) -> HTMLResponse:
+    with connection_context() as connection:
+        group = get_timeline_group(connection, group_id)
+        if group is None:
+            raise HTTPException(status_code=404, detail="Timeline group not found")
+            
+    context = {
+        "request": request,
+        "page_title": f"{group.name} Tag Clusters",
+        "group": group,
+        "selected_group_id": group.id,
+        "selected_group_query_value": str(group.id),
+        "query": "",
+    }
+    return templates.TemplateResponse(
+        request,
+        "topic_graph.html",
+        cast(dict[str, object], context)
+    )
 
 
 @app.get("/entries/export")

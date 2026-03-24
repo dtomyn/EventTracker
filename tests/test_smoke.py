@@ -380,6 +380,67 @@ class TestAppSmokeTests(unittest.TestCase):
         self.assertNotIn("Non matching event", response.text)
         self.assertIn("Showing 1 matching entry", response.text)
 
+    def test_timeline_filter_prefers_exact_tag_match_over_semantic_breadth(self) -> None:
+        with TestClient(app) as client:
+            first_response = client.post(
+                "/entries/new",
+                data={
+                    "event_year": "2026",
+                    "event_month": "3",
+                    "event_day": "20",
+                    "group_id": "1",
+                    "title": "Tagged release entry",
+                    "source_url": "",
+                    "generated_text": "",
+                    "final_text": "<p>Release notes and launch checklist.</p>",
+                    "tags": "release focus, launch",
+                },
+                follow_redirects=False,
+            )
+            self.assertEqual(first_response.status_code, 303)
+
+            second_response = client.post(
+                "/entries/new",
+                data={
+                    "event_year": "2026",
+                    "event_month": "3",
+                    "event_day": "21",
+                    "group_id": "1",
+                    "title": "Unrelated entry",
+                    "source_url": "",
+                    "generated_text": "",
+                    "final_text": "<p>This should not appear for the exact tag query.</p>",
+                    "tags": "operations",
+                },
+                follow_redirects=False,
+            )
+            self.assertEqual(second_response.status_code, 303)
+
+            with connection_context() as connection:
+                rows = connection.execute(
+                    "SELECT id FROM entries ORDER BY id ASC"
+                ).fetchall()
+
+            self.assertEqual(len(rows), 2)
+            first_entry_id = int(rows[0]["id"])
+            second_entry_id = int(rows[1]["id"])
+
+            with patch(
+                "app.services.search.search_semantic_matches",
+                return_value=[
+                    SemanticMatch(entry_id=first_entry_id, distance=0.02),
+                    SemanticMatch(entry_id=second_entry_id, distance=0.03),
+                ],
+            ):
+                response = client.get("/", params={"q": "release focus"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Filtered Timeline", response.text)
+        self.assertIn("release focus", response.text)
+        self.assertIn("Tagged release entry", response.text)
+        self.assertNotIn("Unrelated entry", response.text)
+        self.assertIn("Showing 1 matching entry", response.text)
+
     def test_ranked_search_route_stays_distinct_from_timeline_filter(self) -> None:
         with TestClient(app) as client:
             create_response = client.post(

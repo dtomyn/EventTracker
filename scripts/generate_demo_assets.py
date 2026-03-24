@@ -39,26 +39,34 @@ FULL_FRAME_NAMES = [
     "01-home.png",
     "02-recent-loading.png",
     "03-recent-results.png",
-    "04-query-entered.png",
-    "05-filter-results.png",
-    "06-search-results.png",
-    "07-url-entered.png",
-    "08-generating.png",
-    "09-summary-generated.png",
-    "10-dark-mode.png",
-    "11-story-mode-screen.png",
-    "12-story-generated.png",
+    "04-summaries-clicked.png",
+    "05-tag-clusters-clicked.png",
+    "06-query-entered.png",
+    "07-filter-results.png",
+    "08-search-results.png",
+    "09-url-entered.png",
+    "10-generating.png",
+    "11-summary-generated.png",
+    "12-dark-mode.png",
+    "13-months-clicked.png",
+    "14-years-clicked.png",
+    "15-story-mode-screen.png",
+    "16-story-generated.png",
 ]
 NO_SEARCH_FRAME_NAMES = [
     "01-home.png",
     "02-recent-loading.png",
     "03-recent-results.png",
-    "07-url-entered.png",
-    "08-generating.png",
-    "09-summary-generated.png",
-    "10-dark-mode.png",
-    "11-story-mode-screen.png",
-    "12-story-generated.png",
+    "04-summaries-clicked.png",
+    "05-tag-clusters-clicked.png",
+    "09-url-entered.png",
+    "10-generating.png",
+    "11-summary-generated.png",
+    "12-dark-mode.png",
+    "13-months-clicked.png",
+    "14-years-clicked.png",
+    "15-story-mode-screen.png",
+    "16-story-generated.png",
 ]
 
 
@@ -219,9 +227,9 @@ def capture_assets(page: Page, base_url: str, output_dir: Path) -> list[Path]:
     page.wait_for_load_state("networkidle")
     save_screenshot(page, output_paths[0])
 
-    page.get_by_role("button", name="Recent Developments").click()
+    page.locator("[data-group-web-search-toggle]").click()
     page.wait_for_timeout(300)
-    refresh_button = page.get_by_role("button", name="Refresh").first
+    refresh_button = page.locator("[data-group-web-search-refresh]").first
     if refresh_button.is_enabled():
         refresh_button.click()
         page.wait_for_timeout(250)
@@ -230,46 +238,62 @@ def capture_assets(page: Page, base_url: str, output_dir: Path) -> list[Path]:
     wait_for_recent_results(page)
     save_screenshot(page, output_paths[2])
 
-    searchbox = page.get_by_role("searchbox", name="Filter timeline in plain English")
-    searchbox.fill(SEARCH_QUERY)
+    page.locator("[data-zoom-target='events']").click()
+    page.wait_for_timeout(300)
     save_screenshot(page, output_paths[3])
 
-    page.get_by_role("button", name="Filter").click()
-    page.wait_for_load_state("networkidle")
+    page.get_by_role("link", name="Tag Clusters").click()
+    page.wait_for_timeout(300)
     save_screenshot(page, output_paths[4])
 
     searchbox = page.get_by_role("searchbox", name="Filter timeline in plain English")
     searchbox.fill(SEARCH_QUERY)
-    page.get_by_role("button", name="Search").click()
-    page.wait_for_load_state("networkidle")
     save_screenshot(page, output_paths[5])
+
+    page.locator('button:has-text("Filter"):not([formaction])').click()
+    page.wait_for_load_state("networkidle")
+    save_screenshot(page, output_paths[6])
+
+    searchbox = page.get_by_role("searchbox", name="Filter timeline in plain English")
+    searchbox.fill(SEARCH_QUERY)
+    page.locator('button[formaction="/search"]').click()
+    page.wait_for_load_state("networkidle")
+    save_screenshot(page, output_paths[7])
 
     page.get_by_role("link", name="New Entry").click()
     page.wait_for_load_state("networkidle")
     page.get_by_label("Source URL").fill(SUMMARY_SOURCE_URL)
-    save_screenshot(page, output_paths[6])
-
-    page.get_by_role("button", name="Generate").click()
-    page.wait_for_timeout(600)
-    save_screenshot(page, output_paths[7])
-
-    wait_for_generated_summary(page)
     save_screenshot(page, output_paths[8])
 
-    page.goto(f"{base_url}/")
-    page.wait_for_load_state("networkidle")
-    page.get_by_role("button", name="Toggle dark mode").click()
+    page.locator("#generate-button").click()
     page.wait_for_timeout(600)
     save_screenshot(page, output_paths[9])
 
+    wait_for_generated_summary(page)
+    save_screenshot(page, output_paths[10])
+
+    page.goto(f"{base_url}/")
+    page.wait_for_load_state("networkidle")
+    page.locator("#theme-toggle").click()
+    page.wait_for_timeout(600)
+    save_screenshot(page, output_paths[11])
+
+    page.locator("[data-zoom-target='months']").click()
+    page.wait_for_timeout(300)
+    save_screenshot(page, output_paths[12])
+
+    page.locator("[data-zoom-target='years']").click()
+    page.wait_for_timeout(300)
+    save_screenshot(page, output_paths[13])
+
     page.get_by_role("link", name="Story Mode").click()
     page.wait_for_load_state("networkidle")
-    save_screenshot(page, output_paths[10])
+    save_screenshot(page, output_paths[14])
 
     page.locator("[data-story-generate-button]").click(no_wait_after=True)
     wait_for_story_result(page)
     page.wait_for_timeout(500)
-    save_screenshot(page, output_paths[11])
+    save_screenshot(page, output_paths[15])
 
     return output_paths
 

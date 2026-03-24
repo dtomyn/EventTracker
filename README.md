@@ -97,6 +97,7 @@ uv run --with pillow python .\scripts\generate_demo_assets.py --also-no-search-a
 - Imports legacy HTML lists or prior JSON exports with `scripts/import_entries.py`.
 - Shows a Copilot-backed `On the web` sidebar for the selected group when that group has a stored web search query.
 - Supports dark mode with automatic system preference detection and a manual toggle in the navbar.
+- Generates AI topic tags for entries using `scripts/compute_topic_clusters.py`, and visualizes the resulting tag relationships as an interactive mind-map graph per timeline group.
 
 ## Current architecture
 
@@ -208,6 +209,7 @@ The app currently stores:
 - `entries`: the main event records.
 - `timeline_stories`: saved Story Mode snapshots for a specific scope and output format.
 - `timeline_story_entries`: citation rows that preserve which entries were cited by a saved story and in what order.
+- `topic_cluster_cache`: cached tag-graph JSON per group, keyed by group id, written by `scripts/compute_topic_clusters.py`.
 - `tags` and `entry_tags`: normalized tag mapping.
 - `entry_links`: additional per-entry websites with required notes.
 - `entries_fts`: derived FTS5 index over `entries.final_text` only.
@@ -225,6 +227,7 @@ Important implementation details:
 - URL extraction fetches remote content server-side and is intended only for local or otherwise trusted deployments.
 - Embeddings are derived only from `final_text`.
 - FTS indexes `final_text` only.
+- AI-generated topic tags are merged into the normal tag set and persist across runs. Running the compute script again will not remove or duplicate existing tags.
 
 ### Database ER diagram
 
@@ -314,6 +317,12 @@ erDiagram
     string embedding
   }
 
+  TOPIC_CLUSTER_CACHE {
+    int group_id PK
+    string graph_json
+    string updated_utc
+  }
+
   TIMELINE_GROUPS ||--o{ ENTRIES : contains
   ENTRIES ||--o{ ENTRY_LINKS : has
   ENTRIES ||--o{ ENTRY_TAGS : maps
@@ -324,6 +333,7 @@ erDiagram
   ENTRIES ||--|| ENTRIES_FTS : indexed_as
   ENTRIES ||--o| ENTRY_EMBEDDINGS : embedded_as
   EMBEDDING_INDEX_META ||--|| ENTRY_EMBEDDINGS : configures
+  TIMELINE_GROUPS ||--o| TOPIC_CLUSTER_CACHE : caches
 ```
 
 ## Routes and workflows
@@ -503,6 +513,43 @@ Current behavior:
 `GET /visualization`
 
 - Redirects to `/` for backward compatibility.
+
+### Topic clustering graph
+
+`GET /groups/{group_id}/topics/graph`
+
+- Renders the topic cluster visualization page for the selected group.
+- Reads the cached tag graph from `topic_cluster_cache`.
+- Shows an empty state with a prompt to run the compute script when no cache exists.
+
+`GET /api/groups/{group_id}/topics`
+
+- Returns the cached topic graph as JSON.
+- Used by the client-side D3 renderer on the graph page.
+- Returns `{"nodes": [], "edges": []}` when no cache is available.
+
+Topic graph behavior:
+
+- Each node represents a unique tag that appears on at least one entry in the group.
+- Node size reflects the number of entries carrying that tag.
+- Edges connect tags that co-occur on the same entry; edge thickness reflects co-occurrence strength.
+- Clicking a node redirects to the timeline filtered by that tag label.
+- Zoom in and zoom out buttons are available for touch-constrained environments.
+- The graph uses D3 force simulation and respects the current dark/light theme.
+
+To populate the graph, run the compute script:
+
+```powershell
+uv run python -m scripts.compute_topic_clusters
+```
+
+This script:
+
+- Iterates over all timeline groups.
+- For each entry, calls the configured AI provider to generate 2 to 5 topic tags.
+- Merges the AI tags into the entry's existing tag set without removing user-assigned tags or duplicating existing ones.
+- Builds a tag co-occurrence graph and writes it to `topic_cluster_cache`.
+- Skips entries gracefully if AI generation fails for that entry.
 
 ## Search behavior
 
@@ -746,6 +793,7 @@ app/  # FastAPI application package
     group_web_search.py
     search.py
     story_mode.py
+    topics.py
   static/  # Static web assets
     styles.css
   templates/  # Server-rendered Jinja templates
@@ -768,6 +816,7 @@ app/  # FastAPI application package
 data/  # Local SQLite database and runtime data
 docs/  # Requirements and demo assets
 scripts/  # Developer and maintenance entry points
+  compute_topic_clusters.py
   generate_demo_assets.py
   import_entries.py
   init_db.py
@@ -789,4 +838,5 @@ tests/  # Unit and integration tests
   test_smoke.py
   test_story_mode.py
   test_story_routes.py
+  test_topics.py
 ```

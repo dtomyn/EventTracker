@@ -130,6 +130,14 @@ POST_ENTRY_SCHEMA_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_entries_group_sort_key ON entries(group_id, sort_key DESC)",
     "CREATE INDEX IF NOT EXISTS idx_entry_tags_tag_id ON entry_tags(tag_id)",
     "CREATE INDEX IF NOT EXISTS idx_entry_links_entry_id ON entry_links(entry_id)",
+    """
+    CREATE TABLE IF NOT EXISTS topic_cluster_cache (
+        group_id INTEGER PRIMARY KEY,
+        graph_json TEXT NOT NULL,
+        updated_utc TEXT NOT NULL,
+        FOREIGN KEY (group_id) REFERENCES timeline_groups(id) ON DELETE CASCADE
+    )
+    """,
 ]
 
 TIMELINE_STORY_SCHEMA_STATEMENTS = [

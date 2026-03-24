@@ -85,3 +85,4 @@ DS_Store
 
 # Ignore all runtime data files
 data/
+gif_frames_story/
