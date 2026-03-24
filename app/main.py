@@ -15,7 +15,7 @@ from typing import Any, TypedDict, cast
 from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup, Tag
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request
 from fastapi.responses import (
     HTMLResponse,
     JSONResponse,
@@ -103,7 +103,11 @@ from app.services.search import (
     paginate_search_results,
     search_entries,
 )
-from app.services.topics import get_topic_clusters_from_cache
+from app.services.topics import (
+    build_tag_graph,
+    get_topic_clusters_from_cache,
+    save_topic_clusters_to_cache,
+)
 from app.services.story_mode import (
     get_story,
     list_story_entries,
@@ -1434,6 +1438,22 @@ def export_entries() -> JSONResponse:
     )
 
 
+def _refresh_topic_clusters_bg(group_id: int) -> None:
+    """Background task: rebuild the tag-based topic graph for *group_id* and
+    persist it to the cache.  Runs after an entry save so that the topic graph
+    stays current without blocking the HTTP response."""
+    _log = logging.getLogger(__name__)
+    try:
+        with connection_context() as connection:
+            graph = build_tag_graph(connection, group_id)
+            save_topic_clusters_to_cache(connection, group_id, graph)
+        _log.info("Topic clusters refreshed for group %d.", group_id)
+    except Exception:
+        _log.warning(
+            "Failed to refresh topic clusters for group %d.", group_id, exc_info=True
+        )
+
+
 @app.get("/entries/new", response_class=HTMLResponse)
 def new_entry_form(request: Request) -> HTMLResponse:
     with connection_context() as connection:
@@ -1475,7 +1495,9 @@ def view_entry(request: Request, entry_id: int) -> HTMLResponse:
 
 
 @app.post("/entries/new", response_model=None)
-async def create_entry(request: Request) -> RedirectResponse | HTMLResponse:
+async def create_entry(
+    request: Request, background_tasks: BackgroundTasks
+) -> RedirectResponse | HTMLResponse:
     form = await request.form()
     form_state, payload = validate_entry_form(form)
     timeline_filters: list[TimelineGroup] = []
@@ -1519,6 +1541,8 @@ async def create_entry(request: Request) -> RedirectResponse | HTMLResponse:
             cast(dict[str, object], context),
             status_code=400,
         )
+    if payload.tags:
+        background_tasks.add_task(_refresh_topic_clusters_bg, payload.group_id)
     return RedirectResponse(url=f"/entries/{entry_id}/view", status_code=303)
 
 
@@ -1545,7 +1569,7 @@ def edit_entry_form(request: Request, entry_id: int) -> HTMLResponse:
 
 @app.post("/entries/{entry_id:int}", response_model=None)
 async def update_entry_route(
-    request: Request, entry_id: int
+    request: Request, entry_id: int, background_tasks: BackgroundTasks
 ) -> RedirectResponse | HTMLResponse:
     form = await request.form()
     form_state, payload = validate_entry_form(form)
@@ -1593,6 +1617,8 @@ async def update_entry_route(
             cast(dict[str, object], context),
             status_code=400,
         )
+    if payload.tags:
+        background_tasks.add_task(_refresh_topic_clusters_bg, payload.group_id)
     return RedirectResponse(url=f"/entries/{entry_id}/view", status_code=303)
 
 
