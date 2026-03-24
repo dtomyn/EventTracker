@@ -26,9 +26,11 @@ class TestStoryRoutes(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.previous_db_path = os.environ.get("EVENTTRACKER_DB_PATH")
+        self.previous_testing = os.environ.get("TESTING")
         os.environ["EVENTTRACKER_DB_PATH"] = str(
             Path(self.temp_dir.name) / "EventTracker-test.db"
         )
+        os.environ["TESTING"] = "1"
         init_db()
 
     def tearDown(self) -> None:
@@ -36,6 +38,10 @@ class TestStoryRoutes(unittest.TestCase):
             os.environ.pop("EVENTTRACKER_DB_PATH", None)
         else:
             os.environ["EVENTTRACKER_DB_PATH"] = self.previous_db_path
+        if self.previous_testing is None:
+            os.environ.pop("TESTING", None)
+        else:
+            os.environ["TESTING"] = self.previous_testing
         self.temp_dir.cleanup()
 
     def test_story_page_renders_empty_scope_warning_without_failing(self) -> None:

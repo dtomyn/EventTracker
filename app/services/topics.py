@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import collections
+from collections import deque
 import datetime
 import json
 import logging
@@ -107,10 +108,10 @@ def build_topic_graph(connection: sqlite3.Connection, group_id: int) -> TopicGra
     for node in adj:
         if node not in visited:
             comp = []
-            queue = [node]
+            queue = deque([node])
             visited.add(node)
             while queue:
-                curr = queue.pop(0)
+                curr = queue.popleft()
                 comp.append(curr)
                 for neighbor in adj[curr]:
                     if neighbor not in visited:
@@ -457,18 +458,30 @@ async def compute_topic_clusters(connection: sqlite3.Connection, group_id: int) 
         logger.error(f"Entry tag generator unavailable: {e}")
         return build_tag_graph(connection, group_id)
 
-    for i, entry in enumerate(entries, start=1):
-        logger.info(f"Generating tags for entry {i}/{len(entries)}: {entry.title[:60]}")
+    semaphore = asyncio.Semaphore(5)
+
+    async def _generate_tags_for_entry(
+        idx: int, entry: object,
+    ) -> tuple[object, list[str]] | None:
+        logger.info(f"Generating tags for entry {idx}/{len(entries)}: {entry.title[:60]}")
         try:
-            new_tags = await generator.generate_tags(entry)
-            if new_tags:
-                merge_entry_tags(connection, entry.id, new_tags)
-                connection.commit()
-                logger.info(f"Merged tags for entry {entry.id}: {new_tags}")
-            else:
-                logger.warning(f"No tags returned for entry {entry.id}")
+            async with semaphore:
+                new_tags = await generator.generate_tags(entry)
+            return (entry, new_tags) if new_tags else None
         except Exception as e:
             logger.warning(f"Failed to generate tags for entry {entry.id}: {e}")
+            return None
+
+    results = await asyncio.gather(
+        *[_generate_tags_for_entry(i, e) for i, e in enumerate(entries, start=1)]
+    )
+
+    for result in results:
+        if result is not None:
+            entry, new_tags = result
+            merge_entry_tags(connection, entry.id, new_tags)
+            logger.info(f"Merged tags for entry {entry.id}: {new_tags}")
+    connection.commit()
 
     logger.info(f"Building tag graph for group {group_id}...")
     graph = build_tag_graph(connection, group_id)

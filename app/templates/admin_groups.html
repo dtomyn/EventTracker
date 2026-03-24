@@ -13,6 +13,7 @@
                     {% endif %}
 
                     <form method="post" action="/admin/groups" class="vstack gap-3">
+                        {{ csrf_hidden_input(request) }}
                         <div>
                             <label class="form-label" for="name">New group name</label>
                             <input class="form-control {% if create_group_errors.get('name') %}is-invalid{% endif %}" id="name" name="name" value="{{ create_group_name }}" placeholder="Agentic Coding">
@@ -54,6 +55,7 @@
                                 {% set group_errors = edit_group_errors.get(timeline_filter.id, {}) %}
                                 {% set group_values = edit_group_values.get(timeline_filter.id, {}) %}
                                 <form method="post" action="/admin/groups/{{ timeline_filter.id }}" class="border rounded-4 p-3 bg-body">
+                                    {{ csrf_hidden_input(request) }}
                                     <div class="vstack gap-3">
                                         <div class="flex-grow-1">
                                             <label class="form-label" for="group-{{ timeline_filter.id }}">Group name</label>

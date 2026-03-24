@@ -12,6 +12,7 @@
             </div>
 
             <form method="post" action="{% if entry_id %}/entries/{{ entry_id }}{% else %}/entries/new{% endif %}" class="card shadow-sm border-0">
+                {{ csrf_hidden_input(request) }}
                 <div class="card-body p-4 p-lg-5">
                     <div class="row g-3">
                         <div class="col-12">
@@ -78,7 +79,7 @@
                                                 {% if form_state.errors.get('link_note_' ~ row_index) %}<div class="invalid-feedback">{{ form_state.errors['link_note_' ~ row_index] }}</div>{% endif %}
                                             </div>
                                             <div class="col-md-1 d-flex align-items-end">
-                                                <button class="btn btn-outline-danger w-100" type="button" data-remove-link-row aria-label="Remove link row">×</button>
+                                                <button class="btn btn-outline-danger w-100" type="button" data-remove-link-row aria-label="Remove link row">x</button>
                                             </div>
                                         </div>
                                     </div>
@@ -132,6 +133,11 @@
         const htmlPreviewTimers = new WeakMap();
         const htmlPreviewControllers = new WeakMap();
 
+        function getCsrfToken() {
+            const meta = document.querySelector('meta[name="csrf-token"]');
+            return meta ? meta.getAttribute('content') : '';
+        }
+
         function renderGenerationFeedback(feedbackClass = 'text-body-secondary', feedbackMessage = '') {
             return `
                 <input type="hidden" id="generated_text" name="generated_text" value="">
@@ -174,11 +180,15 @@
 
             const payload = new FormData();
             payload.append('raw_html', field.value);
+            payload.append('csrf_token', getCsrfToken());
 
             try {
                 const response = await fetch(htmlPreviewEndpoint, {
                     method: 'POST',
                     body: payload,
+                    headers: {
+                        'x-csrf-token': getCsrfToken(),
+                    },
                     signal: controller.signal,
                 });
 
@@ -215,7 +225,7 @@
                         <input class="form-control" id="link_note_${rowIndex}" name="link_note" value="${note}" placeholder="Why this link matters">
                     </div>
                     <div class="col-md-1 d-flex align-items-end">
-                        <button class="btn btn-outline-danger w-100" type="button" data-remove-link-row aria-label="Remove link row">×</button>
+                        <button class="btn btn-outline-danger w-100" type="button" data-remove-link-row aria-label="Remove link row">x</button>
                     </div>
                 </div>
             `;
@@ -270,12 +280,27 @@
             payload.append('title', document.getElementById('title').value);
             payload.append('source_url', document.getElementById('source_url').value);
             payload.append('generated_text', currentSummaryText);
+            payload.append('csrf_token', getCsrfToken());
 
             try {
                 const response = await fetch('/entries/generate', {
                     method: 'POST',
                     body: payload,
+                    headers: {
+                        'x-csrf-token': getCsrfToken(),
+                    },
                 });
+                const responseContentType = response.headers.get('content-type') || '';
+                if (!responseContentType.includes('text/html')) {
+                    // Non-HTML response — most likely a CSRF rejection from the middleware.
+                    // Restore the hidden input structure so the form stays usable.
+                    const errorMessage = response.status === 403
+                        ? 'Session expired — please reload the page and try again.'
+                        : 'Generation failed. You can still write manually.';
+                    previewContainer.innerHTML = renderGenerationFeedback('text-danger', errorMessage);
+                    document.getElementById('generated_text').value = currentSummaryText;
+                    return;
+                }
                 const responseHtml = await response.text();
                 previewContainer.innerHTML = responseHtml;
                 if (response.ok) {

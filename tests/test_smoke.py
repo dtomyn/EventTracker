@@ -10,7 +10,13 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.db import connection_context
-from app.main import app
+from app.main import (
+    _CSRF_COOKIE_NAME,
+    _generate_csrf_token,
+    _get_csrf_secret_file,
+    _load_or_create_csrf_secret,
+    app,
+)
 from app.services.ai_generate import (
     DraftGenerationError,
     GeneratedEntrySuggestion,
@@ -18,7 +24,9 @@ from app.services.ai_generate import (
 )
 from app.services.embeddings import SemanticMatch
 from app.services.embeddings import load_embedding_settings
+from app.services.extraction import ExtractionResult
 from app.services.group_web_search import GroupWebSearchItem, GroupWebSearchResponse
+from tests.csrf_helpers import csrf_data
 
 
 ENV_KEYS = (
@@ -29,6 +37,7 @@ ENV_KEYS = (
     "OPENAI_BASE_URL",
     "OPENAI_CHAT_MODEL_ID",
     "OPENAI_EMBEDDING_MODEL_ID",
+    "TESTING",
 )
 
 
@@ -43,6 +52,7 @@ class TestAppSmokeTests(unittest.TestCase):
         os.environ["EVENTTRACKER_DB_PATH"] = str(
             Path(self.temp_dir.name) / "EventTracker-test.db"
         )
+        os.environ["TESTING"] = "1"
         get_draft_generator.cache_clear()
         load_embedding_settings.cache_clear()
 
@@ -69,6 +79,60 @@ class TestAppSmokeTests(unittest.TestCase):
         self.assertIn('href="/entries/export"', response.text)
         self.assertIn(">Export</a>", response.text)
         self.assertNotIn('id="export-json-button"', response.text)
+
+    def test_new_entry_form_renders_csrf_hidden_input_without_escaping(self) -> None:
+        with TestClient(app) as client:
+            response = client.get("/entries/new")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('type="hidden" name="csrf_token"', response.text)
+        self.assertNotIn('&lt;input type="hidden" name="csrf_token"', response.text)
+
+    def test_create_entry_succeeds_with_csrf_enabled(self) -> None:
+        previous_testing = os.environ.pop("TESTING", None)
+        try:
+            with TestClient(app, raise_server_exceptions=False) as client:
+                response = client.post(
+                    "/entries/new",
+                    data=csrf_data(
+                        client,
+                        {
+                            "event_year": "2026",
+                            "event_month": "3",
+                            "event_day": "24",
+                            "group_id": "1",
+                            "title": "CSRF protected save",
+                            "source_url": "https://example.com/csrf-protected-save",
+                            "generated_text": "",
+                            "final_text": "<p>Form submissions should survive CSRF validation.</p>",
+                            "tags": "csrf, regression",
+                        },
+                    ),
+                    follow_redirects=False,
+                )
+
+            self.assertEqual(response.status_code, 303)
+            self.assertIn("/entries/", response.headers["location"])
+        finally:
+            if previous_testing is not None:
+                os.environ["TESTING"] = previous_testing
+
+    def test_load_or_create_csrf_secret_prefers_environment_override(self) -> None:
+        os.environ["EVENTTRACKER_CSRF_SECRET"] = "configured-secret"
+        try:
+            self.assertEqual(_load_or_create_csrf_secret(), "configured-secret")
+        finally:
+            os.environ.pop("EVENTTRACKER_CSRF_SECRET", None)
+
+    def test_load_or_create_csrf_secret_persists_generated_secret(self) -> None:
+        secret_path = Path(self.temp_dir.name) / "csrf_secret.txt"
+        with patch("app.main._get_csrf_secret_file", return_value=secret_path):
+            first = _load_or_create_csrf_secret()
+            second = _load_or_create_csrf_secret()
+
+        self.assertTrue(secret_path.exists())
+        self.assertEqual(first, second)
+        self.assertGreaterEqual(len(first), 32)
 
     def test_visualization_loads_with_empty_database(self) -> None:
         with TestClient(app) as client:
@@ -1323,6 +1387,49 @@ class TestAppSmokeTests(unittest.TestCase):
         )
         self.assertIn(
             "Summary, title, and date suggestions generated from the current input.",
+            response.text,
+        )
+
+    def test_generation_accepts_source_url_only_for_multipart_requests(self) -> None:
+        with patch.dict(os.environ, {"TESTING": ""}, clear=False):
+            with patch(
+                "app.main.extract_url_text",
+                return_value=ExtractionResult(
+                    source_url="https://example.com/article",
+                    title="Source title",
+                    text="Source text for timeline draft generation.",
+                ),
+            ):
+                with patch(
+                    "app.main.generate_entry_suggestion",
+                    return_value=GeneratedEntrySuggestion(
+                        title="URL-only generated title",
+                        draft_html="<p>Generated from URL only.</p>",
+                        event_year=2026,
+                        event_month=3,
+                        event_day=24,
+                    ),
+                ):
+                    with TestClient(app) as client:
+                        home_response = client.get("/")
+                        session_id = home_response.cookies.get(_CSRF_COOKIE_NAME)
+                        self.assertIsNotNone(session_id)
+                        csrf_token = _generate_csrf_token(str(session_id))
+
+                        response = client.post(
+                            "/entries/generate",
+                            files={
+                                "title": (None, ""),
+                                "source_url": (None, "https://example.com/article"),
+                                "generated_text": (None, ""),
+                            },
+                            headers={"x-csrf-token": csrf_token},
+                        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Generated from URL only.", response.text)
+        self.assertNotIn(
+            "Title or source URL is required to generate a summary.",
             response.text,
         )
 

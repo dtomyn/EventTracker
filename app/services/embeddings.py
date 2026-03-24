@@ -218,12 +218,22 @@ def _generate_embedding(text: str, settings: OpenAIEmbeddingSettings) -> list[fl
     return [float(value) for value in response.data[0].embedding]
 
 
+def _validate_dimensions(dimensions: int) -> int:
+    """Validate that *dimensions* is a positive integer before DDL interpolation."""
+    if not isinstance(dimensions, int) or dimensions <= 0:
+        raise ValueError(
+            f"Embedding dimensions must be a positive integer, got {dimensions!r}"
+        )
+    return dimensions
+
+
 def _recreate_embedding_index(
     connection: sqlite3.Connection, model_id: str, dimensions: int
 ) -> None:
+    safe_dims = _validate_dimensions(dimensions)
     connection.execute(f"DROP TABLE IF EXISTS {INDEX_TABLE_NAME}")
     connection.execute(
-        f"CREATE VIRTUAL TABLE {INDEX_TABLE_NAME} USING vec0(embedding float[{dimensions}])"
+        f"CREATE VIRTUAL TABLE {INDEX_TABLE_NAME} USING vec0(embedding float[{safe_dims}])"
     )
     _touch_embedding_index_state(connection, model_id, dimensions)
 

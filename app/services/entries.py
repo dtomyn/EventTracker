@@ -7,6 +7,7 @@ from html import escape
 import json
 import logging
 import sqlite3
+import time
 from typing import Literal, TypedDict, cast
 from urllib.parse import urlparse
 
@@ -43,6 +44,22 @@ EMPTY_LINK_ROW = {"url": "", "note": ""}
 DEFAULT_TIMELINE_PAGE_SIZE = 25
 MAX_TIMELINE_PAGE_SIZE = 50
 MAX_TIMELINE_GROUP_WEB_SEARCH_QUERY_LENGTH = 400
+
+
+class SavedUrlsCache(TypedDict):
+    urls: set[str] | None
+    ts: float
+
+
+# Module-level TTL cache for saved entry URLs
+_saved_urls_cache: SavedUrlsCache = {"urls": None, "ts": 0.0}
+_SAVED_URLS_TTL_SECONDS = 30.0
+
+
+def _invalidate_saved_urls_cache() -> None:
+    _saved_urls_cache["urls"] = None
+    _saved_urls_cache["ts"] = 0.0
+
 
 ALLOWED_RICH_TEXT_TAGS = {
     "b",
@@ -358,6 +375,7 @@ def save_entry(connection: sqlite3.Connection, payload: EntryPayload) -> int:
     sync_entry_tags(connection, entry_id, payload.tags)
     sync_entry_links(connection, entry_id, payload.links)
     _sync_embedding_without_failing(connection, entry_id, payload.final_text)
+    _invalidate_saved_urls_cache()
     return entry_id
 
 
@@ -404,22 +422,27 @@ def update_entry(
     sync_entry_tags(connection, entry_id, payload.tags)
     sync_entry_links(connection, entry_id, payload.links)
     _sync_embedding_without_failing(connection, entry_id, payload.final_text)
+    _invalidate_saved_urls_cache()
 
 
 def sync_entry_tags(
     connection: sqlite3.Connection, entry_id: int, tags: list[str]
 ) -> None:
     connection.execute("DELETE FROM entry_tags WHERE entry_id = ?", (entry_id,))
-    for tag_name in tags:
-        connection.execute("INSERT OR IGNORE INTO tags(name) VALUES (?)", (tag_name,))
-        tag_row = connection.execute(
-            "SELECT id FROM tags WHERE name = ?", (tag_name,)
-        ).fetchone()
-        if tag_row is None:
-            continue
-        connection.execute(
+    if not tags:
+        return
+    connection.executemany(
+        "INSERT OR IGNORE INTO tags(name) VALUES (?)",
+        [(t,) for t in tags],
+    )
+    placeholders = ",".join("?" for _ in tags)
+    tag_rows = connection.execute(
+        f"SELECT id FROM tags WHERE name IN ({placeholders})", tags
+    ).fetchall()
+    if tag_rows:
+        connection.executemany(
             "INSERT OR IGNORE INTO entry_tags(entry_id, tag_id) VALUES (?, ?)",
-            (entry_id, tag_row["id"]),
+            [(entry_id, row["id"]) for row in tag_rows],
         )
 
 
@@ -434,20 +457,22 @@ def merge_entry_tags(
             (entry_id,),
         ).fetchall()
     }
-    for tag_name in new_tags:
-        if tag_name.casefold() in existing:
-            continue
-        connection.execute("INSERT OR IGNORE INTO tags(name) VALUES (?)", (tag_name,))
-        tag_row = connection.execute(
-            "SELECT id FROM tags WHERE name = ?", (tag_name,)
-        ).fetchone()
-        if tag_row is None:
-            continue
-        connection.execute(
+    tags_to_add = [t for t in new_tags if t.casefold() not in existing]
+    if not tags_to_add:
+        return
+    connection.executemany(
+        "INSERT OR IGNORE INTO tags(name) VALUES (?)",
+        [(t,) for t in tags_to_add],
+    )
+    placeholders = ",".join("?" for _ in tags_to_add)
+    tag_rows = connection.execute(
+        f"SELECT id FROM tags WHERE name IN ({placeholders})", tags_to_add
+    ).fetchall()
+    if tag_rows:
+        connection.executemany(
             "INSERT OR IGNORE INTO entry_tags(entry_id, tag_id) VALUES (?, ?)",
-            (entry_id, tag_row["id"]),
+            [(entry_id, row["id"]) for row in tag_rows],
         )
-        existing.add(tag_name.casefold())
 
 
 def sync_entry_links(
@@ -696,6 +721,10 @@ def get_entry(connection: sqlite3.Connection, entry_id: int) -> Entry | None:
 
 
 def list_saved_entry_urls(connection: sqlite3.Connection) -> set[str]:
+    cached = _saved_urls_cache["urls"]
+    if cached is not None and (time.monotonic() - _saved_urls_cache["ts"]) < _SAVED_URLS_TTL_SECONDS:
+        return set(cached)
+
     rows = connection.execute(
         """
         SELECT source_url AS url
@@ -713,6 +742,9 @@ def list_saved_entry_urls(connection: sqlite3.Connection) -> set[str]:
         value = str(row["url"] if "url" in row.keys() else row[0]).strip()
         if value:
             saved_urls.add(value)
+
+    _saved_urls_cache["urls"] = saved_urls
+    _saved_urls_cache["ts"] = time.monotonic()
     return saved_urls
 
 
@@ -1042,7 +1074,7 @@ def preview_text(value: str, max_length: int = 280) -> str:
     clean = " ".join(plain_text_from_html(value).split())
     if len(clean) <= max_length:
         return clean
-    return clean[: max_length - 1].rstrip() + "…"
+    return clean[: max_length - 1].rstrip() + "\u2026"
 
 
 def format_plain_text(value: str) -> str:

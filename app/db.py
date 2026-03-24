@@ -130,6 +130,7 @@ POST_ENTRY_SCHEMA_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_entries_group_sort_key ON entries(group_id, sort_key DESC)",
     "CREATE INDEX IF NOT EXISTS idx_entry_tags_tag_id ON entry_tags(tag_id)",
     "CREATE INDEX IF NOT EXISTS idx_entry_links_entry_id ON entry_links(entry_id)",
+    "CREATE INDEX IF NOT EXISTS idx_entries_group_source_url ON entries(group_id, source_url) WHERE source_url IS NOT NULL",
     """
     CREATE TABLE IF NOT EXISTS topic_cluster_cache (
         group_id INTEGER PRIMARY KEY,
@@ -210,6 +211,25 @@ FTS_TRIGGER_STATEMENTS = [
     END
     """,
 ]
+
+
+def _validate_positive_integer(value: object, label: str) -> int:
+    """Validate that *value* is a positive integer, suitable for DDL interpolation."""
+    try:
+        result = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{label} must be an integer, got {type(value).__name__}") from exc
+    if result <= 0:
+        raise ValueError(f"{label} must be positive, got {result}")
+    return result
+
+
+# Trigger names that may be dropped during FTS schema maintenance.
+_ALLOWED_FTS_TRIGGER_NAMES = frozenset({"entries_ai", "entries_ad", "entries_au"})
+
+# Module-level flag: tracks whether sqlite_vec loading has already failed,
+# so we can skip redundant load attempts on subsequent connections.
+_sqlite_vec_load_failed = False
 
 
 def get_connection() -> sqlite3.Connection:
@@ -360,6 +380,8 @@ def ensure_entries_fts_schema(connection: sqlite3.Connection) -> None:
     needs_rebuild = not current_sql
 
     for trigger_name in ("entries_ai", "entries_ad", "entries_au"):
+        if trigger_name not in _ALLOWED_FTS_TRIGGER_NAMES:
+            raise ValueError(f"Unexpected FTS trigger name: {trigger_name!r}")
         connection.execute(f"DROP TRIGGER IF EXISTS {trigger_name}")
 
     if needs_rebuild:
@@ -388,13 +410,14 @@ def ensure_entry_embeddings_schema(connection: sqlite3.Connection) -> None:
             connection.execute("DROP TABLE IF EXISTS entry_embeddings")
         return
 
+    dimensions = _validate_positive_integer(state["dimensions"], "embedding dimensions")
     current_sql = (current_table["sql"] if current_table else "") or ""
     normalized_sql = " ".join(current_sql.lower().split())
-    expected_fragment = f"float[{int(state['dimensions'])}]"
+    expected_fragment = f"float[{dimensions}]"
     if "using vec0" not in normalized_sql or expected_fragment not in normalized_sql:
         connection.execute("DROP TABLE IF EXISTS entry_embeddings")
         connection.execute(
-            f"CREATE VIRTUAL TABLE entry_embeddings USING vec0(embedding float[{int(state['dimensions'])}])"
+            f"CREATE VIRTUAL TABLE entry_embeddings USING vec0(embedding float[{dimensions}])"
         )
 
 
@@ -407,7 +430,9 @@ def is_sqlite_vec_enabled(connection: sqlite3.Connection) -> bool:
 
 
 def _load_sqlite_vec(connection: sqlite3.Connection) -> None:
-    if sqlite_vec is None:
+    global _sqlite_vec_load_failed
+
+    if sqlite_vec is None or _sqlite_vec_load_failed:
         return
 
     try:
@@ -417,6 +442,7 @@ def _load_sqlite_vec(connection: sqlite3.Connection) -> None:
         logger.warning(
             "sqlite-vec could not be loaded; semantic search disabled: %s", exc
         )
+        _sqlite_vec_load_failed = True
     finally:
         try:
             connection.enable_load_extension(False)

@@ -63,6 +63,7 @@
                     </div>
 
                     <form method="post" action="/story/generate" class="d-grid gap-3" data-story-generate-form>
+                        {{ csrf_hidden_input(request) }}
                         <div>
                             <label class="form-label" for="story-group-id">Group</label>
                             <select class="form-select" id="story-group-id" name="group_id">
@@ -139,6 +140,7 @@
                             </div>
                             {% if not story_result.is_saved %}
                                 <form method="post" action="/story/save" class="d-inline" data-story-save-form>
+                                    {{ csrf_hidden_input(request) }}
                                     <input type="hidden" name="q" value="{{ story_form_state.values.q }}">
                                     <input type="hidden" name="group_id" value="{{ story_form_state.values.group_id }}">
                                     <input type="hidden" name="year" value="{{ story_form_state.values.year }}">
