@@ -22,6 +22,24 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_DB_PATH = REPO_ROOT / "data" / "EventTracker.db"
 SERVER_HOST = "127.0.0.1"
 SERVER_START_TIMEOUT_SECONDS = 30.0
+SCREENSHOTS_DIR = REPO_ROOT / "test-screenshots"
+TEMP_DIR_CLEANUP_TIMEOUT_SECONDS = 5.0
+TEMP_DIR_CLEANUP_RETRY_INTERVAL_SECONDS = 0.2
+
+# Module-level cache so each external stylesheet URL is fetched only once per
+# test session rather than on every request interception.
+_CSS_CACHE: dict[str, str] = {}
+
+
+def _fetch_cdn_css(url: str) -> str:
+    """Return the text of a CDN stylesheet, fetching it once and caching the result."""
+    if url not in _CSS_CACHE:
+        try:
+            response = httpx.get(url, timeout=10, follow_redirects=True)
+            _CSS_CACHE[url] = response.text if response.status_code == 200 else ""
+        except Exception:
+            _CSS_CACHE[url] = ""
+    return _CSS_CACHE[url]
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,14 +124,44 @@ def _wait_for_server(base_url: str, process: subprocess.Popen[str]) -> None:
 
 
 def _stop_server(process: subprocess.Popen[str]) -> None:
-    if process.poll() is not None:
-        return
-    process.terminate()
-    try:
-        process.wait(timeout=10)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait(timeout=10)
+    if process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=10)
+    if process.stdout is not None:
+        process.stdout.close()
+
+
+def _is_retryable_windows_cleanup_error(error: OSError) -> bool:
+    """Return True when Windows reports a transient file-lock cleanup failure."""
+    return getattr(error, "winerror", None) == 32
+
+
+def _remove_temp_dir(temp_dir: Path) -> bool:
+    """Delete a Playwright temp directory, retrying briefly for Windows file locks."""
+    deadline = time.monotonic() + TEMP_DIR_CLEANUP_TIMEOUT_SECONDS
+    while temp_dir.exists():
+        try:
+            shutil.rmtree(temp_dir)
+            return True
+        except OSError as exc:
+            if not _is_retryable_windows_cleanup_error(exc):
+                raise
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(TEMP_DIR_CLEANUP_RETRY_INTERVAL_SECONDS)
+    return True
+
+
+def _cleanup_stale_temp_dirs() -> None:
+    """Best-effort cleanup for leftover Playwright temp directories from prior runs."""
+    temp_root = Path(tempfile.gettempdir())
+    for temp_dir in temp_root.glob("eventtracker-playwright-*"):
+        if temp_dir.is_dir():
+            _remove_temp_dir(temp_dir)
 
 
 def _lookup_group_id(db_path: Path, group_name: str) -> int | None:
@@ -137,29 +185,32 @@ def copilot_e2e_session() -> Iterator[E2ESession]:
 
 def _create_e2e_session(*, ai_provider: str) -> Iterator[E2ESession]:
     run_id = time.strftime("%Y%m%d%H%M%S")
-    with tempfile.TemporaryDirectory(prefix="eventtracker-playwright-") as temp_dir:
-        temp_db_path = Path(temp_dir) / "EventTracker-playwright.db"
-        _copy_seed_database(temp_db_path)
-        port = _find_free_port()
-        base_url = f"http://{SERVER_HOST}:{port}"
-        process = _start_server(temp_db_path, port, ai_provider=ai_provider)
-        try:
-            _wait_for_server(base_url, process)
-            yield E2ESession(
-                base_url=base_url,
-                run_id=run_id,
-                group_name=f"Playwright E2E {run_id}",
-                db_path=temp_db_path,
-                ai_provider=ai_provider,
-            )
-        finally:
-            _stop_server(process)
+    temp_dir = Path(tempfile.mkdtemp(prefix="eventtracker-playwright-"))
+    temp_db_path = temp_dir / "EventTracker-playwright.db"
+    _copy_seed_database(temp_db_path)
+    port = _find_free_port()
+    base_url = f"http://{SERVER_HOST}:{port}"
+    process = _start_server(temp_db_path, port, ai_provider=ai_provider)
+    try:
+        _wait_for_server(base_url, process)
+        yield E2ESession(
+            base_url=base_url,
+            run_id=run_id,
+            group_name=f"Playwright E2E {run_id}",
+            db_path=temp_db_path,
+            ai_provider=ai_provider,
+        )
+    finally:
+        _stop_server(process)
+        _remove_temp_dir(temp_dir)
 
 
 @pytest.fixture(scope="session")
 def playwright_instance() -> Iterator[Playwright]:
+    _cleanup_stale_temp_dirs()
     with sync_playwright() as playwright:
         yield playwright
+    _cleanup_stale_temp_dirs()
 
 
 @pytest.fixture
@@ -174,17 +225,20 @@ def browser(playwright_instance: Playwright) -> Iterator[Browser]:
         browser.close()
 
 
-@pytest.fixture
-def page(browser: Browser, e2e_session: E2ESession) -> Iterator[Page]:
-    yield from _create_page(browser, e2e_session)
+SCREENSHOTS_DIR = REPO_ROOT / "test-screenshots"
 
 
 @pytest.fixture
-def copilot_page(browser: Browser, copilot_e2e_session: E2ESession) -> Iterator[Page]:
-    yield from _create_page(browser, copilot_e2e_session)
+def page(request: pytest.FixtureRequest, browser: Browser, e2e_session: E2ESession) -> Iterator[Page]:
+    yield from _create_page(browser, e2e_session, test_name=request.node.nodeid)
 
 
-def _create_page(browser: Browser, session: E2ESession) -> Iterator[Page]:
+@pytest.fixture
+def copilot_page(request: pytest.FixtureRequest, browser: Browser, copilot_e2e_session: E2ESession) -> Iterator[Page]:
+    yield from _create_page(browser, copilot_e2e_session, test_name=request.node.nodeid)
+
+
+def _create_page(browser: Browser, session: E2ESession, *, test_name: str = "") -> Iterator[Page]:
     context = browser.new_context(
         base_url=session.base_url,
         accept_downloads=True,
@@ -195,7 +249,7 @@ def _create_page(browser: Browser, session: E2ESession) -> Iterator[Page]:
         lambda route: route.fulfill(
             status=200,
             content_type="text/css",
-            body="",
+            body=_fetch_cdn_css(route.request.url),
         )
         if route.request.resource_type == "stylesheet"
         else route.abort(),
@@ -205,6 +259,13 @@ def _create_page(browser: Browser, session: E2ESession) -> Iterator[Page]:
     try:
         yield page
     finally:
+        if test_name:
+            try:
+                SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+                safe_name = re.sub(r"[^\w\-]", "_", test_name)[:120]
+                page.screenshot(path=str(SCREENSHOTS_DIR / f"{safe_name}.png"), full_page=True)
+            except Exception:
+                pass
         context.close()
 
 

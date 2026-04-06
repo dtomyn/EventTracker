@@ -82,6 +82,10 @@ DS_Store
 
 .env
 .eventtracker-dev-reload.pid
+node_modules/
+playwright-report/
+test-results/playwright/
+test-results/playwright-artifacts/
 
 # Ignore all runtime data files
 data/

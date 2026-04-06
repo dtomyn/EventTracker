@@ -69,6 +69,7 @@ from app.services.entries import (
     format_plain_text,
     get_default_timeline_group,
     get_entry,
+    list_group_tag_vocabulary,
     get_timeline_group,
     list_timeline_entries_page,
     list_timeline_groups,
@@ -527,6 +528,8 @@ class GeneratedPreviewContext(TypedDict, total=False):
     suggested_event_year: str
     suggested_event_month: str
     suggested_event_day: str
+    suggested_tags: list[str]
+    suggested_tags_csv: str
     feedback_message: str
     feedback_class: str
 
@@ -1880,11 +1883,14 @@ async def delete_group_route(
 async def generate_entry_preview(
     request: Request,
     title: str = Form(""),
+    group_id: str = Form(""),
     source_url: str = Form(""),
     generated_text: str = Form(""),
 ) -> HTMLResponse:
     prompt_title = title.strip()
+    selected_group_id = _parse_group_id(group_id)
     cleaned_source_url = source_url.strip()
+    preferred_tags: list[str] = []
     if not prompt_title and not cleaned_source_url:
         context: GeneratedPreviewContext = {
             "generated_text": generated_text,
@@ -1922,7 +1928,15 @@ async def generate_entry_preview(
                 )
 
     try:
-        suggestion = await generate_entry_suggestion(prompt_title, extraction)
+        if selected_group_id is not None:
+            with connection_context() as connection:
+                if get_timeline_group(connection, selected_group_id) is not None:
+                    preferred_tags = list_group_tag_vocabulary(connection, selected_group_id)
+        suggestion = await generate_entry_suggestion(
+            prompt_title,
+            extraction,
+            preferred_tags,
+        )
         generated_text = suggestion.draft_html
     except DraftGenerationConfigurationError as exc:
         context: GeneratedPreviewContext = {
@@ -1986,12 +2000,14 @@ async def generate_entry_preview(
         "suggested_event_day": ""
         if suggestion.event_day is None
         else str(suggestion.event_day),
+        "suggested_tags": suggestion.suggested_tags or [],
+        "suggested_tags_csv": ", ".join(suggestion.suggested_tags or []),
         "feedback_message": (
             extraction_error
             or (
-                "Summary, title, and date suggestions generated with source context."
+                "Summary, title, date, and tag suggestions generated with source context."
                 if extraction is not None
-                else "Summary, title, and date suggestions generated from the current input."
+                else "Summary, title, date, and tag suggestions generated from the current input."
             )
         ),
         "feedback_class": "text-warning" if extraction_error else "text-success",

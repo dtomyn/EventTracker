@@ -37,19 +37,48 @@ Use this README as a high-level product and architecture overview. Use the requi
 
 ## Playwright end-to-end tests
 
-The browser E2E suite runs against a temporary copy of the SQLite database so the live `data/EventTracker.db` file is never modified.
+EventTracker has two Playwright browser end-to-end suites:
+
+- Python Playwright tests in `tests/e2e/`
+- TypeScript Playwright tests in `tstests/e2e/`
+
+Both suites run against a temporary copy of the SQLite database so the live `data/EventTracker.db` file is never modified.
 
 Set up the test tooling once:
 
 ```powershell
 uv sync --dev
+npm install
 uv run python -m playwright install chromium
 ```
 
-Run the Playwright suite:
+Run the Python Playwright suite from `tests/e2e/`:
 
 ```powershell
 uv run pytest tests/e2e
+```
+
+Run the TypeScript Playwright suite from `tstests/e2e/`:
+
+```powershell
+npm run test:e2e:ts
+```
+
+The Python suite uses the Playwright pytest harness in `tests/e2e/conftest.py`.
+
+The TypeScript Playwright config and shared harness live in `playwright.config.ts` and `tstests/e2e/helpers/harness.ts`.
+
+Future TypeScript specs should import `test` and `expect` from `tstests/e2e/helpers/harness.ts` instead of directly from `@playwright/test`. That harness mirrors the Python suite's isolation model: it copies `data/EventTracker.db` to a temporary file when present, launches EventTracker on a free local port, and tears the temporary database down after the test completes.
+
+`npm run serve:e2e:ts` still starts a shared local server on `http://127.0.0.1:35231/` for manual debugging and `npm run codegen:e2e`, but the automated TypeScript suite is configured around the isolated harness instead of a shared web server.
+
+Until the first TypeScript specs are added, `npm run test:e2e:ts` exits successfully because it uses Playwright's `--pass-with-no-tests` option.
+
+Useful TypeScript Playwright commands:
+
+```powershell
+npm run serve:e2e:ts
+npm run test:e2e:ts -- tstests/e2e/search-and-topic-graph.spec.ts
 ```
 
 Useful environment variables:

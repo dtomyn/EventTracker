@@ -1,0 +1,19 @@
+{
+  "name": "eventtracker-playwright-ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "codegen:e2e": "playwright codegen http://127.0.0.1:35231/",
+    "install:browsers": "playwright install chromium",
+    "serve:e2e:ts": "uv run python -m scripts.run_dev --port 35231",
+    "test:e2e:ts": "playwright test --pass-with-no-tests",
+    "test:e2e:ts:debug": "playwright test --debug",
+    "test:e2e:ts:headed": "playwright test --headed",
+    "test:e2e:ts:ui": "playwright test --ui"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.0",
+    "@types/node": "^24.6.0",
+    "typescript": "^5.9.3"
+  }
+}

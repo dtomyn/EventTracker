@@ -1,107 +1,307 @@
 :root,
 [data-bs-theme="light"] {
-    --et-bg-gradient-accent: rgba(13, 110, 253, 0.08);
+    /* Backgrounds */
+    --et-bg-gradient-accent: rgba(8, 145, 178, 0.06);
     --et-bg-gradient-start: #f8fafc;
-    --et-bg-gradient-end: #eef3f8;
+    --et-bg-gradient-end: #f1f5f9;
+
+    /* Text */
     --et-text: #0f172a;
     --et-text-secondary: #475569;
-    --et-text-muted: #64748b;
+    --et-text-muted: #94a3b8;
     --et-text-subtle: #334155;
-    --et-text-date: #6c757d;
+    --et-text-date: #0891b2;
     --et-text-sep: #94a3b8;
-    --et-border: rgba(33, 37, 41, 0.12);
-    --et-border-light: rgba(33, 37, 41, 0.08);
-    --et-border-dashed: rgba(33, 37, 41, 0.14);
-    --et-border-input: rgba(33, 37, 41, 0.1);
-    --et-primary: #0d6efd;
-    --et-primary-bg: rgba(13, 110, 253, 0.08);
-    --et-primary-border: rgba(13, 110, 253, 0.18);
-    --et-primary-border-hover: rgba(13, 110, 253, 0.34);
-    --et-primary-focus: rgba(13, 110, 253, 0.24);
-    --et-primary-focus-shadow: rgba(13, 110, 253, 0.2);
-    --et-primary-active-shadow: rgba(13, 110, 253, 0.12);
-    --et-primary-outline-focus: rgba(13, 110, 253, 0.28);
-    --et-primary-line-start: rgba(13, 110, 253, 0.45);
-    --et-primary-line-end: rgba(13, 110, 253, 0.12);
+
+    /* Borders */
+    --et-border: rgba(15, 23, 42, 0.1);
+    --et-border-light: rgba(15, 23, 42, 0.07);
+    --et-border-dashed: rgba(15, 23, 42, 0.12);
+    --et-border-input: rgba(15, 23, 42, 0.1);
+
+    /* Primary accent — cyan */
+    --et-primary: #0891b2;
+    --et-primary-bg: rgba(8, 145, 178, 0.08);
+    --et-primary-border: rgba(8, 145, 178, 0.18);
+    --et-primary-border-hover: rgba(8, 145, 178, 0.34);
+    --et-primary-focus: rgba(8, 145, 178, 0.24);
+    --et-primary-focus-shadow: rgba(8, 145, 178, 0.2);
+    --et-primary-active-shadow: rgba(8, 145, 178, 0.12);
+    --et-primary-outline-focus: rgba(8, 145, 178, 0.28);
+    --et-primary-line-start: rgba(8, 145, 178, 0.4);
+    --et-primary-line-end: rgba(8, 145, 178, 0.1);
+
+    /* Node */
     --et-node-border: #fff;
-    --et-card-bg: rgba(255, 255, 255, 0.92);
-    --et-card-bg-solid: rgba(255, 255, 255, 0.98);
-    --et-card-bg-glass: rgba(255, 255, 255, 0.7);
-    --et-card-bg-subtle: rgba(255, 255, 255, 0.55);
-    --et-card-bg-empty: rgba(255, 255, 255, 0.72);
-    --et-card-bg-empty-viz: rgba(255, 255, 255, 0.65);
-    --et-surface-bg: rgba(248, 250, 252, 0.9);
-    --et-surface-bg-alt: rgba(248, 250, 252, 0.82);
-    --et-surface-bg-subtle: rgba(15, 23, 42, 0.04);
+
+    /* Cards & surfaces */
+    --et-card-bg: #ffffff;
+    --et-card-bg-solid: #ffffff;
+    --et-card-bg-glass: rgba(255, 255, 255, 0.85);
+    --et-card-bg-subtle: rgba(248, 250, 252, 0.8);
+    --et-card-bg-empty: rgba(248, 250, 252, 0.9);
+    --et-card-bg-empty-viz: rgba(248, 250, 252, 0.85);
+    --et-surface-bg: #f8fafc;
+    --et-surface-bg-alt: #f1f5f9;
+    --et-surface-bg-subtle: rgba(15, 23, 42, 0.03);
     --et-card-shadow: rgba(15, 23, 42, 0.05);
     --et-card-shadow-hover: rgba(15, 23, 42, 0.08);
-    --et-summary-gradient-start: rgba(255, 255, 255, 0.94);
-    --et-summary-gradient-end: rgba(241, 245, 249, 0.92);
-    --et-progress-mode-border: rgba(15, 23, 42, 0.14);
-    --et-progress-mode-bg: rgba(255, 255, 255, 0.82);
+    --et-summary-gradient-start: #ffffff;
+    --et-summary-gradient-end: #f8fafc;
+
+    /* Progress mode */
+    --et-progress-mode-border: rgba(15, 23, 42, 0.12);
+    --et-progress-mode-bg: #ffffff;
     --et-progress-mode-text: #334155;
-    --et-progress-mode-active-border: #0f172a;
-    --et-progress-mode-active-bg: #0f172a;
+    --et-progress-mode-active-border: #0891b2;
+    --et-progress-mode-active-bg: #0891b2;
     --et-progress-mode-active-text: #fff;
     --et-progress-status: #0f172a;
-    --et-error: #b42318;
-    --et-mark-bg: #fff3bf;
+
+    /* Semantic colors */
+    --et-error: #dc2626;
+    --et-success: #059669;
+    --et-warning: #d97706;
+    --et-mark-bg: #ccfbf1;
 }
 
 [data-bs-theme="dark"] {
-    --et-bg-gradient-accent: rgba(56, 132, 255, 0.06);
-    --et-bg-gradient-start: #1a1d23;
-    --et-bg-gradient-end: #141619;
-    --et-text: #e2e8f0;
+    /* Backgrounds */
+    --et-bg-gradient-accent: rgba(6, 182, 212, 0.05);
+    --et-bg-gradient-start: #0f172a;
+    --et-bg-gradient-end: #0c1220;
+
+    /* Text */
+    --et-text: #f1f5f9;
     --et-text-secondary: #94a3b8;
-    --et-text-muted: #94a3b8;
+    --et-text-muted: #64748b;
     --et-text-subtle: #cbd5e1;
-    --et-text-date: #9ca3af;
-    --et-text-sep: #4b5563;
-    --et-border: rgba(255, 255, 255, 0.1);
-    --et-border-light: rgba(255, 255, 255, 0.07);
-    --et-border-dashed: rgba(255, 255, 255, 0.12);
-    --et-border-input: rgba(255, 255, 255, 0.1);
-    --et-primary: #5b9cf6;
-    --et-primary-bg: rgba(56, 132, 255, 0.1);
-    --et-primary-border: rgba(56, 132, 255, 0.2);
-    --et-primary-border-hover: rgba(56, 132, 255, 0.35);
-    --et-primary-focus: rgba(56, 132, 255, 0.25);
-    --et-primary-focus-shadow: rgba(56, 132, 255, 0.2);
-    --et-primary-active-shadow: rgba(56, 132, 255, 0.15);
-    --et-primary-outline-focus: rgba(56, 132, 255, 0.3);
-    --et-primary-line-start: rgba(56, 132, 255, 0.4);
-    --et-primary-line-end: rgba(56, 132, 255, 0.1);
-    --et-node-border: #212529;
-    --et-card-bg: rgba(33, 37, 41, 0.92);
-    --et-card-bg-solid: rgba(33, 37, 41, 0.98);
-    --et-card-bg-glass: rgba(33, 37, 41, 0.7);
-    --et-card-bg-subtle: rgba(33, 37, 41, 0.55);
-    --et-card-bg-empty: rgba(33, 37, 41, 0.72);
-    --et-card-bg-empty-viz: rgba(33, 37, 41, 0.65);
-    --et-surface-bg: rgba(26, 29, 35, 0.9);
-    --et-surface-bg-alt: rgba(26, 29, 35, 0.82);
-    --et-surface-bg-subtle: rgba(255, 255, 255, 0.04);
-    --et-card-shadow: rgba(0, 0, 0, 0.2);
+    --et-text-date: #06b6d4;
+    --et-text-sep: #334155;
+
+    /* Borders — cyan-tinted */
+    --et-border: rgba(6, 182, 212, 0.15);
+    --et-border-light: rgba(6, 182, 212, 0.1);
+    --et-border-dashed: rgba(6, 182, 212, 0.18);
+    --et-border-input: rgba(6, 182, 212, 0.12);
+
+    /* Primary accent — cyan */
+    --et-primary: #06b6d4;
+    --et-primary-bg: rgba(6, 182, 212, 0.1);
+    --et-primary-border: rgba(6, 182, 212, 0.2);
+    --et-primary-border-hover: rgba(6, 182, 212, 0.35);
+    --et-primary-focus: rgba(6, 182, 212, 0.25);
+    --et-primary-focus-shadow: rgba(6, 182, 212, 0.2);
+    --et-primary-active-shadow: rgba(6, 182, 212, 0.15);
+    --et-primary-outline-focus: rgba(6, 182, 212, 0.3);
+    --et-primary-line-start: rgba(6, 182, 212, 0.4);
+    --et-primary-line-end: rgba(6, 182, 212, 0.1);
+
+    /* Node */
+    --et-node-border: #1e293b;
+
+    /* Cards & surfaces */
+    --et-card-bg: #1e293b;
+    --et-card-bg-solid: #1e293b;
+    --et-card-bg-glass: rgba(30, 41, 59, 0.85);
+    --et-card-bg-subtle: rgba(30, 41, 59, 0.7);
+    --et-card-bg-empty: rgba(30, 41, 59, 0.8);
+    --et-card-bg-empty-viz: rgba(30, 41, 59, 0.75);
+    --et-surface-bg: #1e293b;
+    --et-surface-bg-alt: #162032;
+    --et-surface-bg-subtle: rgba(6, 182, 212, 0.04);
+    --et-card-shadow: none;
     --et-card-shadow-hover: rgba(0, 0, 0, 0.3);
-    --et-summary-gradient-start: rgba(33, 37, 41, 0.94);
-    --et-summary-gradient-end: rgba(26, 29, 35, 0.92);
-    --et-progress-mode-border: rgba(255, 255, 255, 0.14);
-    --et-progress-mode-bg: rgba(33, 37, 41, 0.82);
-    --et-progress-mode-text: #cbd5e1;
-    --et-progress-mode-active-border: #e2e8f0;
-    --et-progress-mode-active-bg: #e2e8f0;
-    --et-progress-mode-active-text: #1a1d23;
-    --et-progress-status: #e2e8f0;
+    --et-summary-gradient-start: #1e293b;
+    --et-summary-gradient-end: #162032;
+
+    /* Progress mode */
+    --et-progress-mode-border: rgba(6, 182, 212, 0.15);
+    --et-progress-mode-bg: #1e293b;
+    --et-progress-mode-text: #94a3b8;
+    --et-progress-mode-active-border: #06b6d4;
+    --et-progress-mode-active-bg: #06b6d4;
+    --et-progress-mode-active-text: #0f172a;
+    --et-progress-status: #f1f5f9;
+
+    /* Semantic colors */
     --et-error: #f87171;
-    --et-mark-bg: rgba(202, 138, 4, 0.3);
+    --et-success: #34d399;
+    --et-warning: #fbbf24;
+    --et-mark-bg: rgba(6, 182, 212, 0.2);
 }
 
 body {
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: var(--et-text);
     background:
         radial-gradient(circle at top left, var(--et-bg-gradient-accent), transparent 32%),
         linear-gradient(180deg, var(--et-bg-gradient-start) 0%, var(--et-bg-gradient-end) 100%);
     min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Bootstrap variable overrides */
+:root,
+[data-bs-theme="light"] {
+    --bs-body-bg: #f8fafc;
+    --bs-body-color: #0f172a;
+    --bs-primary: #0891b2;
+    --bs-primary-rgb: 8, 145, 178;
+    --bs-link-color: #0891b2;
+    --bs-link-hover-color: #0e7490;
+}
+
+[data-bs-theme="dark"] {
+    --bs-body-bg: #0f172a;
+    --bs-body-color: #f1f5f9;
+    --bs-primary: #06b6d4;
+    --bs-primary-rgb: 6, 182, 212;
+    --bs-link-color: #06b6d4;
+    --bs-link-hover-color: #22d3ee;
+}
+
+/* Monospace utility for dates, tags, badges */
+.font-mono {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* Typography scale */
+h1, .h1 { font-size: clamp(1.3rem, 2vw, 1.5rem); font-weight: 700; line-height: 1.3; }
+h2, .h2 { font-size: 1.15rem; font-weight: 600; line-height: 1.3; }
+h3, .h3 { font-size: 1rem; font-weight: 600; line-height: 1.3; }
+
+/* Navbar overrides */
+.navbar {
+    background: var(--et-bg-gradient-start) !important;
+    border-bottom: 1px solid var(--et-border) !important;
+}
+
+.navbar-brand {
+    font-weight: 700;
+    color: var(--et-text) !important;
+    letter-spacing: -0.01em;
+}
+
+/* Card overrides — remove Bootstrap defaults, apply subtle-border style */
+.card {
+    background: var(--et-card-bg);
+    border: 1px solid var(--et-border);
+    border-radius: 8px;
+    box-shadow: none;
+}
+
+[data-bs-theme="light"] .card {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* Button overrides */
+.btn-primary {
+    --bs-btn-bg: var(--et-primary);
+    --bs-btn-border-color: var(--et-primary);
+    --bs-btn-hover-bg: var(--et-primary);
+    --bs-btn-hover-border-color: var(--et-primary);
+    --bs-btn-color: #0f172a;
+    --bs-btn-hover-color: #0f172a;
+    --bs-btn-active-bg: var(--et-primary);
+    --bs-btn-active-border-color: var(--et-primary);
+    --bs-btn-active-color: #0f172a;
+    font-weight: 600;
+    filter: brightness(1);
+    transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.btn-primary:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+}
+
+.btn-outline-secondary {
+    --bs-btn-color: var(--et-text-secondary);
+    --bs-btn-border-color: var(--et-border);
+    --bs-btn-hover-bg: var(--et-surface-bg-subtle);
+    --bs-btn-hover-border-color: var(--et-primary-border);
+    --bs-btn-hover-color: var(--et-text);
+    --bs-btn-active-bg: var(--et-primary-bg);
+    --bs-btn-active-border-color: var(--et-primary-border);
+    --bs-btn-active-color: var(--et-primary);
+    border-radius: 6px;
+}
+
+/* Form control overrides */
+.form-control,
+.form-select {
+    background: var(--et-surface-bg);
+    border: 1px solid var(--et-border-input);
+    color: var(--et-text);
+    border-radius: 6px;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: var(--et-primary);
+    box-shadow: 0 0 0 3px var(--et-primary-bg);
+    background: var(--et-surface-bg);
+    color: var(--et-text);
+}
+
+.form-control::placeholder {
+    color: var(--et-text-muted);
+}
+
+/* Badge overrides — developer style with mono font */
+.badge {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    border-radius: 4px;
+    padding: 0.2rem 0.5rem;
+}
+
+.badge.text-bg-light {
+    background: var(--et-primary-bg) !important;
+    color: var(--et-primary) !important;
+    border-color: var(--et-primary-border) !important;
+}
+
+/* Uppercase labels */
+.timeline-web-card-label,
+.group-flyout-label,
+.entry-live-preview-label,
+.story-kicker,
+.story-guide-label,
+.story-meta-label,
+.story-preview-title,
+.visualization-toolbar-label,
+.visualization-summary-label,
+.timeline-web-progress-label,
+.story-progress-label {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--et-text-muted);
+}
+
+/* Date elements — monospace accent */
+.visualization-date,
+.text-body-secondary.small {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.7rem;
+    font-weight: 400;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--et-text-date);
+}
+
+/* Progress log — use JetBrains Mono */
+.timeline-web-progress-log {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 .timeline-heading {

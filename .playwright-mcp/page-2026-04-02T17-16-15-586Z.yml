@@ -1,0 +1,31 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - generic [ref=e3]:
+      - link "Events" [ref=e4] [cursor=pointer]:
+        - /url: /
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - searchbox "Filter timeline in plain English" [ref=e7]
+          - button "Filter" [ref=e8] [cursor=pointer]
+          - button "Search" [ref=e9] [cursor=pointer]
+        - generic [ref=e10]:
+          - link "Export" [ref=e11] [cursor=pointer]:
+            - /url: /entries/export
+          - link "Admin" [ref=e12] [cursor=pointer]:
+            - /url: /admin/groups
+          - button "Toggle dark mode" [ref=e13] [cursor=pointer]:
+            - img [ref=e14]
+          - link "New Entry" [ref=e16] [cursor=pointer]:
+            - /url: /entries/new
+  - main [ref=e17]:
+    - generic [ref=e18]:
+      - generic [ref=e19]:
+        - heading "Search Results" [level=1] [ref=e20]
+        - paragraph [ref=e21]: Use search to find the strongest keyword and semantic matches across your entries.
+      - group [ref=e23]:
+        - generic "Group Agentic Coding" [ref=e24] [cursor=pointer]:
+          - generic [ref=e25]: Group
+          - generic [ref=e26]: Agentic Coding
+    - generic [ref=e29]:
+      - heading "No search query yet" [level=2] [ref=e30]
+      - paragraph [ref=e31]: Enter a query in the navbar, then choose Search for ranked results or Filter for a narrowed timeline.

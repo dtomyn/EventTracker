@@ -5,9 +5,18 @@
 <input type="hidden" id="generated_suggested_event_year" value="{{ suggested_event_year if suggested_event_year is defined else '' }}">
 <input type="hidden" id="generated_suggested_event_month" value="{{ suggested_event_month if suggested_event_month is defined else '' }}">
 <input type="hidden" id="generated_suggested_event_day" value="{{ suggested_event_day if suggested_event_day is defined else '' }}">
+<input type="hidden" id="generated_suggested_tags" value="{{ suggested_tags_csv if suggested_tags_csv is defined else '' }}">
 {% if suggested_title is defined and suggested_title %}
 	<div class="small text-body-secondary mt-2">Suggested title: <strong>{{ suggested_title }}</strong></div>
 {% endif %}
 {% if suggested_event_year is defined and suggested_event_year %}
 	<div class="small text-body-secondary">Suggested date: {{ suggested_event_year }}{% if suggested_event_month is defined and suggested_event_month %}-{{ suggested_event_month }}{% endif %}{% if suggested_event_day is defined and suggested_event_day %}-{{ suggested_event_day }}{% endif %}</div>
+{% endif %}
+{% if suggested_tags is defined and suggested_tags %}
+	<div class="small text-body-secondary mt-2">Suggested tags:</div>
+	<div class="d-flex flex-wrap gap-2 mt-1">
+		{% for suggested_tag in suggested_tags %}
+			<span class="badge text-bg-light border">{{ suggested_tag }}</span>
+		{% endfor %}
+	</div>
 {% endif %}

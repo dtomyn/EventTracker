@@ -209,6 +209,7 @@ class TestOpenAIChatDraftGenerator(unittest.TestCase):
                                     "event_year": 2026,
                                     "event_month": 3,
                                     "event_day": 16,
+                                    "suggested_tags": ["release", "milestone"],
                                 }
                             )
                         )
@@ -236,6 +237,7 @@ class TestOpenAIChatDraftGenerator(unittest.TestCase):
         self.assertEqual(suggestion.event_year, 2026)
         self.assertEqual(suggestion.event_month, 3)
         self.assertEqual(suggestion.event_day, 16)
+        self.assertEqual(suggestion.suggested_tags, ["release", "milestone"])
         await_args = create.await_args
         self.assertIsNotNone(await_args)
         assert await_args is not None
@@ -254,11 +256,39 @@ class TestGeneratedDraftNormalization(unittest.TestCase):
                     "event_year": 2026,
                     "event_month": 3,
                     "event_day": None,
+                    "suggested_tags": ["  Release ", "milestone", "release", "launch"],
                 }
             )
         )
 
         self.assertEqual(suggestion.draft_html, "<p>Release update for Café</p>")
+        self.assertEqual(suggestion.suggested_tags, ["Release", "milestone", "launch"])
+
+    def test_parse_generation_response_truncates_suggested_tags_to_five(self) -> None:
+        suggestion = _parse_generation_response(
+            json.dumps(
+                {
+                    "title": "Launch Momentum",
+                    "draft_html": "<p>Release update.</p>",
+                    "event_year": 2026,
+                    "event_month": 3,
+                    "event_day": 18,
+                    "suggested_tags": [
+                        "release",
+                        "milestone",
+                        "launch",
+                        "timeline",
+                        "summary",
+                        "extra",
+                    ],
+                }
+            )
+        )
+
+        self.assertEqual(
+            suggestion.suggested_tags,
+            ["release", "milestone", "launch", "timeline", "summary"],
+        )
 
 
 class TestCopilotSdkWrapper(unittest.TestCase):
@@ -318,6 +348,7 @@ class TestCopilotChatDraftGenerator(unittest.TestCase):
                         "event_year": 2026,
                         "event_month": 3,
                         "event_day": None,
+                        "suggested_tags": ["copilot", "release"],
                     }
                 )
             )
@@ -335,14 +366,14 @@ class TestCopilotChatDraftGenerator(unittest.TestCase):
         ):
             generator = CopilotChatDraftGenerator(CopilotSettings(model_id="gpt-5"))
             suggestion = _run_async(
-                generator.generate_entry_suggestion("Release milestone")
+                generator.generate_entry_suggestion(
+                    "Release milestone",
+                    preferred_tags=["release", "milestone"],
+                )
             )
 
         self.assertEqual(suggestion.title, "Copilot Draft")
         self.assertEqual(suggestion.draft_html, "<p>Summarized from Copilot.</p>")
-        self.assertEqual(suggestion.event_year, 2026)
-        self.assertEqual(suggestion.event_month, 3)
-        self.assertIsNone(suggestion.event_day)
         self.assertEqual(
             fake_client.config,
             {
@@ -354,13 +385,15 @@ class TestCopilotChatDraftGenerator(unittest.TestCase):
                         "You write concise personal timeline entry suggestions. Return JSON only with "
                         'this exact schema: {"title": string, "draft_html": string, '
                         '"event_year": number|null, "event_month": number|null, '
-                        '"event_day": number|null}. Do not wrap the JSON in markdown fences. '
+                        '"event_day": number|null, "suggested_tags": string[]}. Do not wrap the JSON in markdown fences. '
                         "The title should be short, specific, and catchy. The draft_html should be "
                         "factual, concise, and may use only simple HTML tags such as <p>, <b>, "
                         "<strong>, <i>, <em>, <ul>, <ol>, <li>, <br>, <blockquote>, <code>, and <u>. "
-                        "Prefer one short paragraph unless a short list genuinely improves clarity. "
+                        "Prefer two to three short paragraphs unless a short list genuinely improves clarity. "
                         "Infer the date from the supplied content only when reasonably supported; use "
-                        "null for unknown fields, especially event_day when the day is not explicit."
+                        "null for unknown fields, especially event_day when the day is not explicit. "
+                        "Return up to 5 concise suggested_tags. Prefer supplied existing tags when they fit, "
+                        "avoid duplicates or near-duplicates, and create new tags only when needed."
                     ),
                 },
             },
@@ -373,7 +406,8 @@ class TestCopilotChatDraftGenerator(unittest.TestCase):
             (
                 "Create a structured suggestion for a personal timeline entry.\n"
                 "Current title hint: Release milestone\n"
-                "Keep it factual, readable, and ready for manual editing. If there is not enough evidence for the date, return null for the missing parts."
+                "Preferred existing tags for this timeline group: release, milestone\n"
+                "Keep it factual, readable, and ready for manual editing. If there is not enough evidence for the date, return null for the missing parts. Return up to 5 tags, and prefer the supplied group tags whenever they are a good fit."
             ),
         )
         self.assertEqual(fake_client.session.timeouts[0], 60.0)

@@ -1,0 +1,404 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - generic [ref=e3]:
+      - link "Events" [ref=e4] [cursor=pointer]:
+        - /url: /
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - searchbox "Filter timeline in plain English" [ref=e7]: Copilot
+          - button "Filter" [ref=e8] [cursor=pointer]
+          - button "Search" [ref=e9] [cursor=pointer]
+        - generic [ref=e10]:
+          - link "Export" [ref=e11] [cursor=pointer]:
+            - /url: /entries/export
+          - link "Admin" [ref=e12] [cursor=pointer]:
+            - /url: /admin/groups
+          - button "Toggle dark mode" [ref=e13] [cursor=pointer]:
+            - img [ref=e14]
+          - link "New Entry" [ref=e16] [cursor=pointer]:
+            - /url: /entries/new
+  - main [ref=e17]:
+    - generic [ref=e18]:
+      - generic [ref=e19]:
+        - heading "Search Results" [level=1] [ref=e20]
+        - paragraph [ref=e21]: Showing 20 of 25 ranked matches for "Copilot" in Agentic Coding.
+      - generic [ref=e22]:
+        - group [ref=e23]:
+          - generic "Group Agentic Coding" [ref=e24] [cursor=pointer]:
+            - generic [ref=e25]: Group
+            - generic [ref=e26]: Agentic Coding
+        - generic [ref=e28]:
+          - link "Create story" [ref=e29] [cursor=pointer]:
+            - /url: /story?group_id=1&q=Copilot
+          - link "Filter Timeline" [ref=e30] [cursor=pointer]:
+            - /url: /?group_id=1&q=Copilot
+          - link "Clear search" [ref=e31] [cursor=pointer]:
+            - /url: /search?group_id=1
+    - generic [ref=e34]:
+      - article [ref=e35]:
+        - generic [ref=e36]:
+          - generic [ref=e37]:
+            - generic [ref=e38]:
+              - generic [ref=e39]: March 9, 2026
+              - generic [ref=e40]: Microsoft’s Copilot Cowork brings agentic AI to Office apps
+              - paragraph [ref=e42]:
+                - text: At its “Future of Work” event, Microsoft announces
+                - generic [ref=e43]:
+                  - mark [ref=e44]: Copilot
+                  - text: Cowork
+                - text: – a new capability for Microsoft 365
+                - mark [ref=e45]: Copilot
+                - text: …
+            - generic [ref=e46]:
+              - link "View" [ref=e47] [cursor=pointer]:
+                - /url: /entries/2/view
+              - link "Edit" [ref=e48] [cursor=pointer]:
+                - /url: /entries/2
+          - generic [ref=e49]:
+            - generic [ref=e50]: Agentic AI
+            - generic [ref=e51]: Microsoft 365
+            - generic [ref=e52]: Office Productivity
+            - generic [ref=e53]: Claude Integration
+            - generic [ref=e54]: Autonomous Agents
+      - article [ref=e55]:
+        - generic [ref=e56]:
+          - generic [ref=e57]:
+            - generic [ref=e58]:
+              - generic [ref=e59]: March 18, 2026
+              - generic [ref=e60]: "VS Code 1.112: Smarter Agents, Browser Debugging & MCP Sandboxing"
+              - generic [ref=e61]:
+                - text: … Key highlights include integrated browser debugging (debug web apps end-to-end without leaving the editor),
+                - generic [ref=e62]:
+                  - mark [ref=e63]: Copilot
+                  - text: …
+            - generic [ref=e64]:
+              - link "View" [ref=e65] [cursor=pointer]:
+                - /url: /entries/50/view
+              - link "Edit" [ref=e66] [cursor=pointer]:
+                - /url: /entries/50
+          - generic [ref=e67]:
+            - generic [ref=e68]: VS Code Release
+            - generic [ref=e69]: Agentic Development
+            - generic [ref=e70]: Browser Debugging
+            - generic [ref=e71]: MCP Sandboxing
+            - generic [ref=e72]: Copilot CLI
+      - article [ref=e73]:
+        - generic [ref=e74]:
+          - generic [ref=e75]:
+            - generic [ref=e76]:
+              - generic [ref=e77]: January 8, 2026
+              - generic [ref=e78]: Visual Studio Code integrates “Agent Skills” (v1.108)
+              - generic [ref=e79]:
+                - text: … GitHub
+                - mark [ref=e80]: Copilot
+                - text: "can now auto-load skill modules from a project’s repository (e.g. a `.github/skills/` folder), granting …"
+            - generic [ref=e81]:
+              - link "View" [ref=e82] [cursor=pointer]:
+                - /url: /entries/8/view
+              - link "Edit" [ref=e83] [cursor=pointer]:
+                - /url: /entries/8
+          - generic [ref=e84]:
+            - generic [ref=e85]: VS Code Release
+            - generic [ref=e86]: AI Coding
+            - generic [ref=e87]: Agentic Tools
+            - generic [ref=e88]: GitHub Copilot
+      - article [ref=e89]:
+        - generic [ref=e90]:
+          - generic [ref=e91]:
+            - generic [ref=e92]:
+              - generic [ref=e93]: May 19, 2025
+              - generic [ref=e94]: GitHub Introduces Coding Agent For GitHub Copilot
+              - generic [ref=e95]:
+                - text: … GitHub also announced broader AI enhancements, including open-sourcing
+                - mark [ref=e96]: Copilot
+                - text: Chat in VS Code, expanding GitHub Models with support for …
+            - generic [ref=e97]:
+              - link "View" [ref=e98] [cursor=pointer]:
+                - /url: /entries/23/view
+              - link "Edit" [ref=e99] [cursor=pointer]:
+                - /url: /entries/23
+          - generic [ref=e100]:
+            - generic [ref=e101]: GitHub Copilot
+            - generic [ref=e102]: Coding Agent
+            - generic [ref=e103]: Agentic DevOps
+            - generic [ref=e104]: Enterprise AI
+      - article [ref=e105]:
+        - generic [ref=e106]:
+          - generic [ref=e107]:
+            - generic [ref=e108]:
+              - generic [ref=e109]: March 9, 2026
+              - generic [ref=e110]: VS Code 1.111 — Agent Autopilot & Permissions
+              - generic [ref=e111]: Visual Studio Code 1.111 expands the agent experience with session-scoped Agent permissions (a permissions picker to set autonomy per session), Autopilot (Preview) for autonomous agent iteration until it signals completion, Agent-scoped hooks (Preview) for pre/post-processing, a…
+            - generic [ref=e112]:
+              - link "View" [ref=e113] [cursor=pointer]:
+                - /url: /entries/46/view
+              - link "Edit" [ref=e114] [cursor=pointer]:
+                - /url: /entries/46
+          - generic [ref=e115]:
+            - generic [ref=e116]: VS Code Release
+            - generic [ref=e117]: Developer Tools
+            - generic [ref=e118]: AI Agent
+      - article [ref=e119]:
+        - generic [ref=e120]:
+          - generic [ref=e121]:
+            - generic [ref=e122]:
+              - generic [ref=e123]: January 2026
+              - generic [ref=e124]: Anthropic releases Claude Cowork (agentic AI with a GUI)
+              - generic [ref=e125]: Anthropic expands its coding assistant suite with Claude Cowork , a graphical AI coworker designed for non-programmers and general knowledge work. Released in January 2026 as a research preview, Claude Cowork provides a user-friendly “auto-pilot” interface (distinct from the dev…
+            - generic [ref=e126]:
+              - link "View" [ref=e127] [cursor=pointer]:
+                - /url: /entries/9/view
+              - link "Edit" [ref=e128] [cursor=pointer]:
+                - /url: /entries/9
+          - generic [ref=e129]:
+            - generic [ref=e130]: Agentic AI
+            - generic [ref=e131]: Anthropic
+            - generic [ref=e132]: GUI Tools
+            - generic [ref=e133]: No-Code AI
+            - generic [ref=e134]: AI Assistants
+      - article [ref=e135]:
+        - generic [ref=e136]:
+          - generic [ref=e137]:
+            - generic [ref=e138]:
+              - generic [ref=e139]: March 14, 2023
+              - generic [ref=e140]: GPT-4 launches, powering next-gen code assistants
+              - generic [ref=e141]:
+                - text: … GPT-4 becomes the engine behind advanced products like new versions of GitHub
+                - mark [ref=e142]: Copilot
+                - text: and ChatGPT, sparking a wave of …
+            - generic [ref=e143]:
+              - link "View" [ref=e144] [cursor=pointer]:
+                - /url: /entries/40/view
+              - link "Edit" [ref=e145] [cursor=pointer]:
+                - /url: /entries/40
+          - generic [ref=e146]:
+            - generic [ref=e147]: LLM Release
+            - generic [ref=e148]: OpenAI
+            - generic [ref=e149]: Function Calling
+      - article [ref=e150]:
+        - generic [ref=e151]:
+          - generic [ref=e152]:
+            - generic [ref=e153]:
+              - generic [ref=e154]: January 23, 2025
+              - generic [ref=e155]: OpenAI launches Operator (browser automation agent)
+              - generic [ref=e156]: OpenAI announces Operator , a ChatGPT-based experimental agent that can control a web browser to perform tasks autonomously . Powered by a specialized vision-and-action model called “ Computer-Using Agent (CUA) ,” Operator can click, scroll, and navigate websites to, for example…
+            - generic [ref=e157]:
+              - link "View" [ref=e158] [cursor=pointer]:
+                - /url: /entries/31/view
+              - link "Edit" [ref=e159] [cursor=pointer]:
+                - /url: /entries/31
+          - generic [ref=e160]:
+            - generic [ref=e161]: Agentic AI
+            - generic [ref=e162]: Browser Automation
+            - generic [ref=e163]: OpenAI
+            - generic [ref=e164]: Computer Use
+      - article [ref=e165]:
+        - generic [ref=e166]:
+          - generic [ref=e167]:
+            - generic [ref=e168]:
+              - generic [ref=e169]: February 24, 2025
+              - generic [ref=e170]: Anthropic unveils Claude Code (beta)
+              - generic [ref=e171]: "Anthropic releases Claude Code as a research preview: an agentic coding assistant accessible via a command-line interface (CLI) that can run shell commands, read/write files, and converse with developers. This AI “pair programmer” allows developers to delegate coding tasks to an…"
+            - generic [ref=e172]:
+              - link "View" [ref=e173] [cursor=pointer]:
+                - /url: /entries/30/view
+              - link "Edit" [ref=e174] [cursor=pointer]:
+                - /url: /entries/30
+          - generic [ref=e175]:
+            - generic [ref=e176]: Developer Tools
+            - generic [ref=e177]: Anthropic
+            - generic [ref=e178]: CLI
+      - article [ref=e179]:
+        - generic [ref=e180]:
+          - generic [ref=e181]:
+            - generic [ref=e182]:
+              - generic [ref=e183]: March 14, 2023
+              - generic [ref=e184]: Anthropic’s Claude (beta) and “Constitutional AI” approach
+              - generic [ref=e185]: AI startup Anthropic unveils its assistant Claude in a closed beta. Trained using a novel “Constitutional AI” method (guiding behavior with a fixed set of principles rather than only RLHF), Claude offers a friendly textual assistant similar to ChatGPT. Though initially not speci…
+            - generic [ref=e186]:
+              - link "View" [ref=e187] [cursor=pointer]:
+                - /url: /entries/41/view
+              - link "Edit" [ref=e188] [cursor=pointer]:
+                - /url: /entries/41
+          - generic [ref=e189]:
+            - generic [ref=e190]: Anthropic
+            - generic [ref=e191]: Constitutional AI
+            - generic [ref=e192]: AI Safety
+            - generic [ref=e193]: AI Assistant
+            - generic [ref=e194]: 100K Context
+      - article [ref=e195]:
+        - generic [ref=e196]:
+          - generic [ref=e197]:
+            - generic [ref=e198]:
+              - generic [ref=e199]: November 20, 2025
+              - generic [ref=e200]: Google Antigravity — Agentic Dev Platform (Public Preview)
+              - generic [ref=e201]: Google Antigravity is a new agentic development platform released in public preview that lets you deploy agents to autonomously plan, execute, and verify complex tasks across your editor, terminal, and browser. Agents generate verifiable "Artifacts" (task lists, implementation p…
+            - generic [ref=e202]:
+              - link "View" [ref=e203] [cursor=pointer]:
+                - /url: /entries/16/view
+              - link "Edit" [ref=e204] [cursor=pointer]:
+                - /url: /entries/16
+          - generic [ref=e205]:
+            - generic [ref=e206]: Developer Tools
+            - generic [ref=e207]: Agentic AI
+            - generic [ref=e208]: Google
+            - generic [ref=e209]: Antigravity
+      - article [ref=e210]:
+        - generic [ref=e211]:
+          - generic [ref=e212]:
+            - generic [ref=e213]:
+              - generic [ref=e214]: April 9, 2025
+              - generic [ref=e215]: Google launches Agent2Agent (A2A) open protocol
+              - generic [ref=e216]: Agent2Agent (A2A) is an open protocol launched by Google to let autonomous AI agents securely communicate, exchange information, and coordinate actions across siloed enterprise systems and applications. The effort includes support from 50+ technology partners (e.g., Atlassian, B…
+            - generic [ref=e217]:
+              - link "View" [ref=e218] [cursor=pointer]:
+                - /url: /entries/27/view
+              - link "Edit" [ref=e219] [cursor=pointer]:
+                - /url: /entries/27
+          - generic [ref=e220]:
+            - generic [ref=e221]: AI Agents
+            - generic [ref=e222]: Enterprise AI
+            - generic [ref=e223]: Open Protocol
+            - generic [ref=e224]: Interoperability
+            - generic [ref=e225]: Google
+      - article [ref=e226]:
+        - generic [ref=e227]:
+          - generic [ref=e228]:
+            - generic [ref=e229]:
+              - generic [ref=e230]: November 19, 2025
+              - generic [ref=e231]: Google debuts Gemini 3 Pro and the 'thinking' agent paradigm
+              - generic [ref=e232]: Google introduced Gemini 3 Pro (Pro Preview), an agentic foundation model intended to act as the core orchestrator for semi‑autonomous “thinking” agents. Google collaborated with open-source partners—LangChain, AI SDK by Vercel, LlamaIndex, Pydantic AI, and n8n—to provide Day‑0…
+            - generic [ref=e233]:
+              - link "View" [ref=e234] [cursor=pointer]:
+                - /url: /entries/17/view
+              - link "Edit" [ref=e235] [cursor=pointer]:
+                - /url: /entries/17
+          - generic [ref=e236]:
+            - generic [ref=e237]: Google Gemini
+            - generic [ref=e238]: AI Agents
+            - generic [ref=e239]: Open Source
+            - generic [ref=e240]: LLM Release
+            - generic [ref=e241]: Google
+      - article [ref=e242]:
+        - generic [ref=e243]:
+          - generic [ref=e244]:
+            - generic [ref=e245]:
+              - generic [ref=e246]: October 22, 2024
+              - generic [ref=e247]: Anthropic’s Claude 3.5 gains “computer use” abilities
+              - generic [ref=e248]: "Anthropic launches Claude 3.5 (Haiku and Sonnet models) with a groundbreaking feature: “computer use” in public beta. For the first time, developers can direct a general AI model to use a computer like a human – seeing a virtual screen, clicking, typing, and navigating UIs. Clau…"
+            - generic [ref=e249]:
+              - link "View" [ref=e250] [cursor=pointer]:
+                - /url: /entries/35/view
+              - link "Edit" [ref=e251] [cursor=pointer]:
+                - /url: /entries/35
+          - generic [ref=e252]:
+            - generic [ref=e253]: Agentic AI
+            - generic [ref=e254]: AI Agents
+            - generic [ref=e255]: Anthropic
+            - generic [ref=e256]: Computer Use
+      - article [ref=e257]:
+        - generic [ref=e258]:
+          - generic [ref=e259]:
+            - generic [ref=e260]:
+              - generic [ref=e261]: September 29, 2025
+              - generic [ref=e262]: Claude 4.5 (Sonnet) enables 30‑hour autonomous coding sessions
+              - generic [ref=e263]: "Anthropic rolls out Claude 4.5 , starting with the mid-tier Claude 4.5 Sonnet model (followed by the larger Opus 4.5 in November). Claude 4.5 is called “the best coding model in the world” and introduces major upgrades for autonomy: it can operate continuously for 24–30 hours wi…"
+            - generic [ref=e264]:
+              - link "View" [ref=e265] [cursor=pointer]:
+                - /url: /entries/20/view
+              - link "Edit" [ref=e266] [cursor=pointer]:
+                - /url: /entries/20
+          - generic [ref=e267]:
+            - generic [ref=e268]: Developer Tools
+            - generic [ref=e269]: AI Agents
+            - generic [ref=e270]: LLM Release
+            - generic [ref=e271]: Anthropic
+            - generic [ref=e272]: Autonomous Coding
+      - article [ref=e273]:
+        - generic [ref=e274]:
+          - generic [ref=e275]:
+            - generic [ref=e276]:
+              - generic [ref=e277]: July 6, 2023
+              - generic [ref=e278]: ChatGPT Code Interpreter adds tool-use to AI assistance
+              - generic [ref=e279]: OpenAI begins enabling the Code Interpreter plugin for ChatGPT (later renamed “Advanced Data Analysis”), letting the chatbot run Python code in a sandbox environment and work with file uploads. This marks the first widely available instance of a general-purpose AI assistant that…
+            - generic [ref=e280]:
+              - link "View" [ref=e281] [cursor=pointer]:
+                - /url: /entries/38/view
+              - link "Edit" [ref=e282] [cursor=pointer]:
+                - /url: /entries/38
+          - generic [ref=e283]:
+            - generic [ref=e284]: OpenAI
+            - generic [ref=e285]: Code Interpreter
+            - generic [ref=e286]: AI Tools
+            - generic [ref=e287]: Python Sandbox
+            - generic [ref=e288]: Data Analysis
+      - article [ref=e289]:
+        - generic [ref=e290]:
+          - generic [ref=e291]:
+            - generic [ref=e292]:
+              - generic [ref=e293]: November 25, 2024
+              - generic [ref=e294]: Anthropic’s Model Context Protocol (MCP) standardizes tool integration
+              - generic [ref=e295]: Anthropic open-sources Model Context Protocol (MCP) to provide a unified, secure method for AI models to connect with external tools, data, and memory. MCP defines how an agent can read/write files, call APIs or functions, and maintain context across steps. The standard is quick…
+            - generic [ref=e296]:
+              - link "View" [ref=e297] [cursor=pointer]:
+                - /url: /entries/34/view
+              - link "Edit" [ref=e298] [cursor=pointer]:
+                - /url: /entries/34
+          - generic [ref=e299]:
+            - generic [ref=e300]: Agentic AI
+            - generic [ref=e301]: Anthropic
+            - generic [ref=e302]: Open Protocol
+            - generic [ref=e303]: AI Standards
+            - generic [ref=e304]: Tool Integration
+            - generic [ref=e305]: Industry Adoption
+      - article [ref=e306]:
+        - generic [ref=e307]:
+          - generic [ref=e308]:
+            - generic [ref=e309]:
+              - generic [ref=e310]: December 11, 2025
+              - generic [ref=e311]: Streamline ADK agents with Google's Interactions API
+              - generic [ref=e312]: "With the beta launch of the Interactions API , developers using the Agent Development Kit (ADK) can replace raw generateContent calls with a server-side, stateful interface: ADK agents keep lightweight pointers to API-managed inference state, retain control flow and routing in t…"
+            - generic [ref=e313]:
+              - link "View" [ref=e314] [cursor=pointer]:
+                - /url: /entries/13/view
+              - link "Edit" [ref=e315] [cursor=pointer]:
+                - /url: /entries/13
+          - generic [ref=e316]:
+            - generic [ref=e317]: Developer Tools
+            - generic [ref=e318]: AI Agents
+            - generic [ref=e319]: Google API
+            - generic [ref=e320]: Context Management
+            - generic [ref=e321]: Google
+      - article [ref=e322]:
+        - generic [ref=e323]:
+          - generic [ref=e324]:
+            - generic [ref=e325]:
+              - generic [ref=e326]: January 21, 2026
+              - generic [ref=e327]: Eight Trends Shaping Agentic Software Development in 2026
+              - generic [ref=e328]: "Read Anthropic's report on the eight trends predicted to define agentic coding in 2026, organized around foundation, capability, and impact categories. A key finding: while developers use AI in roughly 60% of their work, they can fully delegate only 0–20% of tasks — making activ…"
+            - generic [ref=e329]:
+              - link "View" [ref=e330] [cursor=pointer]:
+                - /url: /entries/55/view
+              - link "Edit" [ref=e331] [cursor=pointer]:
+                - /url: /entries/55
+          - generic [ref=e332]:
+            - generic [ref=e333]: Anthropic
+            - generic [ref=e334]: Trends
+      - article [ref=e335]:
+        - generic [ref=e336]:
+          - generic [ref=e337]:
+            - generic [ref=e338]:
+              - generic [ref=e339]: March 16, 2026
+              - generic [ref=e340]: "Codex Subagents: Parallel Agent Workflows"
+              - generic [ref=e341]: Codex subagents let Codex spawn specialized agents in parallel and consolidate their results into a single response, useful for highly parallel tasks (e.g., codebase exploration or multi-step feature plans) and for defining custom agents with different model configurations and i…
+            - generic [ref=e342]:
+              - link "View" [ref=e343] [cursor=pointer]:
+                - /url: /entries/47/view
+              - link "Edit" [ref=e344] [cursor=pointer]:
+                - /url: /entries/47
+          - generic [ref=e345]:
+            - generic [ref=e346]: Parallel Agents
+            - generic [ref=e347]: AI Orchestration
+            - generic [ref=e348]: OpenAI
+            - generic [ref=e349]: Codex
+            - generic [ref=e350]: Subagents

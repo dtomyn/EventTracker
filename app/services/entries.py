@@ -44,6 +44,7 @@ EMPTY_LINK_ROW = {"url": "", "note": ""}
 DEFAULT_TIMELINE_PAGE_SIZE = 25
 MAX_TIMELINE_PAGE_SIZE = 50
 MAX_TIMELINE_GROUP_WEB_SEARCH_QUERY_LENGTH = 400
+MAX_GENERATION_PREFERRED_TAGS = 50
 
 
 class SavedUrlsCache(TypedDict):
@@ -299,6 +300,32 @@ def normalize_tags(raw_tags: str) -> list[str]:
         seen.add(lowered)
         normalized.append(value)
     return normalized
+
+
+def list_group_tag_vocabulary(
+    connection: sqlite3.Connection,
+    group_id: int,
+    *,
+    limit: int = MAX_GENERATION_PREFERRED_TAGS,
+) -> list[str]:
+    """Return the most common distinct tags already used in a timeline group."""
+    if limit <= 0:
+        return []
+
+    rows = connection.execute(
+        """
+        SELECT t.name, COUNT(*) AS usage_count
+        FROM tags t
+        JOIN entry_tags et ON et.tag_id = t.id
+        JOIN entries e ON e.id = et.entry_id
+        WHERE e.group_id = ?
+        GROUP BY t.id, t.name
+        ORDER BY usage_count DESC, lower(t.name) ASC
+        LIMIT ?
+        """,
+        (group_id, limit),
+    ).fetchall()
+    return [str(row["name"]) for row in rows]
 
 
 def compute_sort_key(year: int, month: int, day: int | None) -> int:

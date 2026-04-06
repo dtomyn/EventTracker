@@ -146,6 +146,7 @@
                 <input type="hidden" id="generated_suggested_event_year" value="">
                 <input type="hidden" id="generated_suggested_event_month" value="">
                 <input type="hidden" id="generated_suggested_event_day" value="">
+                <input type="hidden" id="generated_suggested_tags" value="">
             `;
         }
 
@@ -256,6 +257,7 @@
             const suggestedYear = document.getElementById('generated_suggested_event_year');
             const suggestedMonth = document.getElementById('generated_suggested_event_month');
             const suggestedDay = document.getElementById('generated_suggested_event_day');
+            const suggestedTags = document.getElementById('generated_suggested_tags');
 
             if (suggestedTitle && suggestedTitle.value) {
                 document.getElementById('title').value = suggestedTitle.value;
@@ -269,6 +271,9 @@
             if (suggestedDay) {
                 document.getElementById('event_day').value = suggestedDay.value;
             }
+            if (suggestedTags && suggestedTags.value) {
+                document.getElementById('tags').value = suggestedTags.value;
+            }
         }
 
         generateButton.addEventListener('click', async () => {
@@ -278,6 +283,7 @@
 
             const payload = new FormData();
             payload.append('title', document.getElementById('title').value);
+            payload.append('group_id', document.getElementById('group_id').value);
             payload.append('source_url', document.getElementById('source_url').value);
             payload.append('generated_text', currentSummaryText);
             payload.append('csrf_token', getCsrfToken());

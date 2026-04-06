@@ -94,6 +94,7 @@ def _generated_preview_partial(
     suggested_event_year: str = "",
     suggested_event_month: str = "",
     suggested_event_day: str = "",
+    suggested_tags: str = "",
 ) -> str:
     title_hint = ""
     if suggested_title:
@@ -114,6 +115,18 @@ def _generated_preview_partial(
             f"{date_value}</div>"
         )
 
+    tags_hint = ""
+    if suggested_tags:
+        badges = "".join(
+            f'<span class="badge text-bg-light border">{tag}</span>'
+            for tag in suggested_tags.split(", ")
+            if tag
+        )
+        tags_hint = (
+            '<div class="small text-body-secondary mt-2">Suggested tags:</div>'
+            f'<div class="d-flex flex-wrap gap-2 mt-1">{badges}</div>'
+        )
+
     return (
         f'<input type="hidden" id="generated_text" name="generated_text" value="{generated_text}">'
         f'<div id="generate-feedback" class="form-text {feedback_class}">{feedback_message}</div>'
@@ -121,7 +134,8 @@ def _generated_preview_partial(
         f'<input type="hidden" id="generated_suggested_event_year" value="{suggested_event_year}">'
         f'<input type="hidden" id="generated_suggested_event_month" value="{suggested_event_month}">'
         f'<input type="hidden" id="generated_suggested_event_day" value="{suggested_event_day}">'
-        f"{title_hint}{date_hint}"
+        f'<input type="hidden" id="generated_suggested_tags" value="{suggested_tags}">'
+        f"{title_hint}{date_hint}{tags_hint}"
     )
 
 
@@ -195,12 +209,13 @@ def test_ai_generation_applies_mocked_draft_and_metadata(
             content_type="text/html",
             body=_generated_preview_partial(
                 feedback_class="text-success",
-                feedback_message="Summary, title, and date suggestions generated from the current input.",
+                feedback_message="Summary, title, date, and tag suggestions generated from the current input.",
                 generated_text=generated_html,
                 suggested_title="Generated release summary",
                 suggested_event_year="2026",
                 suggested_event_month="3",
                 suggested_event_day="18",
+                suggested_tags="release, milestone, launch",
             ),
         ),
     )
@@ -208,6 +223,7 @@ def test_ai_generation_applies_mocked_draft_and_metadata(
     page.goto("/entries/new")
     page.get_by_label("Timeline Group").select_option(str(group_id))
     page.get_by_label("Title").fill("Original draft title")
+    page.get_by_label("Tags").fill("manual, tags")
     _fill_summary_and_wait_for_html_preview(page, "<p>Existing summary</p>")
 
     with page.expect_response(
@@ -223,12 +239,13 @@ def test_ai_generation_applies_mocked_draft_and_metadata(
             page.get_by_role("button", name="Generate").click()
 
     expect(page.locator("#generate-feedback")).to_have_text(
-        "Summary, title, and date suggestions generated from the current input."
+        "Summary, title, date, and tag suggestions generated from the current input."
     )
     expect(page.get_by_label("Title")).to_have_value("Generated release summary")
     expect(page.get_by_label("Year")).to_have_value("2026")
     expect(page.get_by_label("Month")).to_have_value("3")
     expect(page.get_by_label("Day")).to_have_value("18")
+    expect(page.get_by_label("Tags")).to_have_value("release, milestone, launch")
     expect(page.get_by_label("Event Summary")).to_have_value(generated_html)
     expect(page.locator("#final-text-preview strong")).to_have_text("summary")
     expect(page.locator("#final-text-preview")).to_contain_text(
@@ -253,6 +270,7 @@ def test_ai_generation_renders_mocked_error_partials_without_overwriting_form_va
     group_id = ensure_dedicated_group()
     original_title = "Keep my title"
     original_summary = "<p>Keep my manually written summary.</p>"
+    original_tags = "manual, tags"
 
     page.route(
         "**/entries/generate",
@@ -270,6 +288,7 @@ def test_ai_generation_renders_mocked_error_partials_without_overwriting_form_va
     page.goto("/entries/new")
     page.get_by_label("Timeline Group").select_option(str(group_id))
     page.get_by_label("Title").fill(original_title)
+    page.get_by_label("Tags").fill(original_tags)
     _fill_summary_and_wait_for_html_preview(page, original_summary)
 
     with page.expect_response(
@@ -282,6 +301,7 @@ def test_ai_generation_renders_mocked_error_partials_without_overwriting_form_va
     expect(page.locator("#generate-feedback")).to_have_text(feedback_message)
     expect(page.get_by_label("Title")).to_have_value(original_title)
     expect(page.get_by_label("Event Summary")).to_have_value(original_summary)
+    expect(page.get_by_label("Tags")).to_have_value(original_tags)
 
 
 def test_group_web_search_panel_is_hidden_without_a_group_query(

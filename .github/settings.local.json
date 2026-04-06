@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/Scripts/pytest.exe tests/test_sanitize.py tests/test_extraction.py tests/test_admin_groups.py -v)",
+      "Bash(.venv/Scripts/pytest.exe tests/ -v)",
+      "Bash(.venv/Scripts/pytest.exe tests/ -x --ignore=tests/e2e -v --timeout=120)",
+      "Bash(.venv/Scripts/pytest.exe tests/ -x --ignore=tests/e2e -v)",
+      "Bash(.venv/Scripts/pytest.exe tests/ --ignore=tests/e2e -v)"
+    ]
+  }
+}

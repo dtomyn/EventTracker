@@ -10,6 +10,7 @@ from app.models import Entry
 from app.schemas import EntryLinkPayload, EntryPayload
 from app.services.entries import (
     build_timeline_groups,
+    list_group_tag_vocabulary,
     list_saved_entry_urls,
     list_timeline_month_buckets,
     list_timeline_summary_groups,
@@ -185,3 +186,86 @@ class TestSavedEntryUrls(unittest.TestCase):
                 "https://example.com/additional",
             },
         )
+
+
+class TestGroupTagVocabulary(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.previous_db_path = os.environ.get("EVENTTRACKER_DB_PATH")
+        os.environ["EVENTTRACKER_DB_PATH"] = str(
+            Path(self.temp_dir.name) / "EventTracker-test.db"
+        )
+        init_db()
+
+    def tearDown(self) -> None:
+        if self.previous_db_path is None:
+            os.environ.pop("EVENTTRACKER_DB_PATH", None)
+        else:
+            os.environ["EVENTTRACKER_DB_PATH"] = self.previous_db_path
+        self.temp_dir.cleanup()
+
+    def test_list_group_tag_vocabulary_prefers_most_used_tags_in_selected_group(
+        self,
+    ) -> None:
+        with connection_context() as connection:
+            group_cursor = connection.execute(
+                "INSERT INTO timeline_groups(name, web_search_query, is_default) VALUES (?, NULL, 0)",
+                ("Other Group",),
+            )
+            assert group_cursor.lastrowid is not None
+            group_two_id = int(group_cursor.lastrowid)
+            save_entry(
+                connection,
+                EntryPayload(
+                    event_year=2026,
+                    event_month=3,
+                    event_day=20,
+                    group_id=1,
+                    title="Release prep",
+                    source_url=None,
+                    generated_text=None,
+                    final_text="<p>Prepared the release.</p>",
+                    tags=["release", "milestone", "launch"],
+                    links=[],
+                ),
+            )
+            save_entry(
+                connection,
+                EntryPayload(
+                    event_year=2026,
+                    event_month=3,
+                    event_day=21,
+                    group_id=1,
+                    title="Release shipped",
+                    source_url=None,
+                    generated_text=None,
+                    final_text="<p>Shipped the release.</p>",
+                    tags=["release", "announcement"],
+                    links=[],
+                ),
+            )
+            save_entry(
+                connection,
+                EntryPayload(
+                    event_year=2026,
+                    event_month=3,
+                    event_day=22,
+                    group_id=group_two_id,
+                    title="Other group",
+                    source_url=None,
+                    generated_text=None,
+                    final_text="<p>Separate group tags.</p>",
+                    tags=["release", "unrelated"],
+                    links=[],
+                ),
+            )
+
+            vocabulary = list_group_tag_vocabulary(connection, 1)
+
+        self.assertEqual(vocabulary, ["release", "announcement", "launch", "milestone"])
+
+    def test_list_group_tag_vocabulary_returns_empty_for_zero_limit(self) -> None:
+        with connection_context() as connection:
+            vocabulary = list_group_tag_vocabulary(connection, 1, limit=0)
+
+        self.assertEqual(vocabulary, [])

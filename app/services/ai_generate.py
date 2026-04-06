@@ -15,6 +15,7 @@ from openai.types.chat import ChatCompletionSystemMessageParam
 from openai.types.chat import ChatCompletionUserMessageParam
 
 from app.env import load_app_env
+from app.services.entries import normalize_tags
 from app.services import copilot_runtime
 from app.services.copilot_runtime import COPILOT_CLIENT_SETTINGS_MESSAGE
 from app.services.copilot_runtime import COPILOT_SDK_REQUIRED_MESSAGE
@@ -29,13 +30,15 @@ GENERATION_SYSTEM_PROMPT = (
     "You write concise personal timeline entry suggestions. Return JSON only with "
     'this exact schema: {"title": string, "draft_html": string, '
     '"event_year": number|null, "event_month": number|null, '
-    '"event_day": number|null}. Do not wrap the JSON in markdown fences. '
+    '"event_day": number|null, "suggested_tags": string[]}. Do not wrap the JSON in markdown fences. '
     "The title should be short, specific, and catchy. The draft_html should be "
     "factual, concise, and may use only simple HTML tags such as <p>, <b>, "
     "<strong>, <i>, <em>, <ul>, <ol>, <li>, <br>, <blockquote>, <code>, and <u>. "
-    "Prefer one short paragraph unless a short list genuinely improves clarity. "
+    "Prefer two to three short paragraphs unless a short list genuinely improves clarity. "
     "Infer the date from the supplied content only when reasonably supported; use "
-    "null for unknown fields, especially event_day when the day is not explicit."
+    "null for unknown fields, especially event_day when the day is not explicit. "
+    "Return up to 5 concise suggested_tags. Prefer supplied existing tags when they fit, "
+    "avoid duplicates or near-duplicates, and create new tags only when needed."
 )
 
 
@@ -54,11 +57,15 @@ class GeneratedEntrySuggestion:
     event_year: int | None = None
     event_month: int | None = None
     event_day: int | None = None
+    suggested_tags: list[str] | None = None
 
 
 class DraftGenerator(Protocol):
     async def generate_entry_suggestion(
-        self, title: str, extraction: ExtractionResult | None = None
+        self,
+        title: str,
+        extraction: ExtractionResult | None = None,
+        preferred_tags: list[str] | None = None,
     ) -> GeneratedEntrySuggestion: ...
 
 
@@ -85,13 +92,16 @@ class OpenAIChatDraftGenerator:
         )
 
     async def generate_entry_suggestion(
-        self, title: str, extraction: ExtractionResult | None = None
+        self,
+        title: str,
+        extraction: ExtractionResult | None = None,
+        preferred_tags: list[str] | None = None,
     ) -> GeneratedEntrySuggestion:
         normalized_title = _normalize_text(title)
         if not normalized_title and extraction is None:
             raise ValueError("Provide a title or source URL to generate a draft.")
 
-        prompt = _build_user_prompt(normalized_title, extraction)
+        prompt = _build_user_prompt(normalized_title, extraction, preferred_tags)
 
         response = await self._client.chat.completions.create(
             model=self._settings.model_id,
@@ -106,13 +116,16 @@ class CopilotChatDraftGenerator:
         self._settings = settings
 
     async def generate_entry_suggestion(
-        self, title: str, extraction: ExtractionResult | None = None
+        self,
+        title: str,
+        extraction: ExtractionResult | None = None,
+        preferred_tags: list[str] | None = None,
     ) -> GeneratedEntrySuggestion:
         normalized_title = _normalize_text(title)
         if not normalized_title and extraction is None:
             raise ValueError("Provide a title or source URL to generate a draft.")
 
-        prompt = _build_user_prompt(normalized_title, extraction)
+        prompt = _build_user_prompt(normalized_title, extraction, preferred_tags)
 
         response_content = await self._generate_response_content(prompt)
         return _finalize_suggestion(response_content, normalized_title, extraction)
@@ -159,10 +172,12 @@ class CopilotChatDraftGenerator:
 
 
 async def generate_entry_suggestion(
-    title: str, extraction: ExtractionResult | None = None
+    title: str,
+    extraction: ExtractionResult | None = None,
+    preferred_tags: list[str] | None = None,
 ) -> GeneratedEntrySuggestion:
     generator = get_draft_generator()
-    return await generator.generate_entry_suggestion(title, extraction)
+    return await generator.generate_entry_suggestion(title, extraction, preferred_tags)
 
 
 @lru_cache(maxsize=1)
@@ -245,13 +260,18 @@ def _finalize_suggestion(
             event_year=suggestion.event_year,
             event_month=suggestion.event_month,
             event_day=suggestion.event_day,
+            suggested_tags=suggestion.suggested_tags,
         )
     if not suggestion.title:
         raise DraftGenerationError("The AI provider returned an empty title.")
     return suggestion
 
 
-def _build_user_prompt(title: str, extraction: ExtractionResult | None) -> str:
+def _build_user_prompt(
+    title: str,
+    extraction: ExtractionResult | None,
+    preferred_tags: list[str] | None,
+) -> str:
     prompt = [
         "Create a structured suggestion for a personal timeline entry.",
     ]
@@ -268,9 +288,16 @@ def _build_user_prompt(title: str, extraction: ExtractionResult | None) -> str:
             f"Excerpt={_normalize_text(extraction.text[:2000])}"
         )
 
+    if preferred_tags:
+        prompt.append(
+            "Preferred existing tags for this timeline group: "
+            + ", ".join(preferred_tags)
+        )
+
     prompt.append(
         "Keep it factual, readable, and ready for manual editing. If there is not "
-        "enough evidence for the date, return null for the missing parts."
+        "enough evidence for the date, return null for the missing parts. Return "
+        "up to 5 tags, and prefer the supplied group tags whenever they are a good fit."
     )
     return "\n".join(prompt)
 
@@ -327,7 +354,21 @@ def _parse_generation_response(value: str) -> GeneratedEntrySuggestion:
             payload.get("event_month"), minimum=1, maximum=12
         ),
         event_day=_coerce_optional_int(payload.get("event_day"), minimum=1, maximum=31),
+        suggested_tags=_normalize_suggested_tags(payload.get("suggested_tags")),
     )
+
+
+def _normalize_suggested_tags(value: object) -> list[str]:
+    """Normalize model-returned tags to a short deduplicated list for the form."""
+    if value in (None, ""):
+        return []
+    if isinstance(value, str):
+        raw_value = value
+    elif isinstance(value, list):
+        raw_value = ", ".join(str(item) for item in value)
+    else:
+        return []
+    return normalize_tags(raw_value)[:5]
 
 
 def _coerce_optional_int(value: object, *, minimum: int, maximum: int) -> int | None:
