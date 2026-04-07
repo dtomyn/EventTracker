@@ -90,6 +90,7 @@ from app.services.entries import (
     utc_now_iso,
     update_entry,
     validate_entry_form,
+    get_heatmap_counts,
 )
 from app.services.extraction import extract_url_text
 from app.services.group_web_search import (
@@ -379,6 +380,13 @@ class TimelineSummariesPayload(TypedDict):
     month: int | None
     group_count: int
     items_html: str
+
+
+class HeatmapPayload(TypedDict):
+    counts: dict[str, int]
+    total: int
+    year: int
+    years_available: list[int]
 
 
 class SearchResultsPayload(TypedDict):
@@ -1507,6 +1515,101 @@ def api_group_topics(group_id: int) -> JSONResponse:
         graph = get_topic_clusters_from_cache(connection, group_id)
         return JSONResponse(asdict(graph))
 
+@app.get("/api/heatmap")
+def api_heatmap(year: int | None = None, group_id: int | None = None) -> JSONResponse:
+    with connection_context() as connection:
+        resolved_year: int
+        if year is None:
+            row = connection.execute(
+                "SELECT MAX(event_year) FROM entries"
+            ).fetchone()
+            resolved_year = int(row[0]) if row and row[0] else datetime.now().year
+        else:
+            resolved_year = year
+
+        data = get_heatmap_counts(connection, year=resolved_year, group_id=group_id)
+
+    payload: HeatmapPayload = {
+        "counts": data.counts,
+        "total": data.total,
+        "year": data.year,
+        "years_available": data.years_available,
+    }
+    return JSONResponse(payload)
+
+
+@app.get("/timeline/heatmap")
+def timeline_heatmap(
+    q: str = "",
+    group_id: str = "",
+    year: int | None = None,
+) -> JSONResponse:
+    """Return a payload that tells the client to switch to the heatmap view."""
+    payload = {
+        "view": "heatmap",
+        "year": year,
+    }
+    return JSONResponse(payload)
+
+
+@app.get("/timeline/heatmap/entries", response_class=HTMLResponse)
+def timeline_heatmap_entries(
+    request: Request,
+    year: int,
+    month: int,
+    day: int,
+    group_id: int | None = None,
+) -> HTMLResponse:
+    with connection_context() as connection:
+        group_filter = "AND e.group_id = ?" if group_id is not None else ""
+        params: tuple[object, ...] = (year, month, day)
+        if group_id is not None:
+            params = (year, month, day, group_id)
+
+        rows = connection.execute(
+            f"""
+            SELECT
+                e.*,
+                tg.name AS group_name,
+                COALESCE(GROUP_CONCAT(DISTINCT t.name), '') AS tags_csv,
+                COALESCE(
+                    json_group_array(
+                        DISTINCT CASE
+                            WHEN el.id IS NOT NULL THEN json_object(
+                                'id', el.id,
+                                'url', el.url,
+                                'note', el.note,
+                                'created_utc', el.created_utc
+                            )
+                        END
+                    ),
+                    '[]'
+                ) AS links_json
+            FROM entries e
+            JOIN timeline_groups tg ON tg.id = e.group_id
+            LEFT JOIN entry_tags et ON et.entry_id = e.id
+            LEFT JOIN tags t ON t.id = et.tag_id
+            LEFT JOIN entry_links el ON el.entry_id = e.id
+            WHERE e.event_year = ? AND e.event_month = ? AND e.event_day = ?
+                {group_filter}
+            GROUP BY e.id, tg.name
+            ORDER BY e.sort_key DESC, e.updated_utc DESC
+            """,
+            params,
+        ).fetchall()
+
+        from app.services.entries import entry_from_row
+        entries = [entry_from_row(row) for row in rows]
+
+    date_label = f"{_month_name(month)} {day}, {year}"
+    html = _render_partial(
+        "partials/heatmap_entries.html",
+        entries=entries,
+        date_label=date_label,
+    )
+    return HTMLResponse(html)
+
+
 @app.get("/groups/{group_id}/topics/graph", response_class=HTMLResponse)
 async def group_topics_graph(request: Request, group_id: int) -> HTMLResponse:
     with connection_context() as connection:
@@ -1885,11 +1988,13 @@ async def generate_entry_preview(
     title: str = Form(""),
     group_id: str = Form(""),
     source_url: str = Form(""),
+    summary_instructions: str = Form(""),
     generated_text: str = Form(""),
 ) -> HTMLResponse:
     prompt_title = title.strip()
     selected_group_id = _parse_group_id(group_id)
     cleaned_source_url = source_url.strip()
+    cleaned_summary_instructions = summary_instructions.strip()
     preferred_tags: list[str] = []
     if not prompt_title and not cleaned_source_url:
         context: GeneratedPreviewContext = {
@@ -1936,6 +2041,7 @@ async def generate_entry_preview(
             prompt_title,
             extraction,
             preferred_tags,
+            cleaned_summary_instructions,
         )
         generated_text = suggestion.draft_html
     except DraftGenerationConfigurationError as exc:
@@ -2696,6 +2802,11 @@ def _list_timeline_details_for_scope(
 def _render_partial(template_name: str, **context: object) -> str:
     template = templates.get_template(template_name)
     return template.render(**context)
+
+
+def _month_name(month: int) -> str:
+    import calendar
+    return calendar.month_name[month]
 
 
 def _build_timeline_group_web_search_payload(

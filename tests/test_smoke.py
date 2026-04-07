@@ -393,6 +393,35 @@ class TestAppSmokeTests(unittest.TestCase):
         self.assertIsNotNone(first_entry)
         self.assertEqual(first_entry["source_url"], "https://example.com/original")
 
+    def test_edit_entry_form_includes_summary_instructions_field(self) -> None:
+        with TestClient(app) as client:
+            create_response = client.post(
+                "/entries/new",
+                data={
+                    "event_year": "2026",
+                    "event_month": "4",
+                    "event_day": "6",
+                    "group_id": "1",
+                    "title": "Editable entry",
+                    "source_url": "https://example.com/editable-entry",
+                    "generated_text": "",
+                    "final_text": "<p>Editable entry content.</p>",
+                    "tags": "",
+                },
+                follow_redirects=False,
+            )
+            self.assertEqual(create_response.status_code, 303)
+
+            entry_id = self._first_entry_id()
+            edit_form_response = client.get(f"/entries/{entry_id}")
+
+        self.assertEqual(edit_form_response.status_code, 200)
+        self.assertIn('id="summary_instructions"', edit_form_response.text)
+        self.assertIn(
+            'name="summary_instructions"',
+            edit_form_response.text,
+        )
+
     def test_timeline_filter_supports_english_query_via_semantic_match(self) -> None:
         with TestClient(app) as client:
             first_response = client.post(
@@ -1386,9 +1415,40 @@ class TestAppSmokeTests(unittest.TestCase):
             response.text,
         )
         self.assertIn(
-            "Summary, title, and date suggestions generated from the current input.",
+            "Summary, title, date, and tag suggestions generated from the current input.",
             response.text,
         )
+
+    def test_generation_passes_summary_instructions_to_draft_generator(self) -> None:
+        with patch(
+            "app.main.generate_entry_suggestion",
+            return_value=GeneratedEntrySuggestion(
+                title="Launch Momentum",
+                draft_html="<p>Released the first milestone.</p>",
+                event_year=2026,
+                event_month=3,
+                event_day=16,
+            ),
+        ) as mocked_generate:
+            with TestClient(app) as client:
+                response = client.post(
+                    "/entries/generate",
+                    data={
+                        "title": "Release milestone",
+                        "source_url": "",
+                        "summary_instructions": " Focus on technical impact only. ",
+                        "generated_text": "",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        await_args = mocked_generate.await_args
+        self.assertIsNotNone(await_args)
+        assert await_args is not None
+        self.assertEqual(await_args.args[0], "Release milestone")
+        self.assertIsNone(await_args.args[1])
+        self.assertEqual(await_args.args[2], [])
+        self.assertEqual(await_args.args[3], "Focus on technical impact only.")
 
     def test_generation_accepts_source_url_only_for_multipart_requests(self) -> None:
         with patch.dict(os.environ, {"TESTING": ""}, clear=False):
@@ -1568,3 +1628,242 @@ class TestAppSmokeTests(unittest.TestCase):
             follow_redirects=False,
         )
         self.assertEqual(response.status_code, 303)
+
+
+class TestSecurityAndNegativeCases(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.previous_env = {key: os.environ.get(key) for key in ENV_KEYS}
+
+        for key in ENV_KEYS:
+            os.environ.pop(key, None)
+
+        os.environ["EVENTTRACKER_DB_PATH"] = str(
+            Path(self.temp_dir.name) / "EventTracker-test.db"
+        )
+        os.environ["TESTING"] = "1"
+        get_draft_generator.cache_clear()
+        load_embedding_settings.cache_clear()
+
+    def tearDown(self) -> None:
+        for key, value in self.previous_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+        get_draft_generator.cache_clear()
+        load_embedding_settings.cache_clear()
+        self.temp_dir.cleanup()
+
+    @staticmethod
+    def _first_entry_id() -> int:
+        with connection_context() as connection:
+            row = connection.execute(
+                "SELECT id FROM entries ORDER BY id ASC LIMIT 1"
+            ).fetchone()
+        assert row is not None
+        return int(row["id"])
+
+    # --- XSS Resistance Tests ---
+
+    def test_script_in_title_is_escaped(self) -> None:
+        with TestClient(app) as client:
+            response = client.post(
+                "/entries/new",
+                data=csrf_data(client, {
+                    "event_year": "2026", "event_month": "3", "event_day": "15",
+                    "group_id": "1", "title": "<script>alert(1)</script>",
+                    "final_text": "<p>Content</p>",
+                    "source_url": "", "tags": "", "generated_text": "",
+                    "summary_instructions": "",
+                }),
+                follow_redirects=False,
+            )
+            self.assertEqual(response.status_code, 303)
+
+            entry_id = self._first_entry_id()
+            view_response = client.get(f"/entries/{entry_id}/view")
+
+        self.assertEqual(view_response.status_code, 200)
+        self.assertNotIn("<script>alert(1)</script>", view_response.text)
+
+    def test_script_in_tag_name_is_escaped(self) -> None:
+        with TestClient(app) as client:
+            response = client.post(
+                "/entries/new",
+                data=csrf_data(client, {
+                    "event_year": "2026", "event_month": "3", "event_day": "15",
+                    "group_id": "1", "title": "Tag XSS test",
+                    "final_text": "<p>Content</p>",
+                    "source_url": "", "tags": "<script>alert(1)</script>",
+                    "generated_text": "", "summary_instructions": "",
+                }),
+                follow_redirects=False,
+            )
+            self.assertEqual(response.status_code, 303)
+
+            timeline_response = client.get("/")
+
+        self.assertEqual(timeline_response.status_code, 200)
+        self.assertNotIn("<script>alert(1)</script>", timeline_response.text)
+
+    def test_script_in_group_name_is_escaped(self) -> None:
+        with TestClient(app) as client:
+            create_response = client.post(
+                "/admin/groups",
+                data=csrf_data(client, {"name": "<script>alert(1)</script>"}),
+                follow_redirects=False,
+            )
+            self.assertIn(create_response.status_code, (303, 200))
+
+            admin_response = client.get("/admin/groups")
+
+        self.assertEqual(admin_response.status_code, 200)
+        self.assertNotIn("<script>alert(1)</script>", admin_response.text)
+
+    def test_script_in_link_note_is_escaped(self) -> None:
+        with TestClient(app) as client:
+            response = client.post(
+                "/entries/new",
+                data=csrf_data(client, {
+                    "event_year": "2026", "event_month": "3", "event_day": "15",
+                    "group_id": "1", "title": "Link note XSS test",
+                    "final_text": "<p>Content</p>",
+                    "source_url": "", "tags": "", "generated_text": "",
+                    "summary_instructions": "",
+                    "link_url": ["https://example.com/xss"],
+                    "link_note": ["<img onerror=alert(1) src=x>"],
+                }),
+                follow_redirects=False,
+            )
+            self.assertEqual(response.status_code, 303)
+
+            entry_id = self._first_entry_id()
+            view_response = client.get(f"/entries/{entry_id}/view")
+
+        self.assertEqual(view_response.status_code, 200)
+        self.assertNotIn("<img onerror=alert(1) src=x>", view_response.text)
+
+    # --- Route Negative Tests ---
+
+    def test_get_nonexistent_entry_edit_returns_404(self) -> None:
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.get("/entries/99999")
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_post_entry_with_missing_title_shows_error(self) -> None:
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.post(
+                "/entries/new",
+                data=csrf_data(client, {
+                    "event_year": "2026", "event_month": "3", "event_day": "15",
+                    "group_id": "1", "title": "",
+                    "final_text": "<p>Content</p>",
+                    "source_url": "", "tags": "", "generated_text": "",
+                    "summary_instructions": "",
+                }),
+                follow_redirects=False,
+            )
+
+        self.assertIn(response.status_code, (200, 400, 422))
+        self.assertIn("title", response.text.lower())
+
+    def test_post_entry_with_invalid_month_shows_error(self) -> None:
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.post(
+                "/entries/new",
+                data=csrf_data(client, {
+                    "event_year": "2026", "event_month": "13", "event_day": "15",
+                    "group_id": "1", "title": "Invalid month test",
+                    "final_text": "<p>Content</p>",
+                    "source_url": "", "tags": "", "generated_text": "",
+                    "summary_instructions": "",
+                }),
+                follow_redirects=False,
+            )
+
+        self.assertIn(response.status_code, (200, 400, 422))
+
+    def test_post_entry_with_invalid_group_id_format(self) -> None:
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.post(
+                "/entries/new",
+                data=csrf_data(client, {
+                    "event_year": "2026", "event_month": "3", "event_day": "15",
+                    "group_id": "abc", "title": "Invalid group test",
+                    "final_text": "<p>Content</p>",
+                    "source_url": "", "tags": "", "generated_text": "",
+                    "summary_instructions": "",
+                }),
+                follow_redirects=False,
+            )
+
+        self.assertIn(response.status_code, (200, 400, 422))
+
+    def test_get_entry_with_string_id_returns_404_or_422(self) -> None:
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.get("/entries/abc/view")
+
+        self.assertIn(response.status_code, (404, 422))
+
+    def test_generate_with_no_title_returns_error(self) -> None:
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.post(
+                "/entries/generate",
+                data=csrf_data(client, {
+                    "title": "",
+                    "group_id": "",
+                    "source_url": "",
+                    "summary_instructions": "",
+                    "generated_text": "",
+                }),
+                follow_redirects=False,
+            )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_admin_create_group_with_very_long_name(self) -> None:
+        long_name = "A" * 10000
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.post(
+                "/admin/groups",
+                data=csrf_data(client, {"name": long_name}),
+                follow_redirects=False,
+            )
+
+        self.assertIn(response.status_code, (200, 303, 400, 422))
+
+    def test_export_with_empty_database(self) -> None:
+        with TestClient(app) as client:
+            response = client.get("/entries/export")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("entries", payload)
+        self.assertIsInstance(payload["entries"], list)
+        self.assertEqual(payload["count"], 0)
+
+    # --- CSRF Edge Cases ---
+
+    def test_csrf_rejected_on_post_without_testing_env(self) -> None:
+        previous_testing = os.environ.pop("TESTING", None)
+        try:
+            with TestClient(app, raise_server_exceptions=False) as client:
+                response = client.post(
+                    "/entries/new",
+                    data={
+                        "event_year": "2026", "event_month": "3", "event_day": "15",
+                        "group_id": "1", "title": "Should be rejected",
+                        "final_text": "<p>Content</p>",
+                        "source_url": "", "tags": "", "generated_text": "",
+                        "summary_instructions": "",
+                    },
+                    follow_redirects=False,
+                )
+
+            self.assertIn(response.status_code, (403, 400))
+        finally:
+            if previous_testing is not None:
+                os.environ["TESTING"] = previous_testing

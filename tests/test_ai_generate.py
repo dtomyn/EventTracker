@@ -20,6 +20,7 @@ from app.services.ai_generate import (
     DraftGenerationError,
     OpenAIChatDraftGenerator,
     OpenAISettings,
+    _build_user_prompt,
     _parse_generation_response,
     get_draft_generator,
     load_ai_provider,
@@ -291,6 +292,26 @@ class TestGeneratedDraftNormalization(unittest.TestCase):
         )
 
 
+class TestPromptBuilder(unittest.TestCase):
+    def test_build_user_prompt_appends_summary_instructions(self) -> None:
+        prompt = _build_user_prompt(
+            "Release milestone",
+            None,
+            ["release", "milestone"],
+            " Focus on the technical impact and omit promotional phrasing. ",
+        )
+
+        self.assertIn("Current title hint: Release milestone", prompt)
+        self.assertIn(
+            "Additional summarization instructions: Focus on the technical impact and omit promotional phrasing.",
+            prompt,
+        )
+        self.assertIn(
+            "Preferred existing tags for this timeline group: release, milestone",
+            prompt,
+        )
+
+
 class TestCopilotSdkWrapper(unittest.TestCase):
     def test_wrapper_exposes_installed_copilot_sdk_symbols(self) -> None:
         from app.services import copilot_sdk
@@ -428,3 +449,295 @@ class TestCopilotChatDraftGenerator(unittest.TestCase):
             generator = CopilotChatDraftGenerator(CopilotSettings(model_id="gpt-5"))
             with self.assertRaises(DraftGenerationError):
                 _run_async(generator.generate_entry_suggestion("Release milestone"))
+
+
+class TestNormalizeText(unittest.TestCase):
+    def test_collapses_multiple_spaces(self) -> None:
+        from app.services.ai_generate import _normalize_text
+
+        self.assertEqual(_normalize_text("hello   world"), "hello world")
+
+    def test_collapses_tabs_and_newlines(self) -> None:
+        from app.services.ai_generate import _normalize_text
+
+        self.assertEqual(_normalize_text("hello\t\tworld\nfoo"), "hello world foo")
+
+    def test_already_normal_text_unchanged(self) -> None:
+        from app.services.ai_generate import _normalize_text
+
+        self.assertEqual(_normalize_text("hello world"), "hello world")
+
+    def test_empty_string(self) -> None:
+        from app.services.ai_generate import _normalize_text
+
+        self.assertEqual(_normalize_text(""), "")
+
+    def test_strips_leading_and_trailing_whitespace(self) -> None:
+        from app.services.ai_generate import _normalize_text
+
+        self.assertEqual(_normalize_text("  hello  "), "hello")
+
+
+class TestNormalizeHtml(unittest.TestCase):
+    def test_replaces_crlf_with_lf(self) -> None:
+        from app.services.ai_generate import _normalize_html
+
+        self.assertEqual(_normalize_html("line1\r\nline2"), "line1\nline2")
+
+    def test_strips_leading_and_trailing_whitespace(self) -> None:
+        from app.services.ai_generate import _normalize_html
+
+        self.assertEqual(_normalize_html("  <p>hello</p>  "), "<p>hello</p>")
+
+    def test_already_normal_html_unchanged(self) -> None:
+        from app.services.ai_generate import _normalize_html
+
+        self.assertEqual(_normalize_html("<p>hello</p>"), "<p>hello</p>")
+
+
+class TestNormalizeGeneratedHtml(unittest.TestCase):
+    def test_removes_bom_character(self) -> None:
+        from app.services.ai_generate import _normalize_generated_html
+
+        self.assertEqual(_normalize_generated_html("\ufeff<p>hello</p>"), "<p>hello</p>")
+
+    def test_removes_zero_width_space(self) -> None:
+        from app.services.ai_generate import _normalize_generated_html
+
+        self.assertEqual(
+            _normalize_generated_html("<p>hel\u200blo</p>"), "<p>hello</p>"
+        )
+
+    def test_normal_text_unchanged(self) -> None:
+        from app.services.ai_generate import _normalize_generated_html
+
+        self.assertEqual(
+            _normalize_generated_html("<p>Café</p>"), "<p>Café</p>"
+        )
+
+    def test_strips_and_normalizes_crlf(self) -> None:
+        from app.services.ai_generate import _normalize_generated_html
+
+        self.assertEqual(
+            _normalize_generated_html("  <p>hi</p>\r\n"), "<p>hi</p>"
+        )
+
+
+class TestCoerceOptionalInt(unittest.TestCase):
+    def test_none_returns_none(self) -> None:
+        from app.services.ai_generate import _coerce_optional_int
+
+        self.assertIsNone(_coerce_optional_int(None, minimum=1, maximum=100))
+
+    def test_empty_string_returns_none(self) -> None:
+        from app.services.ai_generate import _coerce_optional_int
+
+        self.assertIsNone(_coerce_optional_int("", minimum=1, maximum=100))
+
+    def test_bool_returns_none(self) -> None:
+        from app.services.ai_generate import _coerce_optional_int
+
+        self.assertIsNone(_coerce_optional_int(True, minimum=0, maximum=100))
+        self.assertIsNone(_coerce_optional_int(False, minimum=0, maximum=100))
+
+    def test_valid_int(self) -> None:
+        from app.services.ai_generate import _coerce_optional_int
+
+        self.assertEqual(_coerce_optional_int(5, minimum=1, maximum=100), 5)
+
+    def test_float_with_zero_fraction(self) -> None:
+        from app.services.ai_generate import _coerce_optional_int
+
+        self.assertEqual(_coerce_optional_int(5.0, minimum=1, maximum=100), 5)
+
+    def test_float_with_nonzero_fraction_returns_none(self) -> None:
+        from app.services.ai_generate import _coerce_optional_int
+
+        self.assertIsNone(_coerce_optional_int(5.5, minimum=1, maximum=100))
+
+    def test_out_of_range_returns_none(self) -> None:
+        from app.services.ai_generate import _coerce_optional_int
+
+        self.assertIsNone(_coerce_optional_int(200, minimum=1, maximum=100))
+        self.assertIsNone(_coerce_optional_int(0, minimum=1, maximum=100))
+
+    def test_string_number(self) -> None:
+        from app.services.ai_generate import _coerce_optional_int
+
+        self.assertEqual(_coerce_optional_int("5", minimum=1, maximum=100), 5)
+
+    def test_string_non_numeric_returns_none(self) -> None:
+        from app.services.ai_generate import _coerce_optional_int
+
+        self.assertIsNone(_coerce_optional_int("abc", minimum=1, maximum=100))
+
+
+class TestNormalizeSuggestedTags(unittest.TestCase):
+    def test_none_returns_empty_list(self) -> None:
+        from app.services.ai_generate import _normalize_suggested_tags
+
+        self.assertEqual(_normalize_suggested_tags(None), [])
+
+    def test_empty_string_returns_empty_list(self) -> None:
+        from app.services.ai_generate import _normalize_suggested_tags
+
+        self.assertEqual(_normalize_suggested_tags(""), [])
+
+    def test_list_of_strings(self) -> None:
+        from app.services.ai_generate import _normalize_suggested_tags
+
+        self.assertEqual(
+            _normalize_suggested_tags(["release", "milestone"]),
+            ["release", "milestone"],
+        )
+
+    def test_single_string(self) -> None:
+        from app.services.ai_generate import _normalize_suggested_tags
+
+        self.assertEqual(_normalize_suggested_tags("release"), ["release"])
+
+    def test_truncates_to_five(self) -> None:
+        from app.services.ai_generate import _normalize_suggested_tags
+
+        tags = ["a", "b", "c", "d", "e", "f", "g"]
+        result = _normalize_suggested_tags(tags)
+        self.assertEqual(len(result), 5)
+        self.assertEqual(result, ["a", "b", "c", "d", "e"])
+
+    def test_list_with_non_string_items(self) -> None:
+        from app.services.ai_generate import _normalize_suggested_tags
+
+        result = _normalize_suggested_tags(["release", 42, None])
+        self.assertIsInstance(result, list)
+        self.assertIn("release", result)
+
+
+class TestBuildUserPromptDetailed(unittest.TestCase):
+    def test_title_only(self) -> None:
+        prompt = _build_user_prompt("My event", None, None, "")
+        self.assertIn("Current title hint: My event", prompt)
+        self.assertNotIn("Source context:", prompt)
+        self.assertNotIn("Additional summarization instructions:", prompt)
+        self.assertNotIn("Preferred existing tags", prompt)
+
+    def test_with_extraction(self) -> None:
+        from app.services.extraction import ExtractionResult
+
+        extraction = ExtractionResult(
+            source_url="https://example.com",
+            title="Example Page",
+            text="Some extracted content here.",
+        )
+        prompt = _build_user_prompt("My event", extraction, None, "")
+        self.assertIn("Source context:", prompt)
+        self.assertIn("Example Page", prompt)
+
+    def test_with_preferred_tags(self) -> None:
+        prompt = _build_user_prompt("My event", None, ["tag1", "tag2"], "")
+        self.assertIn("Preferred existing tags for this timeline group: tag1, tag2", prompt)
+
+    def test_with_summary_instructions(self) -> None:
+        prompt = _build_user_prompt("My event", None, None, "Be concise.")
+        self.assertIn("Additional summarization instructions: Be concise.", prompt)
+
+    def test_all_combined(self) -> None:
+        from app.services.extraction import ExtractionResult
+
+        extraction = ExtractionResult(
+            source_url="https://example.com",
+            title="Page Title",
+            text="Page content.",
+        )
+        prompt = _build_user_prompt(
+            "My event", extraction, ["tag1"], "Be brief."
+        )
+        self.assertIn("Current title hint: My event", prompt)
+        self.assertIn("Source context:", prompt)
+        self.assertIn("Additional summarization instructions: Be brief.", prompt)
+        self.assertIn("Preferred existing tags for this timeline group: tag1", prompt)
+
+
+class TestLoadOpenAISettings(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.env_file = Path(self.temp_dir.name) / ".env"
+        self.env_file.write_text("", encoding="utf-8")
+        self.env_file_patcher = patch("app.env.DEFAULT_ENV_FILE", self.env_file)
+        self.env_file_patcher.start()
+        load_app_env.cache_clear()
+
+    def tearDown(self) -> None:
+        self.env_file_patcher.stop()
+        load_app_env.cache_clear()
+        self.temp_dir.cleanup()
+
+    def test_missing_api_key_raises_error(self) -> None:
+        from app.services.ai_generate import load_openai_settings
+
+        with patch.dict(os.environ, {"OPENAI_CHAT_MODEL_ID": "gpt-5"}, clear=True):
+            load_app_env.cache_clear()
+            with self.assertRaises(DraftGenerationConfigurationError):
+                load_openai_settings()
+
+    def test_missing_model_raises_error(self) -> None:
+        from app.services.ai_generate import load_openai_settings
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}, clear=True):
+            load_app_env.cache_clear()
+            with self.assertRaises(DraftGenerationConfigurationError):
+                load_openai_settings()
+
+    def test_valid_config_returns_settings(self) -> None:
+        from app.services.ai_generate import load_openai_settings
+
+        with patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": "test-key", "OPENAI_CHAT_MODEL_ID": "gpt-5"},
+            clear=True,
+        ):
+            load_app_env.cache_clear()
+            settings = load_openai_settings()
+        self.assertEqual(settings.api_key, "test-key")
+        self.assertEqual(settings.model_id, "gpt-5")
+        self.assertIsNone(settings.base_url)
+
+
+class TestLoadCopilotSettings(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.env_file = Path(self.temp_dir.name) / ".env"
+        self.env_file.write_text("", encoding="utf-8")
+        self.env_file_patcher = patch("app.env.DEFAULT_ENV_FILE", self.env_file)
+        self.env_file_patcher.start()
+        load_app_env.cache_clear()
+
+    def tearDown(self) -> None:
+        self.env_file_patcher.stop()
+        load_app_env.cache_clear()
+        self.temp_dir.cleanup()
+
+    def test_default_model_id_is_gpt5(self) -> None:
+        from app.services.ai_generate import load_copilot_settings
+
+        with patch.dict(os.environ, {}, clear=True):
+            load_app_env.cache_clear()
+            settings = load_copilot_settings()
+        self.assertEqual(settings.model_id, "gpt-5")
+
+    def test_custom_model_id(self) -> None:
+        from app.services.ai_generate import load_copilot_settings
+
+        with patch.dict(
+            os.environ, {"COPILOT_CHAT_MODEL_ID": "custom-model"}, clear=True
+        ):
+            load_app_env.cache_clear()
+            settings = load_copilot_settings()
+        self.assertEqual(settings.model_id, "custom-model")
+
+    def test_empty_model_id_falls_back_to_default(self) -> None:
+        from app.services.ai_generate import load_copilot_settings
+
+        with patch.dict(os.environ, {"COPILOT_CHAT_MODEL_ID": ""}, clear=True):
+            load_app_env.cache_clear()
+            settings = load_copilot_settings()
+        self.assertEqual(settings.model_id, "gpt-5")

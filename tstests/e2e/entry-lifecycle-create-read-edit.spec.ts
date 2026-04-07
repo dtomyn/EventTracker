@@ -31,8 +31,7 @@ test('scenario 3: create, view, and edit an entry', async ({ ensureDedicatedGrou
   await entryFormPage.fillTitle(title);
   await entryFormPage.fillSourceUrl(sourceUrl);
   await entryFormPage.addLinkRow();
-
-  await entryFormPage.fillLinkRow(1, extraUrl, 'Supporting reference');
+  await entryFormPage.fillLinkRow(0, extraUrl, 'Supporting reference');
 
   await entryFormPage.fillEventSummary('<b>Scenario 3 summary</b> captured through Playwright CLI.');
   await entryFormPage.fillTags('scenario-3, playwright-cli');

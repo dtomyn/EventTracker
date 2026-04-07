@@ -1637,3 +1637,142 @@ h3, .h3 { font-size: 1rem; font-weight: 600; line-height: 1.3; }
 textarea {
     resize: vertical;
 }
+
+/* === Entry Form Section Layout === */
+
+.entry-form-section {
+    padding: 1.5rem 0;
+}
+
+.entry-form-section--first {
+    padding-top: 0;
+}
+
+.entry-form-section + .entry-form-section {
+    border-top: 1px dashed var(--et-border-dashed);
+}
+
+.entry-form-section-label {
+    color: var(--et-text-muted);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+}
+
+/* Generate button — accent styling to stand out */
+.btn-generate {
+    --bs-btn-color: var(--et-primary);
+    --bs-btn-border-color: var(--et-primary-border);
+    --bs-btn-hover-color: #fff;
+    --bs-btn-hover-bg: var(--et-primary);
+    --bs-btn-hover-border-color: var(--et-primary);
+    --bs-btn-active-color: #fff;
+    --bs-btn-active-bg: var(--et-primary);
+    --bs-btn-active-border-color: var(--et-primary);
+    --bs-btn-focus-shadow-rgb: var(--bs-primary-rgb);
+    background: var(--et-primary-bg);
+    border-radius: 6px;
+    font-weight: 500;
+    gap: 0.4rem;
+    display: inline-flex;
+    align-items: center;
+}
+
+.btn-generate:disabled {
+    opacity: 0.65;
+    pointer-events: none;
+}
+
+.btn-generate .spinner-border {
+    width: 0.85rem;
+    height: 0.85rem;
+    border-width: 0.15em;
+}
+
+/* Collapse toggle links for optional sections */
+.entry-form-collapse-toggle {
+    color: var(--et-text-muted);
+    font-size: 0.8rem;
+    text-decoration: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    transition: color 0.15s ease;
+}
+
+.entry-form-collapse-toggle:hover {
+    color: var(--et-primary);
+}
+
+.entry-form-collapse-toggle .collapse-chevron {
+    display: inline-block;
+    transition: transform 0.2s ease;
+    font-size: 0.65rem;
+}
+
+.entry-form-collapse-toggle[aria-expanded="true"] .collapse-chevron {
+    transform: rotate(90deg);
+}
+
+/* Field highlight animation after AI generation fills values */
+@keyframes field-highlight-fade {
+    0% { box-shadow: 0 0 0 3px var(--et-primary-focus-shadow); }
+    100% { box-shadow: none; }
+}
+
+.field-just-filled {
+    animation: field-highlight-fade 1.5s ease-out forwards;
+}
+
+/* Generate helper text below the button */
+.generate-hint {
+    color: var(--et-text-muted);
+    font-size: 0.75rem;
+    margin-top: 0.35rem;
+}
+
+/* ── Heatmap ──────────────────────────────────────────────── */
+
+.heatmap-container {
+    position: relative;
+    padding: 0.5rem 0;
+}
+
+.heatmap-svg {
+    display: block;
+    margin: 0 auto;
+}
+
+.heatmap-cell-selected {
+    stroke: var(--et-primary);
+    stroke-width: 2;
+}
+
+.heatmap-tooltip {
+    position: absolute;
+    padding: 0.4rem 0.7rem;
+    background: var(--et-card-bg);
+    border: 1px solid var(--et-border);
+    border-radius: 6px;
+    font-size: 0.75rem;
+    color: var(--et-text);
+    pointer-events: none;
+    white-space: nowrap;
+    transform: translateX(-50%);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    z-index: 10;
+}
+
+.heatmap-nav-arrow:hover {
+    fill: var(--et-primary) !important;
+}
+
+.heatmap-entries-header {
+    display: flex;
+    align-items: center;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--et-border);
+}

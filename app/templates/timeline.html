@@ -103,6 +103,7 @@
                 <button class="visualization-view-button" type="button" data-zoom-target="events" aria-pressed="false">Summaries</button>
                 <button class="visualization-view-button" type="button" data-zoom-target="months" aria-pressed="false">Months</button>
                 <button class="visualization-view-button" type="button" data-zoom-target="years" aria-pressed="false">Years</button>
+                <button class="visualization-view-button" type="button" data-zoom-target="heatmap" aria-pressed="false">Heatmap</button>
             </div>
             <div class="timeline-playback-panel" data-playback-panel data-playback-state="idle" hidden>
                 <div class="timeline-playback-controls" role="group" aria-label="Timeline playback controls">
@@ -147,6 +148,10 @@
                         <button class="btn btn-sm btn-outline-secondary" type="button" data-summary-retry>Retry</button>
                     </div>
                     <div data-summary-content hidden></div>
+                </div>
+                <div id="heatmap-view" data-view-panel="heatmap" hidden>
+                    <div id="heatmap-container" class="heatmap-container"></div>
+                    <div id="heatmap-entries" class="mt-4"></div>
                 </div>
             </div>
         </section>
@@ -618,10 +623,12 @@
                     events: "Summaries",
                     months: "Months",
                     years: "Years",
+                    heatmap: "Heatmap",
                 };
 
                 const detailPanel = document.getElementById("timeline-details-view");
                 const summaryPanel = document.getElementById("visualization-content");
+                const heatmapPanel = document.getElementById("heatmap-view");
                 const statusLabel = document.querySelector("[data-current-view-label]");
                 const statusContext = document.querySelector("[data-current-view-context]");
                 const playbackPanel = document.querySelector("[data-playback-panel]");
@@ -821,7 +828,8 @@
                 const syncControls = () => {
                     summaryPanel.dataset.currentView = state.view;
                     detailPanel.hidden = state.view !== "details";
-                    summaryPanel.hidden = state.view === "details";
+                    summaryPanel.hidden = state.view === "details" || state.view === "heatmap";
+                    if (heatmapPanel) heatmapPanel.hidden = state.view !== "heatmap";
                     statusLabel.textContent = viewLabels[state.view];
                     statusContext.textContent = describeState(state);
                     if (playbackPanel) {
@@ -1347,8 +1355,15 @@
 
                 for (const control of controls) {
                     control.addEventListener("click", async () => {
+                        const target = control.dataset.zoomTarget || "details";
+                        if (target === "heatmap") {
+                            state.view = "heatmap";
+                            syncControls();
+                            loadHeatmap();
+                            return;
+                        }
                         await setState({
-                            view: control.dataset.zoomTarget || "details",
+                            view: target,
                             year: null,
                             month: null,
                         }, { clearHistory: true });
@@ -1460,6 +1475,299 @@
                 });
 
                 observer.observe(detailSentinel);
+
+                // --- Heatmap rendering ---
+                let heatmapLoaded = false;
+                let heatmapYear = null;
+                let heatmapSelectedDate = null;
+
+                function getHeatmapColors() {
+                    const style = getComputedStyle(document.documentElement);
+                    const theme = document.documentElement.getAttribute("data-bs-theme");
+                    if (theme === "dark") {
+                        return ["#1e293b", "#164e63", "#0e7490", "#0891b2", "#06b6d4"];
+                    }
+                    return [
+                        style.getPropertyValue("--et-surface-bg").trim() || "#f8fafc",
+                        "rgba(8, 145, 178, 0.15)",
+                        "rgba(8, 145, 178, 0.35)",
+                        "rgba(8, 145, 178, 0.6)",
+                        style.getPropertyValue("--et-primary").trim() || "#0891b2",
+                    ];
+                }
+
+                function loadHeatmap(year) {
+                    const container = document.getElementById("heatmap-container");
+                    if (!container) return;
+
+                    // Load D3 if not loaded
+                    if (!window.d3) {
+                        const script = document.createElement("script");
+                        script.src = "https://cdn.jsdelivr.net/npm/d3@7";
+                        script.onload = () => loadHeatmap(year);
+                        document.head.appendChild(script);
+                        return;
+                    }
+
+                    const groupId = timelineState.groupId || "";
+                    const params = new URLSearchParams();
+                    if (groupId) params.set("group_id", String(groupId));
+                    if (year) params.set("year", year);
+
+                    container.innerHTML = '<div class="text-body-secondary py-4 text-center">Loading heatmap\u2026</div>';
+
+                    fetch(`/api/heatmap?${params}`)
+                        .then(r => { if (!r.ok) throw new Error("Failed to load"); return r.json(); })
+                        .then(data => {
+                            heatmapYear = data.year;
+                            renderHeatmapGrid(container, data);
+                        })
+                        .catch(err => {
+                            container.innerHTML = `<div class="text-danger py-4 text-center">Could not load heatmap: ${err.message}</div>`;
+                        });
+                }
+
+                function renderHeatmapGrid(container, data) {
+                    container.innerHTML = "";
+                    const { counts, total, year, years_available } = data;
+
+                    const cellSize = 12;
+                    const cellGap = 2;
+                    const cellStep = cellSize + cellGap;
+                    const labelWidth = 36;
+                    const topMargin = 28;
+                    const navHeight = 32;
+                    const width = labelWidth + 53 * cellStep + 10;
+                    const height = navHeight + topMargin + 7 * cellStep + 40;
+
+                    const svg = d3.select(container)
+                        .append("svg")
+                        .attr("viewBox", `0 0 ${width} ${height}`)
+                        .attr("class", "heatmap-svg")
+                        .style("width", "100%")
+                        .style("max-width", `${width}px`);
+
+                    // Year navigation
+                    const nav = svg.append("g").attr("transform", `translate(${width / 2}, 18)`);
+
+                    const prevYear = years_available[years_available.indexOf(year) - 1];
+                    const nextYear = years_available[years_available.indexOf(year) + 1];
+
+                    if (prevYear !== undefined) {
+                        nav.append("text")
+                            .attr("x", -60)
+                            .attr("text-anchor", "middle")
+                            .attr("fill", "var(--et-text-secondary)")
+                            .attr("font-size", "14px")
+                            .attr("class", "heatmap-nav-arrow")
+                            .style("cursor", "pointer")
+                            .text("\u25C0")
+                            .on("click", () => loadHeatmap(prevYear));
+                    }
+
+                    nav.append("text")
+                        .attr("x", 0)
+                        .attr("text-anchor", "middle")
+                        .attr("fill", "var(--et-text)")
+                        .attr("font-size", "14px")
+                        .attr("font-weight", "600")
+                        .attr("font-family", "'JetBrains Mono', monospace")
+                        .text(year);
+
+                    if (nextYear !== undefined) {
+                        nav.append("text")
+                            .attr("x", 60)
+                            .attr("text-anchor", "middle")
+                            .attr("fill", "var(--et-text-secondary)")
+                            .attr("font-size", "14px")
+                            .attr("class", "heatmap-nav-arrow")
+                            .style("cursor", "pointer")
+                            .text("\u25B6")
+                            .on("click", () => loadHeatmap(nextYear));
+                    }
+
+                    const gridG = svg.append("g")
+                        .attr("transform", `translate(${labelWidth}, ${navHeight + topMargin})`);
+
+                    // Build date-to-cell mapping
+                    const jan1 = new Date(year, 0, 1);
+                    const dec31 = new Date(year, 11, 31);
+                    const startDay = (jan1.getDay() + 6) % 7; // Monday = 0
+                    const cells = [];
+
+                    for (let d = new Date(jan1); d <= dec31; d.setDate(d.getDate() + 1)) {
+                        const dayOfWeek = (d.getDay() + 6) % 7;
+                        const dayOfYear = Math.floor((d - jan1) / 86400000);
+                        const week = Math.floor((dayOfYear + startDay) / 7);
+                        const month = d.getMonth();
+                        const dayNum = d.getDate();
+                        const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`;
+                        cells.push({ key, week, dayOfWeek, month, dayNum, count: counts[key] || 0 });
+                    }
+
+                    // Color scale
+                    const maxCount = d3.max(cells, c => c.count) || 1;
+                    const colors = getHeatmapColors();
+                    const colorScale = (count) => {
+                        if (count === 0) return colors[0];
+                        const thresholds = [1, Math.ceil(maxCount * 0.25), Math.ceil(maxCount * 0.5), Math.ceil(maxCount * 0.75)];
+                        if (count >= thresholds[3]) return colors[4];
+                        if (count >= thresholds[2]) return colors[3];
+                        if (count >= thresholds[1]) return colors[2];
+                        return colors[1];
+                    };
+
+                    // Month labels
+                    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+                    let lastMonth = -1;
+                    for (const cell of cells) {
+                        if (cell.month !== lastMonth && cell.dayNum <= 7) {
+                            gridG.append("text")
+                                .attr("x", cell.week * cellStep)
+                                .attr("y", -6)
+                                .attr("fill", "var(--et-text-muted)")
+                                .attr("font-size", "9px")
+                                .text(months[cell.month]);
+                            lastMonth = cell.month;
+                        }
+                    }
+
+                    // Day-of-week labels
+                    const dayLabels = ["Mon", "", "Wed", "", "Fri", "", ""];
+                    dayLabels.forEach((label, i) => {
+                        if (label) {
+                            gridG.append("text")
+                                .attr("x", -6)
+                                .attr("y", i * cellStep + cellSize - 1)
+                                .attr("text-anchor", "end")
+                                .attr("fill", "var(--et-text-muted)")
+                                .attr("font-size", "8px")
+                                .text(label);
+                        }
+                    });
+
+                    // Tooltip
+                    const tooltip = d3.select(container)
+                        .append("div")
+                        .attr("class", "heatmap-tooltip")
+                        .style("display", "none");
+
+                    // Cells
+                    gridG.selectAll("rect.heatmap-cell")
+                        .data(cells)
+                        .enter()
+                        .append("rect")
+                        .attr("class", "heatmap-cell")
+                        .attr("x", d => d.week * cellStep)
+                        .attr("y", d => d.dayOfWeek * cellStep)
+                        .attr("width", cellSize)
+                        .attr("height", cellSize)
+                        .attr("rx", 2)
+                        .attr("fill", d => colorScale(d.count))
+                        .attr("data-date", d => d.key)
+                        .attr("data-count", d => d.count)
+                        .style("cursor", d => d.count > 0 ? "pointer" : "default")
+                        .on("mouseenter", function(event, d) {
+                            const rect = this.getBoundingClientRect();
+                            const containerRect = container.getBoundingClientRect();
+                            const dateObj = new Date(year, d.month, d.dayNum);
+                            const formatted = dateObj.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+                            const label = d.count === 0
+                                ? `No entries on ${formatted}`
+                                : `${d.count} ${d.count === 1 ? "entry" : "entries"} on ${formatted}`;
+                            tooltip
+                                .style("display", "block")
+                                .html(label)
+                                .style("left", `${rect.left - containerRect.left + cellSize / 2}px`)
+                                .style("top", `${rect.top - containerRect.top - 32}px`);
+                        })
+                        .on("mouseleave", () => tooltip.style("display", "none"))
+                        .on("click", function(event, d) {
+                            if (d.count === 0) return;
+                            const dateKey = d.key;
+                            if (heatmapSelectedDate === dateKey) {
+                                clearHeatmapFilter();
+                                return;
+                            }
+                            selectHeatmapDate(dateKey, d);
+                        });
+
+                    // Legend
+                    const legendG = svg.append("g")
+                        .attr("transform", `translate(${width - 160}, ${height - 14})`);
+                    legendG.append("text").attr("x", 0).attr("y", 9).attr("fill", "var(--et-text-muted)").attr("font-size", "9px").text("Less");
+                    colors.forEach((color, i) => {
+                        legendG.append("rect")
+                            .attr("x", 28 + i * (cellSize + 2))
+                            .attr("y", 0)
+                            .attr("width", cellSize)
+                            .attr("height", cellSize)
+                            .attr("rx", 2)
+                            .attr("fill", color);
+                    });
+                    legendG.append("text").attr("x", 28 + 5 * (cellSize + 2) + 2).attr("y", 9).attr("fill", "var(--et-text-muted)").attr("font-size", "9px").text("More");
+
+                    // Summary stat
+                    svg.append("text")
+                        .attr("x", labelWidth)
+                        .attr("y", height - 6)
+                        .attr("fill", "var(--et-text-secondary)")
+                        .attr("font-size", "11px")
+                        .text(`${total} events in ${year}`);
+
+                    // Empty state overlay
+                    if (total === 0) {
+                        svg.append("text")
+                            .attr("x", width / 2)
+                            .attr("y", navHeight + topMargin + 3.5 * cellStep)
+                            .attr("text-anchor", "middle")
+                            .attr("fill", "var(--et-text-muted)")
+                            .attr("font-size", "13px")
+                            .text(`No events tracked in ${year}`);
+                    }
+
+                    heatmapLoaded = true;
+                }
+
+                function selectHeatmapDate(dateKey, cellData) {
+                    // Highlight selected cell
+                    d3.selectAll(".heatmap-cell").classed("heatmap-cell-selected", false);
+                    d3.selectAll(`.heatmap-cell[data-date="${dateKey}"]`).classed("heatmap-cell-selected", true);
+                    heatmapSelectedDate = dateKey;
+
+                    // Fetch filtered entries
+                    const [y, m, d] = dateKey.split("-");
+                    const params = new URLSearchParams({ year: y, month: String(parseInt(m)), day: String(parseInt(d)) });
+                    const groupId = timelineState.groupId;
+                    if (groupId) params.set("group_id", String(groupId));
+
+                    const entriesContainer = document.getElementById("heatmap-entries");
+                    entriesContainer.innerHTML = '<div class="text-body-secondary py-3">Loading entries\u2026</div>';
+
+                    fetch(`/timeline/heatmap/entries?${params}`)
+                        .then(r => { if (!r.ok) throw new Error("Failed"); return r.text(); })
+                        .then(html => {
+                            entriesContainer.innerHTML = html;
+                            const clearBtn = entriesContainer.querySelector("[data-heatmap-clear-filter]");
+                            if (clearBtn) clearBtn.addEventListener("click", clearHeatmapFilter);
+                        })
+                        .catch(() => {
+                            entriesContainer.innerHTML = '<div class="text-danger py-3">Could not load entries.</div>';
+                        });
+                }
+
+                function clearHeatmapFilter() {
+                    heatmapSelectedDate = null;
+                    d3.selectAll(".heatmap-cell").classed("heatmap-cell-selected", false);
+                    document.getElementById("heatmap-entries").innerHTML = "";
+                }
+
+                // Theme change observer — re-render heatmap when theme toggles
+                new MutationObserver(() => {
+                    if (state.view === "heatmap" && heatmapLoaded) {
+                        loadHeatmap(heatmapYear);
+                    }
+                }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-bs-theme"] });
             })();
         </script>
     {% else %}

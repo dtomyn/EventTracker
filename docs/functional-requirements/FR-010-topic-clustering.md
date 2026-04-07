@@ -30,6 +30,9 @@
 - FR-010-16 The visualization shall render edges between nodes to represent tag co-occurrence, using edge thickness to indicate co-occurrence strength.
 - FR-010-17 The graph implementation shall support dark mode by respecting the host page's `[data-bs-theme="dark"]` CSS custom properties for node, edge, and background colors.
 
+### Cache Refresh
+- FR-010-17a The application shall refresh the cached topic graph for a timeline group in the background after an entry is created or updated with tags, without blocking the HTTP response.
+
 ### Scoping and Interactivity
 - FR-010-18 The graph data generation shall be strictly bounded to the entries and tags belonging to the currently selected timeline group.
 - FR-010-19 The application shall allow the user to click on a topic node in the cluster graph.

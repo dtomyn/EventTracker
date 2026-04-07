@@ -248,3 +248,137 @@ class TestStoryModeService(unittest.TestCase):
                 links=[],
             ),
         )
+
+
+class TestParseStoryGroupId(unittest.TestCase):
+    def test_empty_string_returns_none(self) -> None:
+        from app.services.story_mode import _parse_story_group_id
+
+        self.assertIsNone(_parse_story_group_id(""))
+
+    def test_all_lowercase_returns_none(self) -> None:
+        from app.services.story_mode import _parse_story_group_id
+
+        self.assertIsNone(_parse_story_group_id("all"))
+
+    def test_all_uppercase_returns_none(self) -> None:
+        from app.services.story_mode import _parse_story_group_id
+
+        self.assertIsNone(_parse_story_group_id("ALL"))
+
+    def test_valid_int_string(self) -> None:
+        from app.services.story_mode import _parse_story_group_id
+
+        self.assertEqual(_parse_story_group_id("5"), 5)
+
+    def test_invalid_string_raises_value_error(self) -> None:
+        from app.services.story_mode import _parse_story_group_id
+
+        with self.assertRaises(ValueError):
+            _parse_story_group_id("abc")
+
+    def test_zero_raises_value_error(self) -> None:
+        from app.services.story_mode import _parse_story_group_id
+
+        with self.assertRaises(ValueError):
+            _parse_story_group_id("0")
+
+    def test_negative_raises_value_error(self) -> None:
+        from app.services.story_mode import _parse_story_group_id
+
+        with self.assertRaises(ValueError):
+            _parse_story_group_id("-1")
+
+
+class TestParseOptionalInt(unittest.TestCase):
+    def test_none_returns_none(self) -> None:
+        from app.services.story_mode import _parse_optional_int
+
+        self.assertIsNone(
+            _parse_optional_int(None, field_name="year", minimum=1900, maximum=2100)
+        )
+
+    def test_empty_string_returns_none(self) -> None:
+        from app.services.story_mode import _parse_optional_int
+
+        self.assertIsNone(
+            _parse_optional_int("", field_name="year", minimum=1900, maximum=2100)
+        )
+
+    def test_valid_string(self) -> None:
+        from app.services.story_mode import _parse_optional_int
+
+        self.assertEqual(
+            _parse_optional_int("2025", field_name="year", minimum=1900, maximum=2100),
+            2025,
+        )
+
+    def test_out_of_range_raises_value_error(self) -> None:
+        from app.services.story_mode import _parse_optional_int
+
+        with self.assertRaises(ValueError):
+            _parse_optional_int("3000", field_name="year", minimum=1900, maximum=2100)
+
+    def test_non_numeric_raises_value_error(self) -> None:
+        from app.services.story_mode import _parse_optional_int
+
+        with self.assertRaises(ValueError):
+            _parse_optional_int("abc", field_name="year", minimum=1900, maximum=2100)
+
+
+class TestOrderStoryEntries(unittest.TestCase):
+    def _make_entry(
+        self,
+        *,
+        entry_id: int,
+        sort_key: int,
+        updated_utc: str,
+    ) -> "Entry":
+        from app.models import Entry
+
+        return Entry(
+            id=entry_id,
+            event_year=2025,
+            event_month=1,
+            event_day=1,
+            sort_key=sort_key,
+            group_id=1,
+            group_name="Default",
+            title=f"Entry {entry_id}",
+            source_url=None,
+            generated_text=None,
+            final_text="<p>text</p>",
+            created_utc="2025-01-01T00:00:00+00:00",
+            updated_utc=updated_utc,
+        )
+
+    def test_sorts_by_sort_key_then_updated_utc_then_id(self) -> None:
+        from app.services.story_mode import order_story_entries
+
+        entry_a = self._make_entry(
+            entry_id=3, sort_key=20250101, updated_utc="2025-01-01T00:00:00+00:00"
+        )
+        entry_b = self._make_entry(
+            entry_id=1, sort_key=20250601, updated_utc="2025-06-01T00:00:00+00:00"
+        )
+        entry_c = self._make_entry(
+            entry_id=2, sort_key=20250101, updated_utc="2025-01-01T00:00:00+00:00"
+        )
+
+        result = order_story_entries([entry_b, entry_a, entry_c])
+        self.assertEqual([e.id for e in result], [2, 3, 1])
+
+    def test_empty_list(self) -> None:
+        from app.services.story_mode import order_story_entries
+
+        self.assertEqual(order_story_entries([]), [])
+
+    def test_single_entry(self) -> None:
+        from app.services.story_mode import order_story_entries
+
+        entry = self._make_entry(
+            entry_id=1, sort_key=20250101, updated_utc="2025-01-01T00:00:00+00:00"
+        )
+        result = order_story_entries([entry])
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].id, 1)

@@ -72,7 +72,7 @@ Future TypeScript specs should import `test` and `expect` from `tstests/e2e/help
 
 `npm run serve:e2e:ts` still starts a shared local server on `http://127.0.0.1:35231/` for manual debugging and `npm run codegen:e2e`, but the automated TypeScript suite is configured around the isolated harness instead of a shared web server.
 
-Until the first TypeScript specs are added, `npm run test:e2e:ts` exits successfully because it uses Playwright's `--pass-with-no-tests` option.
+The TypeScript suite currently includes specs for smoke tests, entry lifecycle (create/read/edit), timeline view switching, and search result navigation. Page Object Models in `tstests/e2e/poms/` cover the timeline, entry form, entry detail, search, and admin groups pages.
 
 Useful TypeScript Playwright commands:
 
@@ -121,7 +121,7 @@ uv run --with pillow python .\scripts\generate_demo_assets.py --also-no-search-a
 - Supports `Story Mode` for the current scope, turning matching entries into a narrative arc with sections, saved snapshots, and linked citations.
 - Organizes entries into timeline groups, seeded with a default `Agentic Coding` group.
 - Lets users create, rename, delete, and mark the default group at `/admin/groups`, and store an optional per-group web search query.
-- Generates AI draft suggestions from either a title alone or a title plus temporary extracted URL content.
+- Generates AI draft suggestions (with suggested tags) from either a title alone or a title plus temporary extracted URL content.
 - Exports all saved entries as JSON from `/entries/export`.
 - Imports legacy HTML lists or prior JSON exports with `scripts/import_entries.py`.
 - Shows a Copilot-backed `On the web` sidebar for the selected group when that group has a stored web search query.
@@ -631,7 +631,8 @@ Both providers are asked to return strict JSON with this shape:
   "draft_html": "string",
   "event_year": 2026,
   "event_month": 3,
-  "event_day": 16
+  "event_day": 16,
+  "suggested_tags": ["string"]
 }
 ```
 
@@ -778,7 +779,7 @@ The app stores all primary data in a single SQLite file.
 Run the test suite with:
 
 ```powershell
-uv run python -m unittest discover -s tests -p "test_*.py"
+uv run pytest tests/
 ```
 
 Run the static type check with:
@@ -796,6 +797,12 @@ Current automated coverage includes:
 - generation partial behavior
 - import parsing
 - group web search behavior
+- admin group CRUD (E2E)
+- URL extraction
+- HTML sanitization
+- navigation and entry detail (E2E)
+- search and topic graph (E2E)
+- story mode (E2E)
 
 ## Project layout
 
@@ -833,6 +840,7 @@ app/  # FastAPI application package
     search.html
     story.html
     timeline.html
+    topic_graph.html
     partials/  # Reusable template fragments
       entry_card.html
       generated_preview.html
@@ -845,27 +853,56 @@ app/  # FastAPI application package
 data/  # Local SQLite database and runtime data
 docs/  # Requirements and demo assets
 scripts/  # Developer and maintenance entry points
+  combine_and_optimize_pdf.py
   compute_topic_clusters.py
   generate_demo_assets.py
+  generate_test_report.py
   import_entries.py
   init_db.py
+  merge_and_shrink_pdf.py
+  merge_pdfs.py
   run_dev.py
+  test_cluster.py
+  test_labels.py
 tests/  # Unit and integration tests
+  csrf_helpers.py
   e2e/  # Playwright end-to-end browser tests
     conftest.py
+    test_admin_groups_crud.py
     test_core_workflows.py
+    test_navigation_and_entry_detail.py
     test_optional_mocked_workflows.py
+    test_search_and_topic_graph.py
+    test_story_mode.py
+  test_admin_groups.py
   test_ai_generate.py
   test_ai_story_mode.py
   test_db.py
   test_entries.py
+  test_extraction.py
   test_group_web_search.py
   test_import_entries.py
   test_init_db.py
   test_run_dev.py
+  test_sanitize.py
   test_search.py
   test_smoke.py
   test_story_mode.py
   test_story_routes.py
   test_topics.py
+tstests/  # TypeScript Playwright E2E tests
+  e2e/
+    entry-lifecycle-create-read-edit.spec.ts
+    search-result-navigation.spec.ts
+    smoke.spec.ts
+    timeline-view-switching.spec.ts
+    helpers/
+      harness.ts
+      sqlite_bridge.py
+    poms/  # Page Object Models
+      admin-groups-page.ts
+      entry-detail-page.ts
+      entry-form-page.ts
+      search-page.ts
+      timeline-page.ts
 ```

@@ -18,8 +18,12 @@
 - NFR-003-09 The application shall default `COPILOT_CHAT_MODEL_ID` to `gpt-5` for Copilot-backed integrations and may accept optional CLI path or URL overrides.
 - NFR-003-10 The application shall default logging to `INFO` unless `LOG_LEVEL` is set explicitly.
 - NFR-003-11 The application shall allow configuration of development-server host and port through CLI arguments or `EVENTTRACKER_HOST` and `EVENTTRACKER_PORT`.
+- NFR-003-12 The application shall accept `EVENTTRACKER_CSRF_SECRET` as an optional environment variable to provide a stable CSRF signing secret across restarts; when unset, the application shall persist an auto-generated secret to `data/csrf_secret.txt`.
+- NFR-003-13 The application shall accept `EVENTTRACKER_GROUP_WEB_SEARCH_TIMEOUT_SECONDS`, `EVENTTRACKER_GROUP_WEB_SEARCH_BROADENED_TIMEOUT_SECONDS`, and `EVENTTRACKER_GROUP_WEB_SEARCH_REQUEST_TIMEOUT_MS` as optional environment variables to tune group web-search timeouts.
+- NFR-003-14 The application shall skip CSRF validation when the `TESTING` environment variable is set, to support automated test harnesses.
 
 ## Acceptance Notes
 
 - Invalid provider values fail with explicit configuration errors.
 - Invalid port values fail before server startup.
+- The CSRF secret auto-generation falls back to an in-memory value when the data directory is not writable.

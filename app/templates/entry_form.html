@@ -14,104 +14,145 @@
             <form method="post" action="{% if entry_id %}/entries/{{ entry_id }}{% else %}/entries/new{% endif %}" class="card shadow-sm border-0">
                 {{ csrf_hidden_input(request) }}
                 <div class="card-body p-4 p-lg-5">
-                    <div class="row g-3">
-                        <div class="col-12">
-                            <label class="form-label" for="group_id">Timeline Group</label>
-                            <select class="form-select {% if form_state.errors.get('group_id') %}is-invalid{% endif %}" id="group_id" name="group_id">
-                                <option value="">Select a group</option>
-                                {% for timeline_filter in timeline_filters %}
-                                    <option value="{{ timeline_filter.id }}" {% if form_state.values.get('group_id') == (timeline_filter.id | string) %}selected{% endif %}>{{ timeline_filter.name }}</option>
-                                {% endfor %}
-                            </select>
-                            {% if form_state.errors.get('group_id') %}<div class="invalid-feedback">{{ form_state.errors['group_id'] }}</div>{% endif %}
-                        </div>
-
-                        <div class="col-md-4">
-                            <label class="form-label" for="event_year">Year</label>
-                            <input class="form-control {% if form_state.errors.get('event_year') %}is-invalid{% endif %}" id="event_year" name="event_year" value="{{ form_state.values.get('event_year', '') }}" inputmode="numeric">
-                            {% if form_state.errors.get('event_year') %}<div class="invalid-feedback">{{ form_state.errors['event_year'] }}</div>{% endif %}
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label" for="event_month">Month</label>
-                            <input class="form-control {% if form_state.errors.get('event_month') %}is-invalid{% endif %}" id="event_month" name="event_month" value="{{ form_state.values.get('event_month', '') }}" inputmode="numeric">
-                            {% if form_state.errors.get('event_month') %}<div class="invalid-feedback">{{ form_state.errors['event_month'] }}</div>{% endif %}
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label" for="event_day">Day</label>
-                            <input class="form-control {% if form_state.errors.get('event_day') %}is-invalid{% endif %}" id="event_day" name="event_day" value="{{ form_state.values.get('event_day', '') }}" inputmode="numeric">
-                            {% if form_state.errors.get('event_day') %}<div class="invalid-feedback">{{ form_state.errors['event_day'] }}</div>{% endif %}
-                        </div>
-
-                        <div class="col-12">
-                            <label class="form-label" for="title">Title</label>
-                            <input class="form-control {% if form_state.errors.get('title') %}is-invalid{% endif %}" id="title" name="title" value="{{ form_state.values.get('title', '') }}">
-                            {% if form_state.errors.get('title') %}<div class="invalid-feedback">{{ form_state.errors['title'] }}</div>{% endif %}
-                        </div>
-
-                        <div class="col-12">
-                            <label class="form-label" for="source_url">Source URL</label>
-                            <input class="form-control {% if form_state.errors.get('source_url') %}is-invalid{% endif %}" id="source_url" name="source_url" value="{{ form_state.values.get('source_url', '') }}" placeholder="https://example.com/article">
-                            {% if form_state.errors.get('source_url') %}<div class="invalid-feedback">{{ form_state.errors['source_url'] }}</div>{% endif %}
-                            <div class="form-text">Only the URL is stored. Extracted article content is kept in memory only during generation.</div>
-                        </div>
-
-                        <div class="col-12">
-                            <div class="d-flex justify-content-between align-items-center gap-3 mb-2">
-                                <div>
-                                    <label class="form-label mb-0">Additional Links</label>
-                                    <div class="form-text">Each extra URL requires a short note explaining why it was added.</div>
-                                </div>
-                                <button class="btn btn-outline-secondary btn-sm" type="button" id="add-link-row">Add Link</button>
+                    {# === Section A: Source & Generation === #}
+                    <div class="entry-form-section entry-form-section--first">
+                        <div class="entry-form-section-label">Source &amp; Generation</div>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label" for="source_url">Source URL</label>
+                                <input class="form-control {% if form_state.errors.get('source_url') %}is-invalid{% endif %}" id="source_url" name="source_url" value="{{ form_state.values.get('source_url', '') }}" placeholder="https://example.com/article">
+                                {% if form_state.errors.get('source_url') %}<div class="invalid-feedback">{{ form_state.errors['source_url'] }}</div>{% endif %}
+                                <div class="form-text">Only the URL is stored. Extracted article content is kept in memory only during generation.</div>
                             </div>
-                            <div class="vstack gap-3" id="entry-links-container">
-                                {% for link_row in form_state.link_rows %}
-                                    {% set row_index = loop.index0 %}
-                                    <div class="border rounded p-3" data-link-row>
-                                        <div class="row g-3 align-items-start">
-                                            <div class="col-md-6">
-                                                <label class="form-label" for="link_url_{{ row_index }}">URL</label>
-                                                <input class="form-control {% if form_state.errors.get('link_url_' ~ row_index) %}is-invalid{% endif %}" id="link_url_{{ row_index }}" name="link_url" value="{{ link_row.url }}" placeholder="https://example.com/reference">
-                                                {% if form_state.errors.get('link_url_' ~ row_index) %}<div class="invalid-feedback">{{ form_state.errors['link_url_' ~ row_index] }}</div>{% endif %}
-                                            </div>
-                                            <div class="col-md-5">
-                                                <label class="form-label" for="link_note_{{ row_index }}">Brief Note</label>
-                                                <input class="form-control {% if form_state.errors.get('link_note_' ~ row_index) %}is-invalid{% endif %}" id="link_note_{{ row_index }}" name="link_note" value="{{ link_row.note }}" placeholder="Why this link matters">
-                                                {% if form_state.errors.get('link_note_' ~ row_index) %}<div class="invalid-feedback">{{ form_state.errors['link_note_' ~ row_index] }}</div>{% endif %}
-                                            </div>
-                                            <div class="col-md-1 d-flex align-items-end">
-                                                <button class="btn btn-outline-danger w-100" type="button" data-remove-link-row aria-label="Remove link row">x</button>
-                                            </div>
-                                        </div>
+
+                            <div class="col-12">
+                                {% set has_instructions = form_state.values.get('summary_instructions', '') %}
+                                <a class="entry-form-collapse-toggle" href="#summary-instructions-collapse" role="button" aria-expanded="{{ 'true' if has_instructions else 'false' }}" aria-controls="summary-instructions-collapse" data-collapse-toggle>
+                                    <span class="collapse-chevron">&#9656;</span> Generation instructions
+                                </a>
+                                <div class="collapse {{ 'show' if has_instructions else '' }}" id="summary-instructions-collapse">
+                                    <div class="mt-2">
+                                        <label class="form-label" for="summary_instructions">Summary Instructions</label>
+                                        <textarea class="form-control" id="summary_instructions" name="summary_instructions" rows="3" maxlength="1000" placeholder="Optional guidance for AI summarization, for example: focus on release milestones and omit marketing language.">{{ form_state.values.get('summary_instructions', '') }}</textarea>
+                                        <div class="form-text">Optional. Used only when generating from the source URL or current input, and never stored with the entry.</div>
                                     </div>
-                                {% endfor %}
+                                </div>
                             </div>
-                        </div>
 
-                        <div class="col-12">
-                            <div class="d-flex justify-content-between align-items-center gap-3 mb-2">
-                                <label class="form-label mb-0" for="final_text">Event Summary</label>
-                                <button class="btn btn-outline-secondary btn-sm" type="button" id="generate-button">Generate</button>
+                            <div class="col-12">
+                                <button class="btn btn-generate" type="button" id="generate-button">
+                                    <span id="generate-button-label">Generate</span>
+                                    <span id="generate-spinner" class="spinner-border d-none" role="status" aria-hidden="true"></span>
+                                </button>
+                                <div class="generate-hint">Fetches the article and drafts a summary, title, date, and tags. <kbd>Ctrl+Enter</kbd> in the URL field.</div>
                             </div>
-                            <div id="generated-preview-container" class="mb-2">
-                                {% include "partials/generated_preview.html" %}
-                            </div>
-                            <textarea class="form-control {% if form_state.errors.get('final_text') %}is-invalid{% endif %}" id="final_text" name="final_text" rows="8" data-html-preview-source data-preview-target="final-text-preview">{{ form_state.values.get('final_text', '') }}</textarea>
-                            {% if form_state.errors.get('final_text') %}<div class="invalid-feedback">{{ form_state.errors['final_text'] }}</div>{% endif %}
-                            <div class="form-text">Supports basic HTML such as &lt;b&gt;, &lt;i&gt;, &lt;ul&gt;, &lt;ol&gt;, and &lt;li&gt;.</div>
-                            <div class="entry-live-preview mt-3">
-                                <div class="entry-live-preview-label">Live preview</div>
-                                <div class="entry-live-preview-body" id="final-text-preview" aria-live="polite">
-                                    {% set preview_html = form_state.values.get('final_text', '') | render_entry_html %}
-                                    {% set empty_message = 'Event summary preview updates here as you type.' %}
-                                    {% include "partials/html_preview_content.html" %}
+
+                            <div class="col-12">
+                                <div id="generated-preview-container" class="mb-2">
+                                    {% include "partials/generated_preview.html" %}
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        <div class="col-12">
-                            <label class="form-label" for="tags">Tags</label>
-                            <input class="form-control" id="tags" name="tags" value="{{ form_state.values.get('tags', '') }}" placeholder="research, milestone, release">
-                            <div class="form-text">Comma-separated. Tags are normalized and deduplicated on save.</div>
+                    {# === Section B: Entry Details === #}
+                    <div class="entry-form-section">
+                        <div class="entry-form-section-label">Entry Details</div>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label" for="group_id">Timeline Group</label>
+                                <select class="form-select {% if form_state.errors.get('group_id') %}is-invalid{% endif %}" id="group_id" name="group_id">
+                                    <option value="">Select a group</option>
+                                    {% for timeline_filter in timeline_filters %}
+                                        <option value="{{ timeline_filter.id }}" {% if form_state.values.get('group_id') == (timeline_filter.id | string) %}selected{% endif %}>{{ timeline_filter.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                {% if form_state.errors.get('group_id') %}<div class="invalid-feedback">{{ form_state.errors['group_id'] }}</div>{% endif %}
+                            </div>
+
+                            <div class="col-md-4">
+                                <label class="form-label" for="event_year">Year</label>
+                                <input class="form-control {% if form_state.errors.get('event_year') %}is-invalid{% endif %}" id="event_year" name="event_year" value="{{ form_state.values.get('event_year', '') }}" inputmode="numeric">
+                                {% if form_state.errors.get('event_year') %}<div class="invalid-feedback">{{ form_state.errors['event_year'] }}</div>{% endif %}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label" for="event_month">Month</label>
+                                <input class="form-control {% if form_state.errors.get('event_month') %}is-invalid{% endif %}" id="event_month" name="event_month" value="{{ form_state.values.get('event_month', '') }}" inputmode="numeric">
+                                {% if form_state.errors.get('event_month') %}<div class="invalid-feedback">{{ form_state.errors['event_month'] }}</div>{% endif %}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label" for="event_day">Day</label>
+                                <input class="form-control {% if form_state.errors.get('event_day') %}is-invalid{% endif %}" id="event_day" name="event_day" value="{{ form_state.values.get('event_day', '') }}" inputmode="numeric">
+                                {% if form_state.errors.get('event_day') %}<div class="invalid-feedback">{{ form_state.errors['event_day'] }}</div>{% endif %}
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label" for="title">Title</label>
+                                <input class="form-control {% if form_state.errors.get('title') %}is-invalid{% endif %}" id="title" name="title" value="{{ form_state.values.get('title', '') }}">
+                                {% if form_state.errors.get('title') %}<div class="invalid-feedback">{{ form_state.errors['title'] }}</div>{% endif %}
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label" for="tags">Tags</label>
+                                <input class="form-control" id="tags" name="tags" value="{{ form_state.values.get('tags', '') }}" placeholder="research, milestone, release">
+                                <div class="form-text">Comma-separated. Tags are normalized and deduplicated on save.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {# === Section C: Content === #}
+                    <div class="entry-form-section">
+                        <div class="entry-form-section-label">Content</div>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label" for="final_text">Event Summary</label>
+                                <textarea class="form-control {% if form_state.errors.get('final_text') %}is-invalid{% endif %}" id="final_text" name="final_text" rows="8" data-html-preview-source data-preview-target="final-text-preview">{{ form_state.values.get('final_text', '') }}</textarea>
+                                {% if form_state.errors.get('final_text') %}<div class="invalid-feedback">{{ form_state.errors['final_text'] }}</div>{% endif %}
+                                <div class="form-text">Supports basic HTML such as &lt;b&gt;, &lt;i&gt;, &lt;ul&gt;, &lt;ol&gt;, and &lt;li&gt;.</div>
+                                <div class="entry-live-preview mt-3">
+                                    <div class="entry-live-preview-label">Live preview</div>
+                                    <div class="entry-live-preview-body" id="final-text-preview" aria-live="polite">
+                                        {% set preview_html = form_state.values.get('final_text', '') | render_entry_html %}
+                                        {% set empty_message = 'Event summary preview updates here as you type.' %}
+                                        {% include "partials/html_preview_content.html" %}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-12">
+                                {% set has_links = form_state.link_rows | length > 0 and (form_state.link_rows[0].url or form_state.link_rows[0].note) %}
+                                <a class="entry-form-collapse-toggle" href="#additional-links-collapse" role="button" aria-expanded="{{ 'true' if has_links else 'false' }}" aria-controls="additional-links-collapse" data-collapse-toggle>
+                                    <span class="collapse-chevron">&#9656;</span> Additional Links
+                                </a>
+                                <div class="collapse {{ 'show' if has_links else '' }}" id="additional-links-collapse">
+                                    <div class="vstack gap-3 mt-2" id="entry-links-container">
+                                        {% for link_row in form_state.link_rows %}
+                                            {% set row_index = loop.index0 %}
+                                            <div class="border rounded p-3" data-link-row>
+                                                <div class="row g-3 align-items-start">
+                                                    <div class="col-md-6">
+                                                        <label class="form-label" for="link_url_{{ row_index }}">URL</label>
+                                                        <input class="form-control {% if form_state.errors.get('link_url_' ~ row_index) %}is-invalid{% endif %}" id="link_url_{{ row_index }}" name="link_url" value="{{ link_row.url }}" placeholder="https://example.com/reference">
+                                                        {% if form_state.errors.get('link_url_' ~ row_index) %}<div class="invalid-feedback">{{ form_state.errors['link_url_' ~ row_index] }}</div>{% endif %}
+                                                    </div>
+                                                    <div class="col-md-5">
+                                                        <label class="form-label" for="link_note_{{ row_index }}">Brief Note</label>
+                                                        <input class="form-control {% if form_state.errors.get('link_note_' ~ row_index) %}is-invalid{% endif %}" id="link_note_{{ row_index }}" name="link_note" value="{{ link_row.note }}" placeholder="Why this link matters">
+                                                        {% if form_state.errors.get('link_note_' ~ row_index) %}<div class="invalid-feedback">{{ form_state.errors['link_note_' ~ row_index] }}</div>{% endif %}
+                                                    </div>
+                                                    <div class="col-md-1 d-flex align-items-end">
+                                                        <button class="btn btn-outline-danger w-100" type="button" data-remove-link-row aria-label="Remove link row">x</button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center gap-3 mt-2">
+                                    <div class="form-text mb-0">Each extra URL requires a short note explaining why it was added.</div>
+                                    <button class="btn btn-outline-secondary btn-sm" type="button" id="add-link-row">Add Link</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -125,10 +166,13 @@
 
     <script>
         const generateButton = document.getElementById('generate-button');
+        const generateButtonLabel = document.getElementById('generate-button-label');
+        const generateSpinner = document.getElementById('generate-spinner');
         const previewContainer = document.getElementById('generated-preview-container');
         const linkContainer = document.getElementById('entry-links-container');
         const addLinkRowButton = document.getElementById('add-link-row');
         const finalTextField = document.getElementById('final_text');
+        const sourceUrlField = document.getElementById('source_url');
         const htmlPreviewEndpoint = '/entries/preview-html';
         const htmlPreviewTimers = new WeakMap();
         const htmlPreviewControllers = new WeakMap();
@@ -138,10 +182,24 @@
             return meta ? meta.getAttribute('content') : '';
         }
 
+        function setGenerateLoading(isLoading) {
+            generateButton.disabled = isLoading;
+            generateButtonLabel.textContent = isLoading ? 'Generating\u2026' : 'Generate';
+            generateSpinner.classList.toggle('d-none', !isLoading);
+        }
+
+        function highlightField(fieldId) {
+            const field = document.getElementById(fieldId);
+            if (!field) return;
+            field.classList.remove('field-just-filled');
+            void field.offsetWidth;
+            field.classList.add('field-just-filled');
+        }
+
         function renderGenerationFeedback(feedbackClass = 'text-body-secondary', feedbackMessage = '') {
             return `
                 <input type="hidden" id="generated_text" name="generated_text" value="">
-                <div id="generate-feedback" class="form-text ${feedbackClass}">${feedbackMessage}</div>
+                <div id="generate-feedback" class="${feedbackClass}">${feedbackMessage}</div>
                 <input type="hidden" id="generated_suggested_title" value="">
                 <input type="hidden" id="generated_suggested_event_year" value="">
                 <input type="hidden" id="generated_suggested_event_month" value="">
@@ -219,17 +277,19 @@
                 <div class="row g-3 align-items-start">
                     <div class="col-md-6">
                         <label class="form-label" for="link_url_${rowIndex}">URL</label>
-                        <input class="form-control" id="link_url_${rowIndex}" name="link_url" value="${url}" placeholder="https://example.com/reference">
+                        <input class="form-control" id="link_url_${rowIndex}" name="link_url" placeholder="https://example.com/reference">
                     </div>
                     <div class="col-md-5">
                         <label class="form-label" for="link_note_${rowIndex}">Brief Note</label>
-                        <input class="form-control" id="link_note_${rowIndex}" name="link_note" value="${note}" placeholder="Why this link matters">
+                        <input class="form-control" id="link_note_${rowIndex}" name="link_note" placeholder="Why this link matters">
                     </div>
                     <div class="col-md-1 d-flex align-items-end">
                         <button class="btn btn-outline-danger w-100" type="button" data-remove-link-row aria-label="Remove link row">x</button>
                     </div>
                 </div>
             `;
+            wrapper.querySelector(`#link_url_${rowIndex}`).value = url;
+            wrapper.querySelector(`#link_note_${rowIndex}`).value = note;
             return wrapper;
         }
 
@@ -240,6 +300,12 @@
         }
 
         addLinkRowButton.addEventListener('click', () => {
+            const linksCollapse = document.getElementById('additional-links-collapse');
+            if (linksCollapse && !linksCollapse.classList.contains('show')) {
+                linksCollapse.classList.add('show');
+                const toggle = document.querySelector('[aria-controls="additional-links-collapse"]');
+                if (toggle) toggle.setAttribute('aria-expanded', 'true');
+            }
             linkContainer.appendChild(createLinkRow());
         });
 
@@ -258,26 +324,37 @@
             const suggestedMonth = document.getElementById('generated_suggested_event_month');
             const suggestedDay = document.getElementById('generated_suggested_event_day');
             const suggestedTags = document.getElementById('generated_suggested_tags');
+            const fieldsToHighlight = [];
 
             if (suggestedTitle && suggestedTitle.value) {
                 document.getElementById('title').value = suggestedTitle.value;
+                fieldsToHighlight.push('title');
             }
             if (suggestedYear && suggestedYear.value) {
                 document.getElementById('event_year').value = suggestedYear.value;
+                fieldsToHighlight.push('event_year');
             }
             if (suggestedMonth && suggestedMonth.value) {
                 document.getElementById('event_month').value = suggestedMonth.value;
+                fieldsToHighlight.push('event_month');
             }
             if (suggestedDay) {
                 document.getElementById('event_day').value = suggestedDay.value;
+                if (suggestedDay.value) fieldsToHighlight.push('event_day');
             }
             if (suggestedTags && suggestedTags.value) {
                 document.getElementById('tags').value = suggestedTags.value;
+                fieldsToHighlight.push('tags');
             }
+
+            requestAnimationFrame(() => {
+                fieldsToHighlight.forEach(id => highlightField(id));
+            });
         }
 
         generateButton.addEventListener('click', async () => {
             const currentSummaryText = finalTextField.value;
+            setGenerateLoading(true);
             previewContainer.innerHTML = renderGenerationFeedback('text-body-secondary', 'Generating summary...');
             document.getElementById('generated_text').value = currentSummaryText;
 
@@ -285,6 +362,10 @@
             payload.append('title', document.getElementById('title').value);
             payload.append('group_id', document.getElementById('group_id').value);
             payload.append('source_url', document.getElementById('source_url').value);
+            const summaryInstructionsField = document.getElementById('summary_instructions');
+            if (summaryInstructionsField) {
+                payload.append('summary_instructions', summaryInstructionsField.value);
+            }
             payload.append('generated_text', currentSummaryText);
             payload.append('csrf_token', getCsrfToken());
 
@@ -314,6 +395,7 @@
                     if (generatedText) {
                         finalTextField.value = generatedText.value;
                         scheduleHtmlPreview(finalTextField, 0);
+                        finalTextField.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         finalTextField.focus();
                     }
                     applySuggestedMetadata();
@@ -321,6 +403,15 @@
             } catch {
                 previewContainer.innerHTML = renderGenerationFeedback('text-danger', 'Summary generation request failed. You can still write manually.');
                 document.getElementById('generated_text').value = currentSummaryText;
+            } finally {
+                setGenerateLoading(false);
+            }
+        });
+
+        sourceUrlField.addEventListener('keydown', (event) => {
+            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                event.preventDefault();
+                generateButton.click();
             }
         });
 
@@ -334,6 +425,20 @@
             scheduleHtmlPreview(event.target);
         });
 
-        ensureAtLeastOneLinkRow();
+        // Manual collapse toggle (Bootstrap JS is not loaded)
+        document.addEventListener('click', (event) => {
+            const toggle = event.target.closest('[data-collapse-toggle]');
+            if (!toggle) return;
+            event.preventDefault();
+            const targetId = toggle.getAttribute('aria-controls');
+            const target = document.getElementById(targetId);
+            if (!target) return;
+            const isExpanded = target.classList.toggle('show');
+            toggle.setAttribute('aria-expanded', String(isExpanded));
+        });
+
+        if (!sourceUrlField.value && !document.getElementById('title').value) {
+            sourceUrlField.focus();
+        }
     </script>
 {% endblock %}

@@ -15,8 +15,14 @@
 - FR-007-06 The system shall return concise structured web results with three to five items, capped at five items, when credible sources are available.
 - FR-007-07 The system shall support cache reuse for repeated group web-search requests and forced refresh for explicit reload requests.
 - FR-007-08 The system shall support streamed progress and result events for group web search over Server-Sent Events.
+- FR-007-09 The system shall exclude web-search result URLs that already exist as saved entry source URLs in the database.
+- FR-007-10 The system shall validate the reachability of web-search result URLs and exclude unreachable links from the returned set.
+- FR-007-11 The system shall request a broadened follow-up search when the initial pass returns fewer than three usable results after saved-URL and reachability filtering.
+- FR-007-12 The system shall return HTTP `504` when the group web-search backend times out.
 
 ## Acceptance Notes
 
 - Web-search results are stored in an in-memory cache rather than the database.
 - The current UI only surfaces the panel when the selected group can actually use it.
+- URL reachability checks use a 5-second timeout per URL.
+- Broadened search uses a 45-second timeout, independent of the initial 60-second timeout.

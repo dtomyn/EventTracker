@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import calendar
 from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, date, datetime
 from html import escape
@@ -139,12 +140,13 @@ def blank_form_state() -> EntryFormState:
             "group_id": "",
             "title": "",
             "source_url": "",
+            "summary_instructions": "",
             "generated_text": "",
             "final_text": "",
             "tags": "",
         },
         errors={},
-        link_rows=[EMPTY_LINK_ROW.copy()],
+        link_rows=[],
     )
 
 
@@ -157,6 +159,7 @@ def form_state_from_entry(entry: Entry) -> EntryFormState:
             "group_id": str(entry.group_id),
             "title": entry.title,
             "source_url": entry.source_url or "",
+            "summary_instructions": "",
             "generated_text": entry.generated_text or "",
             "final_text": entry.final_text,
             "tags": ", ".join(entry.tags),
@@ -179,6 +182,9 @@ def validate_entry_form(
         "group_id": str(form_data.get("group_id", "")).strip(),
         "title": str(form_data.get("title", "")).strip(),
         "source_url": str(form_data.get("source_url", "")).strip(),
+        "summary_instructions": str(
+            form_data.get("summary_instructions", "")
+        ).strip(),
         "generated_text": str(form_data.get("generated_text", "")).strip(),
         "final_text": str(form_data.get("final_text", "")).strip(),
         "tags": str(form_data.get("tags", "")).strip(),
@@ -883,6 +889,72 @@ def list_timeline_month_buckets(
         bucket["count"] += 1
 
     return buckets
+
+
+def get_heatmap_counts(
+    connection: sqlite3.Connection,
+    year: int,
+    group_id: int | None = None,
+) -> HeatmapData:
+    """Return per-day entry counts for a calendar year.
+
+    Entries without ``event_day`` are distributed evenly across their month.
+    """
+    from app.models import HeatmapData
+
+    group_filter = "AND e.group_id = ?" if group_id is not None else ""
+    base_params: tuple[object, ...] = (year,) if group_id is None else (year, group_id)
+
+    # Entries with a specific day
+    rows_with_day = connection.execute(
+        f"""
+        SELECT event_month, event_day, COUNT(*) AS cnt
+        FROM entries e
+        WHERE e.event_year = ? {group_filter}
+          AND e.event_day IS NOT NULL
+        GROUP BY event_month, event_day
+        """,
+        base_params,
+    ).fetchall()
+
+    counts: dict[str, int] = {}
+    for row in rows_with_day:
+        month, day, cnt = row[0], row[1], row[2]
+        key = f"{year}-{month:02d}-{day:02d}"
+        counts[key] = counts.get(key, 0) + cnt
+
+    # Entries without a specific day — distribute evenly across the month
+    rows_without_day = connection.execute(
+        f"""
+        SELECT event_month, COUNT(*) AS cnt
+        FROM entries e
+        WHERE e.event_year = ? {group_filter}
+          AND e.event_day IS NULL
+        GROUP BY event_month
+        """,
+        base_params,
+    ).fetchall()
+
+    for row in rows_without_day:
+        month, cnt = row[0], row[1]
+        days_in_month = calendar.monthrange(year, month)[1]
+        step = max(1, days_in_month // cnt) if cnt <= days_in_month else 1
+        for i in range(cnt):
+            day = (i * step) % days_in_month + 1
+            key = f"{year}-{month:02d}-{day:02d}"
+            counts[key] = counts.get(key, 0) + 1
+
+    # All years with entries (for year navigation)
+    years_query = "SELECT DISTINCT event_year FROM entries"
+    if group_id is not None:
+        years_query += " WHERE group_id = ?"
+        years_rows = connection.execute(years_query, (group_id,)).fetchall()
+    else:
+        years_rows = connection.execute(years_query).fetchall()
+    years_available = sorted(row[0] for row in years_rows)
+
+    total = sum(counts.values())
+    return HeatmapData(counts=counts, total=total, year=year, years_available=years_available)
 
 
 def list_timeline_summary_groups(

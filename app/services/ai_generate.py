@@ -66,6 +66,7 @@ class DraftGenerator(Protocol):
         title: str,
         extraction: ExtractionResult | None = None,
         preferred_tags: list[str] | None = None,
+        summary_instructions: str = "",
     ) -> GeneratedEntrySuggestion: ...
 
 
@@ -96,12 +97,18 @@ class OpenAIChatDraftGenerator:
         title: str,
         extraction: ExtractionResult | None = None,
         preferred_tags: list[str] | None = None,
+        summary_instructions: str = "",
     ) -> GeneratedEntrySuggestion:
         normalized_title = _normalize_text(title)
         if not normalized_title and extraction is None:
             raise ValueError("Provide a title or source URL to generate a draft.")
 
-        prompt = _build_user_prompt(normalized_title, extraction, preferred_tags)
+        prompt = _build_user_prompt(
+            normalized_title,
+            extraction,
+            preferred_tags,
+            summary_instructions,
+        )
 
         response = await self._client.chat.completions.create(
             model=self._settings.model_id,
@@ -120,12 +127,18 @@ class CopilotChatDraftGenerator:
         title: str,
         extraction: ExtractionResult | None = None,
         preferred_tags: list[str] | None = None,
+        summary_instructions: str = "",
     ) -> GeneratedEntrySuggestion:
         normalized_title = _normalize_text(title)
         if not normalized_title and extraction is None:
             raise ValueError("Provide a title or source URL to generate a draft.")
 
-        prompt = _build_user_prompt(normalized_title, extraction, preferred_tags)
+        prompt = _build_user_prompt(
+            normalized_title,
+            extraction,
+            preferred_tags,
+            summary_instructions,
+        )
 
         response_content = await self._generate_response_content(prompt)
         return _finalize_suggestion(response_content, normalized_title, extraction)
@@ -175,9 +188,15 @@ async def generate_entry_suggestion(
     title: str,
     extraction: ExtractionResult | None = None,
     preferred_tags: list[str] | None = None,
+    summary_instructions: str = "",
 ) -> GeneratedEntrySuggestion:
     generator = get_draft_generator()
-    return await generator.generate_entry_suggestion(title, extraction, preferred_tags)
+    return await generator.generate_entry_suggestion(
+        title,
+        extraction,
+        preferred_tags,
+        summary_instructions,
+    )
 
 
 @lru_cache(maxsize=1)
@@ -271,10 +290,13 @@ def _build_user_prompt(
     title: str,
     extraction: ExtractionResult | None,
     preferred_tags: list[str] | None,
+    summary_instructions: str = "",
 ) -> str:
     prompt = [
         "Create a structured suggestion for a personal timeline entry.",
     ]
+
+    normalized_summary_instructions = _normalize_text(summary_instructions)
 
     if title:
         prompt.append(f"Current title hint: {title}")
@@ -286,6 +308,12 @@ def _build_user_prompt(
             "Source context: "
             f"Title={_normalize_text(extraction.title or '')}; "
             f"Excerpt={_normalize_text(extraction.text[:2000])}"
+        )
+
+    if normalized_summary_instructions:
+        prompt.append(
+            "Additional summarization instructions: "
+            f"{normalized_summary_instructions}"
         )
 
     if preferred_tags:

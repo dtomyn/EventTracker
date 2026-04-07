@@ -2,7 +2,7 @@
 
 - Category: Functional
 - Status: Baseline
-- Scope: Index of the functional requirement documents derived from the implemented EventTracker repository as of 2026-03-19.
+- Scope: Index of the functional requirement documents derived from the implemented EventTracker repository as of 2026-04-06.
 - Primary Sources: `README.md`, `app/main.py`, `app/services/*`, `scripts/*`, `tests/*`
 
 ## Requirement Statements

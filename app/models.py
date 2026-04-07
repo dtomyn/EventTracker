@@ -94,3 +94,11 @@ class TimelineStorySnapshot:
     provider_name: str | None = None
     error_text: str | None = None
     citations: list[TimelineStoryCitation] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class HeatmapData:
+    counts: dict[str, int]
+    total: int
+    year: int
+    years_available: list[int]

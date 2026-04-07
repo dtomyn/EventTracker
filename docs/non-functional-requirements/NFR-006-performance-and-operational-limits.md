@@ -16,6 +16,10 @@
 - NFR-006-07 The application shall target three to five items and shall not exceed five items in group web-search responses.
 - NFR-006-08 The application shall default story-generation input to the most recent 40 chronologically ordered entries when the scope contains more than that limit.
 - NFR-006-09 The application shall default each entry summary to a maximum of 280 characters during story prompt preparation.
+- NFR-006-10 The application shall limit the preferred-tag vocabulary passed to AI draft generation to 50 tags per group.
+- NFR-006-11 The application shall limit group `web_search_query` values to 400 characters.
+- NFR-006-12 The application shall default the group web-search backend timeout to 60 seconds, the broadened-search timeout to 45 seconds, and the per-URL reachability check timeout to 5 seconds.
+- NFR-006-13 The application shall derive the browser-side group web-search request timeout from the backend timeout plus a 5-second buffer.
 
 ## Acceptance Notes
 
