@@ -72,13 +72,13 @@ Future TypeScript specs should import `test` and `expect` from `tstests/e2e/help
 
 `npm run serve:e2e:ts` still starts a shared local server on `http://127.0.0.1:35231/` for manual debugging and `npm run codegen:e2e`, but the automated TypeScript suite is configured around the isolated harness instead of a shared web server.
 
-The TypeScript suite currently includes specs for smoke tests, entry lifecycle (create/read/edit), timeline view switching, and search result navigation. Page Object Models in `tstests/e2e/poms/` cover the timeline, entry form, entry detail, search, and admin groups pages.
+The TypeScript suite currently includes specs for smoke tests, entry lifecycle (create/read/edit), timeline view switching, search result navigation, and heatmap visualization. Page Object Models in `tstests/e2e/poms/` cover the timeline, entry form, entry detail, search, and admin groups pages.
 
 Useful TypeScript Playwright commands:
 
 ```powershell
 npm run serve:e2e:ts
-npm run test:e2e:ts -- tstests/e2e/search-and-topic-graph.spec.ts
+npm run test:e2e:ts -- tstests/e2e/heatmap.spec.ts
 ```
 
 Useful environment variables:
@@ -114,7 +114,7 @@ uv run --with pillow python .\scripts\generate_demo_assets.py --also-no-search-a
 ## What the application does today
 
 - Creates and edits timeline entries with year, month, optional day, required group, required title, optional source URL, optional generated draft HTML, required final rich text, comma-separated tags, and optional additional links with required notes.
-- Shows the main timeline at `/` with four views over the current scope: `Details`, `Summaries`, `Months`, and `Years`.
+- Shows the main timeline at `/` with five views over the current scope: `Details`, `Summaries`, `Heatmap`, `Months`, and `Years`.
 - Defaults the main timeline and ranked search to the current default timeline group. Users can switch to a specific group or `All groups`.
 - Supports timeline filtering on `/` with the `q` query string. This keeps matches in timeline order instead of ranked order.
 - Supports ranked search at `/search`, combining FTS matches with semantic matches when embeddings are available.
@@ -395,12 +395,15 @@ erDiagram
 - If `q` is present, uses the search service to find matching entry ids and renders a filtered timeline.
 - Groups entries by month and year.
 - Sorts entries newest first by `sort_key DESC`, then `updated_utc DESC`, then `id DESC`.
-- Exposes client-side metadata so the browser can switch between `Details`, `Summaries`, `Months`, and `Years`.
+- Exposes client-side metadata so the browser can switch between `Details`, `Summaries`, `Heatmap`, `Months`, and `Years`.
 
 Additional timeline endpoints:
 
 - `GET /timeline/details`: paginated HTML payload for the details view.
 - `GET /timeline/summaries`: HTML payload for summary groups, optionally scoped by year and month.
+- `GET /timeline/heatmap`: metadata payload that tells the client to switch to the heatmap view.
+- `GET /timeline/heatmap/entries`: paginated HTML payload for entries matching a heatmap date cell.
+- `GET /api/heatmap`: JSON day-count data for the heatmap grid, optionally scoped by year and group.
 - `GET /timeline/months`: month-bucket HTML payload, optionally scoped by year.
 - `GET /timeline/years`: year-bucket HTML payload.
 
@@ -827,13 +830,16 @@ Current automated coverage includes:
 - timeline filter and ranked search behavior
 - group administration rules
 - generation partial behavior
+- heatmap API behavior
 - import parsing
+- embeddings service behavior
 - group web search behavior
 - admin group CRUD (E2E)
 - URL extraction
 - HTML sanitization
 - navigation and entry detail (E2E)
 - search and topic graph (E2E)
+- heatmap visualization (E2E)
 - story mode (E2E)
 
 ## Project layout
@@ -876,6 +882,7 @@ app/  # FastAPI application package
     partials/  # Reusable template fragments
       entry_card.html
       generated_preview.html
+      heatmap_entries.html
       html_preview_content.html
       search_results.html
       story_links.html
@@ -911,8 +918,10 @@ tests/  # Unit and integration tests
   test_ai_generate.py
   test_ai_story_mode.py
   test_db.py
+  test_embeddings.py
   test_entries.py
   test_extraction.py
+  test_heatmap_api.py
   test_group_web_search.py
   test_import_entries.py
   test_init_db.py
@@ -926,6 +935,7 @@ tests/  # Unit and integration tests
 tstests/  # TypeScript Playwright E2E tests
   e2e/
     entry-lifecycle-create-read-edit.spec.ts
+    heatmap.spec.ts
     search-result-navigation.spec.ts
     smoke.spec.ts
     timeline-view-switching.spec.ts
