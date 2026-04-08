@@ -17,8 +17,9 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
 
+# Use a taller desktop framing so screenshots read more like a typical browser window.
 VIEWPORT_WIDTH = 1200
-VIEWPORT_HEIGHT = 800
+VIEWPORT_HEIGHT = 1100
 DEFAULT_BASE_URL = "http://127.0.0.1:35231"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_DIR = Path("docs") / "demo-assets" / "screenshots"
@@ -31,42 +32,57 @@ DEFAULT_NO_SEARCH_GIF_NAME = (
 SCREEN_HOLD_MS = 1500
 TRANSITION_STEPS = 2
 TRANSITION_STEP_MS = 100
-CANVAS_SIZE = (900, 600)
+CANVAS_SIZE = (900, 825)
 CANVAS_BACKGROUND = (249, 250, 251)
 SUMMARY_SOURCE_URL = "https://code.visualstudio.com/updates/v1_112"
 SEARCH_QUERY = "Copilot"
+ENTRY_DETAIL_ID = 5
+
 FULL_FRAME_NAMES = [
+    # Phase 1: Timeline views
     "01-home.png",
     "02-recent-loading.png",
     "03-recent-results.png",
     "04-summaries-clicked.png",
-    "05-tag-clusters-clicked.png",
-    "06-query-entered.png",
-    "07-filter-results.png",
-    "08-search-results.png",
-    "09-url-entered.png",
-    "10-generating.png",
-    "11-summary-generated.png",
-    "12-dark-mode.png",
-    "13-months-clicked.png",
-    "14-years-clicked.png",
-    "15-story-mode-screen.png",
-    "16-story-generated.png",
+    "05-heatmap-clicked.png",
+    "06-months-clicked.png",
+    "07-years-clicked.png",
+    # Phase 2: Topic graph
+    "08-tag-clusters.png",
+    # Phase 3: Search
+    "09-query-entered.png",
+    "10-filter-results.png",
+    "11-search-results.png",
+    # Phase 4: Entry creation
+    "12-url-entered.png",
+    "13-generating.png",
+    "14-summary-generated.png",
+    # Phase 5: Entry viewing
+    "15-entry-detail.png",
+    # Phase 6: Admin
+    "16-admin-groups.png",
+    # Phase 7: Dark mode and story
+    "17-dark-mode.png",
+    "18-story-mode-screen.png",
+    "19-story-generated.png",
 ]
 NO_SEARCH_FRAME_NAMES = [
     "01-home.png",
     "02-recent-loading.png",
     "03-recent-results.png",
     "04-summaries-clicked.png",
-    "05-tag-clusters-clicked.png",
-    "09-url-entered.png",
-    "10-generating.png",
-    "11-summary-generated.png",
-    "12-dark-mode.png",
-    "13-months-clicked.png",
-    "14-years-clicked.png",
-    "15-story-mode-screen.png",
-    "16-story-generated.png",
+    "05-heatmap-clicked.png",
+    "06-months-clicked.png",
+    "07-years-clicked.png",
+    "08-tag-clusters.png",
+    "12-url-entered.png",
+    "13-generating.png",
+    "14-summary-generated.png",
+    "15-entry-detail.png",
+    "16-admin-groups.png",
+    "17-dark-mode.png",
+    "18-story-mode-screen.png",
+    "19-story-generated.png",
 ]
 
 
@@ -222,78 +238,126 @@ def capture_assets(page: Page, base_url: str, output_dir: Path) -> list[Path]:
     page.set_viewport_size({"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT})
 
     output_paths = resolve_frame_paths(output_dir, FULL_FRAME_NAMES)
+    idx = 0
 
+    # ── Phase 1: Timeline views ──────────────────────────────────────────
+
+    # 01 - Home (details view)
     page.goto(f"{base_url}/")
     page.wait_for_load_state("networkidle")
-    save_screenshot(page, output_paths[0])
+    save_screenshot(page, output_paths[idx]); idx += 1
 
+    # 02 - Recent Developments loading
     page.locator("[data-group-web-search-toggle]").click()
     page.wait_for_timeout(300)
     refresh_button = page.locator("[data-group-web-search-refresh]").first
     if refresh_button.is_enabled():
         refresh_button.click()
         page.wait_for_timeout(250)
-    save_screenshot(page, output_paths[1])
+    save_screenshot(page, output_paths[idx]); idx += 1
 
+    # 03 - Recent Developments results
     wait_for_recent_results(page)
-    save_screenshot(page, output_paths[2])
+    save_screenshot(page, output_paths[idx]); idx += 1
 
+    # 04 - Summaries view
     page.locator("[data-zoom-target='events']").click()
     page.wait_for_timeout(300)
-    save_screenshot(page, output_paths[3])
+    save_screenshot(page, output_paths[idx]); idx += 1
 
-    page.get_by_role("link", name="Tag Clusters").click()
+    # 05 - Heatmap view
+    page.locator("[data-zoom-target='heatmap']").click()
+    page.wait_for_timeout(500)
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # 06 - Months view
+    page.locator("[data-zoom-target='months']").click()
     page.wait_for_timeout(300)
-    save_screenshot(page, output_paths[4])
+    save_screenshot(page, output_paths[idx]); idx += 1
 
+    # 07 - Years view
+    page.locator("[data-zoom-target='years']").click()
+    page.wait_for_timeout(300)
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # ── Phase 2: Topic graph ─────────────────────────────────────────────
+
+    # 08 - Tag clusters / topic graph
+    page.get_by_role("link", name="Tag Clusters").click()
+    page.wait_for_load_state("networkidle")
+    page.wait_for_timeout(1_000)
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # ── Phase 3: Search ──────────────────────────────────────────────────
+
+    # 09 - Search query entered (searchbox is in global navbar)
     searchbox = page.get_by_role("searchbox", name="Filter timeline in plain English")
     searchbox.fill(SEARCH_QUERY)
-    save_screenshot(page, output_paths[5])
+    save_screenshot(page, output_paths[idx]); idx += 1
 
+    # 10 - Timeline filter results
     page.locator('button:has-text("Filter"):not([formaction])').click()
     page.wait_for_load_state("networkidle")
-    save_screenshot(page, output_paths[6])
+    save_screenshot(page, output_paths[idx]); idx += 1
 
+    # 11 - Ranked search results
     searchbox = page.get_by_role("searchbox", name="Filter timeline in plain English")
     searchbox.fill(SEARCH_QUERY)
     page.locator('button[formaction="/search"]').click()
     page.wait_for_load_state("networkidle")
-    save_screenshot(page, output_paths[7])
+    save_screenshot(page, output_paths[idx]); idx += 1
 
+    # ── Phase 4: Entry creation ──────────────────────────────────────────
+
+    # 12 - New entry with URL entered
     page.get_by_role("link", name="New Entry").click()
     page.wait_for_load_state("networkidle")
     page.get_by_label("Source URL").fill(SUMMARY_SOURCE_URL)
-    save_screenshot(page, output_paths[8])
+    save_screenshot(page, output_paths[idx]); idx += 1
 
+    # 13 - Generation in progress
     page.locator("#generate-button").click()
     page.wait_for_timeout(600)
-    save_screenshot(page, output_paths[9])
+    save_screenshot(page, output_paths[idx]); idx += 1
 
+    # 14 - Summary generated
     wait_for_generated_summary(page)
-    save_screenshot(page, output_paths[10])
+    save_screenshot(page, output_paths[idx]); idx += 1
 
+    # ── Phase 5: Entry viewing ───────────────────────────────────────────
+
+    # 15 - Entry detail page (with source snapshot)
+    page.goto(f"{base_url}/entries/{ENTRY_DETAIL_ID}/view")
+    page.wait_for_load_state("networkidle")
+    page.wait_for_timeout(300)
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # ── Phase 6: Admin ───────────────────────────────────────────────────
+
+    # 16 - Admin groups page
+    page.goto(f"{base_url}/admin/groups")
+    page.wait_for_load_state("networkidle")
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # ── Phase 7: Dark mode and Story Mode ────────────────────────────────
+
+    # 17 - Dark mode on timeline
     page.goto(f"{base_url}/")
     page.wait_for_load_state("networkidle")
     page.locator("#theme-toggle").click()
     page.wait_for_timeout(600)
-    save_screenshot(page, output_paths[11])
+    save_screenshot(page, output_paths[idx]); idx += 1
 
-    page.locator("[data-zoom-target='months']").click()
-    page.wait_for_timeout(300)
-    save_screenshot(page, output_paths[12])
-
-    page.locator("[data-zoom-target='years']").click()
-    page.wait_for_timeout(300)
-    save_screenshot(page, output_paths[13])
-
+    # 18 - Story Mode screen
     page.get_by_role("link", name="Story Mode").click()
     page.wait_for_load_state("networkidle")
-    save_screenshot(page, output_paths[14])
+    save_screenshot(page, output_paths[idx]); idx += 1
 
+    # 19 - Story generated
     page.locator("[data-story-generate-button]").click(no_wait_after=True)
     wait_for_story_result(page)
     page.wait_for_timeout(500)
-    save_screenshot(page, output_paths[15])
+    save_screenshot(page, output_paths[idx]); idx += 1
 
     return output_paths
 
