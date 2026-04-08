@@ -12,6 +12,20 @@ class EntryLinkPayload:
 
 
 @dataclass(slots=True)
+class EntrySourceSnapshotPayload:
+    source_url: str
+    final_url: str
+    raw_title: str | None
+    markdown: str
+    fetched_utc: str
+    content_type: str | None
+    http_etag: str | None
+    http_last_modified: str | None
+    extractor_name: str
+    extractor_version: str
+
+
+@dataclass(slots=True)
 class EntryPayload:
     event_year: int
     event_month: int
@@ -23,6 +37,7 @@ class EntryPayload:
     final_text: str
     tags: list[str]
     links: list[EntryLinkPayload]
+    source_snapshot: EntrySourceSnapshotPayload | None = None
 
 
 @dataclass(slots=True)

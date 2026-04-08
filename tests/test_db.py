@@ -162,6 +162,45 @@ class TestDatabaseInitialization(unittest.TestCase):
             citation_indexes,
         )
 
+    def test_init_db_creates_entry_source_snapshot_table(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "EventTracker-test.db"
+
+            with patch.dict(
+                os.environ, {"EVENTTRACKER_DB_PATH": str(db_path)}, clear=False
+            ):
+                init_db()
+
+            connection = sqlite3.connect(db_path)
+            try:
+                snapshot_columns = tuple(
+                    row[1]
+                    for row in connection.execute(
+                        "PRAGMA table_info(entry_source_snapshots)"
+                    ).fetchall()
+                )
+            finally:
+                connection.close()
+
+        self.assertEqual(
+            snapshot_columns,
+            (
+                "entry_id",
+                "source_url",
+                "final_url",
+                "raw_title",
+                "source_markdown",
+                "fetched_utc",
+                "content_type",
+                "http_etag",
+                "http_last_modified",
+                "content_sha256",
+                "extractor_name",
+                "extractor_version",
+                "markdown_char_count",
+            ),
+        )
+
 
 class TestValidatePositiveInteger(unittest.TestCase):
     def test_valid_positive_integer(self) -> None:

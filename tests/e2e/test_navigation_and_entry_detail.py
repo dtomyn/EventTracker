@@ -3,6 +3,7 @@ dark-mode theme toggle, and duplicate source URL detection.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import sqlite3
 from datetime import UTC, datetime
@@ -81,6 +82,51 @@ def _seed_tag(db_path: Path, *, entry_id: int, tag: str) -> None:
         con.execute(
             "INSERT OR IGNORE INTO entry_tags(entry_id, tag_id) VALUES (?, ?)",
             (entry_id, int(tag_id_row[0])),
+        )
+        con.commit()
+
+
+def _seed_source_snapshot(
+    db_path: Path,
+    *,
+    entry_id: int,
+    source_url: str,
+    final_url: str,
+    markdown: str,
+) -> None:
+    ts = _utc_now_iso()
+    with sqlite3.connect(db_path) as con:
+        con.execute(
+            """
+            INSERT INTO entry_source_snapshots (
+                entry_id,
+                source_url,
+                final_url,
+                raw_title,
+                source_markdown,
+                fetched_utc,
+                content_type,
+                http_etag,
+                http_last_modified,
+                content_sha256,
+                extractor_name,
+                extractor_version,
+                markdown_char_count
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?)
+            """,
+            (
+                entry_id,
+                source_url,
+                final_url,
+                "Captured source title",
+                markdown,
+                ts,
+                "text/html",
+                hashlib.sha256(markdown.encode("utf-8")).hexdigest(),
+                "markitdown",
+                "0.1.5",
+                len(markdown),
+            ),
         )
         con.commit()
 
@@ -193,6 +239,13 @@ def test_entry_detail_page_shows_title_date_group_tags_source_url_and_links(
     )
     _seed_tag(e2e_session.db_path, entry_id=entry_id, tag="playwright")
     _seed_tag(e2e_session.db_path, entry_id=entry_id, tag="detail-test")
+    _seed_source_snapshot(
+        e2e_session.db_path,
+        entry_id=entry_id,
+        source_url=source_url,
+        final_url="https://example.com/releases/detail-test/final",
+        markdown="# Captured source\n\n[Reference](https://example.com/reference)",
+    )
 
     page.goto(f"/entries/{entry_id}/view")
 
@@ -212,6 +265,11 @@ def test_entry_detail_page_shows_title_date_group_tags_source_url_and_links(
 
     # Source URL table
     expect(page.get_by_role("link", name=source_url)).to_be_visible()
+    expect(page.get_by_role("heading", name="Saved Source Snapshot")).to_be_visible()
+    expect(page.locator(".source-snapshot-rendered")).to_contain_text("Captured source")
+    expect(page.locator(".source-snapshot-rendered a")).to_have_attribute(
+        "href", "https://example.com/reference"
+    )
 
     # Additional links table
     expect(page.get_by_role("link", name="https://example.com/releases/followup")).to_be_visible()
@@ -221,6 +279,7 @@ def test_entry_detail_page_shows_title_date_group_tags_source_url_and_links(
     page.get_by_role("link", name="Edit").click()
     expect(page).to_have_url(re.compile(rf".*/entries/{entry_id}$"))
     expect(page.get_by_role("heading", name="Edit Entry")).to_be_visible()
+    expect(page.get_by_text("Saved source snapshot")).to_be_visible()
 
 
 def test_entry_detail_page_shows_no_links_placeholder_when_empty(

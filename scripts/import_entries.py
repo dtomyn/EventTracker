@@ -11,12 +11,17 @@ from bs4 import BeautifulSoup, Tag
 from dotenv import load_dotenv
 
 from app.db import connection_context, init_db
-from app.schemas import EntryLinkPayload, EntryPayload
+from app.schemas import EntryLinkPayload, EntryPayload, EntrySourceSnapshotPayload
 from app.services.entries import (
     compute_sort_key,
     sync_entry_links,
     sync_entry_tags,
+    upsert_entry_source_snapshot,
     utc_now_iso,
+)
+from app.services.extraction import (
+    DEFAULT_SOURCE_EXTRACTOR_NAME,
+    DEFAULT_SOURCE_EXTRACTOR_VERSION,
 )
 
 
@@ -175,6 +180,9 @@ def parse_entries_export(raw_json: str) -> list[ParsedEntry]:
                     final_text=str(item.get("final_text") or "").strip(),
                     tags=tags,
                     links=links,
+                    source_snapshot=_parse_source_snapshot(
+                        item.get("source_snapshot"), index=index
+                    ),
                 ),
                 source_heading=str(item.get("title") or f"entry-{index}"),
                 created_utc=_optional_string(item.get("created_utc")),
@@ -298,6 +306,8 @@ def insert_entry_without_embeddings(
     entry_id = int(raw_entry_id)
     sync_entry_tags(connection, entry_id, payload.tags)
     sync_entry_links(connection, entry_id, payload.links)
+    if payload.source_snapshot is not None:
+        upsert_entry_source_snapshot(connection, entry_id, payload.source_snapshot)
     return entry_id
 
 
@@ -312,6 +322,43 @@ def _optional_string(value: object) -> str | None:
         return None
     normalized = str(value).strip()
     return normalized or None
+
+
+def _parse_source_snapshot(
+    raw_value: object, *, index: int
+) -> EntrySourceSnapshotPayload | None:
+    if raw_value is None:
+        return None
+    if not isinstance(raw_value, dict):
+        raise ValueError(f"Export entry #{index} has an invalid source_snapshot payload.")
+
+    markdown = str(raw_value.get("markdown") or "").replace("\r\n", "\n").strip()
+    source_url = str(raw_value.get("source_url") or "").strip()
+    final_url = str(raw_value.get("final_url") or source_url).strip()
+    fetched_utc = str(raw_value.get("fetched_utc") or "").strip()
+    if not markdown or not source_url or not final_url or not fetched_utc:
+        raise ValueError(
+            f"Export entry #{index} contains an incomplete source_snapshot payload."
+        )
+
+    return EntrySourceSnapshotPayload(
+        source_url=source_url,
+        final_url=final_url,
+        raw_title=_optional_string(raw_value.get("raw_title")),
+        markdown=markdown,
+        fetched_utc=fetched_utc,
+        content_type=_optional_string(raw_value.get("content_type")),
+        http_etag=_optional_string(raw_value.get("http_etag")),
+        http_last_modified=_optional_string(raw_value.get("http_last_modified")),
+        extractor_name=(
+            _optional_string(raw_value.get("extractor_name"))
+            or DEFAULT_SOURCE_EXTRACTOR_NAME
+        ),
+        extractor_version=(
+            _optional_string(raw_value.get("extractor_version"))
+            or DEFAULT_SOURCE_EXTRACTOR_VERSION
+        ),
+    )
 
 
 def main() -> None:

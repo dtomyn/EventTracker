@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import unittest
 
-from app.services.entries import sanitize_rich_text, sanitize_search_snippet
+from app.services.entries import (
+    render_source_snapshot_markdown,
+    sanitize_rich_text,
+    sanitize_search_snippet,
+)
 
 
 class TestSanitizeRichText(unittest.TestCase):
@@ -156,3 +160,31 @@ class TestSanitizeSearchSnippet(unittest.TestCase):
         self.assertIn("<mark>", result)
         self.assertIn("<b>bold</b>", result)
         self.assertIn("<p>", result)
+
+
+class TestRenderSourceSnapshotMarkdown(unittest.TestCase):
+    def test_renders_markdown_headings_links_and_code_blocks(self) -> None:
+        result = render_source_snapshot_markdown(
+            "# Snapshot\n\n[Reference](https://example.com/docs)\n\n```\ncode sample\n```"
+        )
+
+        self.assertIn("<h3>Snapshot</h3>", result)
+        self.assertIn('href="https://example.com/docs"', result)
+        self.assertIn('target="_blank"', result)
+        self.assertIn("<pre><code>code sample", result)
+
+    def test_strips_javascript_links_from_rendered_markdown(self) -> None:
+        result = render_source_snapshot_markdown("[Bad](javascript:alert(1))")
+
+        self.assertIn("<a>", result)
+        self.assertNotIn("javascript:", result)
+        self.assertNotIn("href=", result)
+
+    def test_unwraps_disallowed_html_from_rendered_markdown(self) -> None:
+        result = render_source_snapshot_markdown(
+            "<img src=x onerror=alert(1)>\n\n<script>alert(1)</script>\n\nParagraph"
+        )
+
+        self.assertNotIn("<img", result)
+        self.assertNotIn("<script", result)
+        self.assertIn("<p>Paragraph</p>", result)

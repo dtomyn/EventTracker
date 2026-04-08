@@ -22,7 +22,7 @@
                                 <label class="form-label" for="source_url">Source URL</label>
                                 <input class="form-control {% if form_state.errors.get('source_url') %}is-invalid{% endif %}" id="source_url" name="source_url" value="{{ form_state.values.get('source_url', '') }}" placeholder="https://example.com/article">
                                 {% if form_state.errors.get('source_url') %}<div class="invalid-feedback">{{ form_state.errors['source_url'] }}</div>{% endif %}
-                                <div class="form-text">Only the URL is stored. Extracted article content is kept in memory only during generation.</div>
+                                <div class="form-text">When available, the saved entry keeps a normalized Markdown snapshot of the fetched source alongside the URL.</div>
                             </div>
 
                             <div class="col-12">
@@ -52,6 +52,34 @@
                                     {% include "partials/generated_preview.html" %}
                                 </div>
                             </div>
+
+                            {% if entry_id and source_snapshot %}
+                                <div class="col-12">
+                                    <details class="source-snapshot-card source-snapshot-card--compact">
+                                        <summary>Saved source snapshot</summary>
+                                        <div class="source-snapshot-compact-body">
+                                            <p class="text-body-secondary mb-3">This is the Markdown snapshot currently attached to the entry. Generate from the source URL and save if you want to replace it.</p>
+
+                                            <div class="source-snapshot-meta mb-3">
+                                                <span class="source-snapshot-pill">Captured {{ source_snapshot.fetched_utc | replace('T', ' ') | replace('+00:00', ' UTC') }}</span>
+                                                <span class="source-snapshot-pill">{{ source_snapshot.markdown_char_count }} chars</span>
+                                                <span class="source-snapshot-pill">{{ source_snapshot.extractor_name }} {{ source_snapshot.extractor_version }}</span>
+                                            </div>
+
+                                            <div class="source-snapshot-rendered source-snapshot-rendered--compact">{{ source_snapshot.markdown | render_source_markdown | safe }}</div>
+
+                                            <label class="form-label mt-3" for="saved_source_snapshot_markdown">Raw Markdown</label>
+                                            <textarea class="form-control font-mono source-snapshot-textarea" id="saved_source_snapshot_markdown" rows="10" readonly spellcheck="false">{{ source_snapshot.markdown }}</textarea>
+                                        </div>
+                                    </details>
+                                </div>
+                            {% elif entry_id and form_state.values.get('source_url', '') %}
+                                <div class="col-12">
+                                    <div class="source-snapshot-missing">
+                                        No saved Markdown snapshot is attached to this entry yet. Generate from the current source URL and save the entry to store one.
+                                    </div>
+                                </div>
+                            {% endif %}
                         </div>
                     </div>
 
@@ -199,6 +227,16 @@
         function renderGenerationFeedback(feedbackClass = 'text-body-secondary', feedbackMessage = '') {
             return `
                 <input type="hidden" id="generated_text" name="generated_text" value="">
+                <input type="hidden" id="source_snapshot_source_url" name="source_snapshot_source_url" value="">
+                <input type="hidden" id="source_snapshot_final_url" name="source_snapshot_final_url" value="">
+                <input type="hidden" id="source_snapshot_title" name="source_snapshot_title" value="">
+                <textarea id="source_snapshot_markdown" name="source_snapshot_markdown" hidden></textarea>
+                <input type="hidden" id="source_snapshot_content_type" name="source_snapshot_content_type" value="">
+                <input type="hidden" id="source_snapshot_fetched_utc" name="source_snapshot_fetched_utc" value="">
+                <input type="hidden" id="source_snapshot_http_etag" name="source_snapshot_http_etag" value="">
+                <input type="hidden" id="source_snapshot_http_last_modified" name="source_snapshot_http_last_modified" value="">
+                <input type="hidden" id="source_snapshot_extractor_name" name="source_snapshot_extractor_name" value="">
+                <input type="hidden" id="source_snapshot_extractor_version" name="source_snapshot_extractor_version" value="">
                 <div id="generate-feedback" class="${feedbackClass}">${feedbackMessage}</div>
                 <input type="hidden" id="generated_suggested_title" value="">
                 <input type="hidden" id="generated_suggested_event_year" value="">
@@ -206,6 +244,26 @@
                 <input type="hidden" id="generated_suggested_event_day" value="">
                 <input type="hidden" id="generated_suggested_tags" value="">
             `;
+        }
+
+        function clearSourceSnapshotFields() {
+            [
+                'source_snapshot_source_url',
+                'source_snapshot_final_url',
+                'source_snapshot_title',
+                'source_snapshot_markdown',
+                'source_snapshot_content_type',
+                'source_snapshot_fetched_utc',
+                'source_snapshot_http_etag',
+                'source_snapshot_http_last_modified',
+                'source_snapshot_extractor_name',
+                'source_snapshot_extractor_version',
+            ].forEach((fieldId) => {
+                const field = document.getElementById(fieldId);
+                if (field) {
+                    field.value = '';
+                }
+            });
         }
 
         function scheduleHtmlPreview(field, delay = 160) {
@@ -413,6 +471,10 @@
                 event.preventDefault();
                 generateButton.click();
             }
+        });
+
+        sourceUrlField.addEventListener('input', () => {
+            clearSourceSnapshotFields();
         });
 
         document.addEventListener('input', (event) => {

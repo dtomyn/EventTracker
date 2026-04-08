@@ -126,6 +126,24 @@ POST_ENTRY_SCHEMA_STATEMENTS = [
         FOREIGN KEY (entry_id) REFERENCES entries(id) ON DELETE CASCADE
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS entry_source_snapshots (
+        entry_id INTEGER PRIMARY KEY,
+        source_url TEXT NOT NULL,
+        final_url TEXT NOT NULL,
+        raw_title TEXT NULL,
+        source_markdown TEXT NOT NULL,
+        fetched_utc TEXT NOT NULL,
+        content_type TEXT NULL,
+        http_etag TEXT NULL,
+        http_last_modified TEXT NULL,
+        content_sha256 TEXT NOT NULL,
+        extractor_name TEXT NOT NULL,
+        extractor_version TEXT NOT NULL,
+        markdown_char_count INTEGER NOT NULL,
+        FOREIGN KEY (entry_id) REFERENCES entries(id) ON DELETE CASCADE
+    )
+    """,
     "CREATE INDEX IF NOT EXISTS idx_entries_sort_key ON entries(sort_key DESC)",
     "CREATE INDEX IF NOT EXISTS idx_entries_group_sort_key ON entries(group_id, sort_key DESC)",
     "CREATE INDEX IF NOT EXISTS idx_entry_tags_tag_id ON entry_tags(tag_id)",

@@ -93,6 +93,58 @@ class TestImportEntries(unittest.TestCase):
         self.assertEqual(parsed_entry.created_utc, "2026-03-17T00:20:06+00:00")
         self.assertEqual(parsed_entry.updated_utc, "2026-03-17T00:20:06+00:00")
 
+    def test_parse_entries_export_maps_source_snapshot_payload(self) -> None:
+        parsed_entries = parse_entries_export(
+            """
+            {
+                "count": 1,
+                "entries": [
+                    {
+                        "event_year": 2026,
+                        "event_month": 4,
+                        "event_day": 7,
+                        "title": "Snapshot Entry",
+                        "source_url": "https://example.com/source",
+                        "generated_text": "<p>Generated.</p>",
+                        "final_text": "<p>Final.</p>",
+                        "created_utc": "2026-04-07T12:00:00+00:00",
+                        "updated_utc": "2026-04-07T12:00:00+00:00",
+                        "tags": [],
+                        "links": [],
+                        "source_snapshot": {
+                            "entry_id": 12,
+                            "source_url": "https://example.com/source",
+                            "final_url": "https://example.com/source",
+                            "raw_title": "Example source",
+                            "markdown": "# Example source\\n\\nCaptured markdown.",
+                            "fetched_utc": "2026-04-07T12:00:00+00:00",
+                            "content_type": "text/html",
+                            "http_etag": "\\"etag-1\\"",
+                            "http_last_modified": "Tue, 07 Apr 2026 12:00:00 GMT",
+                            "content_sha256": "ignored-on-import",
+                            "extractor_name": "markitdown",
+                            "extractor_version": "0.1.5",
+                            "markdown_char_count": 37
+                        }
+                    }
+                ]
+            }
+            """
+        )
+
+        self.assertEqual(len(parsed_entries), 1)
+        parsed_entry = parsed_entries[0]
+        self.assertIsNotNone(parsed_entry.payload.source_snapshot)
+        assert parsed_entry.payload.source_snapshot is not None
+        self.assertEqual(
+            parsed_entry.payload.source_snapshot.source_url,
+            "https://example.com/source",
+        )
+        self.assertIn(
+            "Captured markdown.",
+            parsed_entry.payload.source_snapshot.markdown,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

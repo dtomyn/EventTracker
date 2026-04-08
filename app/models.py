@@ -42,6 +42,23 @@ class Entry:
 
 
 @dataclass(slots=True)
+class EntrySourceSnapshot:
+    entry_id: int
+    source_url: str
+    final_url: str
+    raw_title: str | None
+    markdown: str
+    fetched_utc: str
+    content_type: str | None
+    http_etag: str | None
+    http_last_modified: str | None
+    content_sha256: str
+    extractor_name: str
+    extractor_version: str
+    markdown_char_count: int
+
+
+@dataclass(slots=True)
 class SearchResult:
     entry: Entry
     snippet: str

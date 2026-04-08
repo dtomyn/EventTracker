@@ -26,6 +26,7 @@ DEFAULT_AI_PROVIDER = "openai"
 DEFAULT_COPILOT_MODEL_ID = "gpt-5"
 SUPPORTED_AI_PROVIDERS = {DEFAULT_AI_PROVIDER, "copilot"}
 _STRAY_GENERATED_HTML_CHARACTERS = "\ufeff\u200b\u200c\u200d\u2060\ufffd"
+_MAX_SOURCE_MARKDOWN_PROMPT_CHARS = 8000
 GENERATION_SYSTEM_PROMPT = (
     "You write concise personal timeline entry suggestions. Return JSON only with "
     'this exact schema: {"title": string, "draft_html": string, '
@@ -303,12 +304,13 @@ def _build_user_prompt(
     else:
         prompt.append("Current title hint: none provided")
 
-    if extraction and extraction.text:
-        prompt.append(
-            "Source context: "
-            f"Title={_normalize_text(extraction.title or '')}; "
-            f"Excerpt={_normalize_text(extraction.text[:2000])}"
-        )
+    if extraction and extraction.markdown:
+        if extraction.title:
+            prompt.append(f"Source title: {_normalize_text(extraction.title)}")
+        prompt.append("Source context in Markdown:")
+        prompt.append(extraction.markdown[:_MAX_SOURCE_MARKDOWN_PROMPT_CHARS].strip())
+    elif extraction and extraction.text:
+        prompt.append(f"Source excerpt: {_normalize_text(extraction.text[:2000])}")
 
     if normalized_summary_instructions:
         prompt.append(

@@ -1,5 +1,25 @@
-{% set current_generated_text = generated_text if generated_text is defined else form_state.values.get('generated_text', '') %}
+{% set current_generated_text = generated_text if generated_text is defined else (form_state.values.get('generated_text', '') if form_state is defined else '') %}
+{% set current_source_snapshot_source_url = source_snapshot_source_url if source_snapshot_source_url is defined else (form_state.values.get('source_snapshot_source_url', '') if form_state is defined else '') %}
+{% set current_source_snapshot_final_url = source_snapshot_final_url if source_snapshot_final_url is defined else (form_state.values.get('source_snapshot_final_url', '') if form_state is defined else '') %}
+{% set current_source_snapshot_title = source_snapshot_title if source_snapshot_title is defined else (form_state.values.get('source_snapshot_title', '') if form_state is defined else '') %}
+{% set current_source_snapshot_markdown = source_snapshot_markdown if source_snapshot_markdown is defined else (form_state.values.get('source_snapshot_markdown', '') if form_state is defined else '') %}
+{% set current_source_snapshot_content_type = source_snapshot_content_type if source_snapshot_content_type is defined else (form_state.values.get('source_snapshot_content_type', '') if form_state is defined else '') %}
+{% set current_source_snapshot_fetched_utc = source_snapshot_fetched_utc if source_snapshot_fetched_utc is defined else (form_state.values.get('source_snapshot_fetched_utc', '') if form_state is defined else '') %}
+{% set current_source_snapshot_http_etag = source_snapshot_http_etag if source_snapshot_http_etag is defined else (form_state.values.get('source_snapshot_http_etag', '') if form_state is defined else '') %}
+{% set current_source_snapshot_http_last_modified = source_snapshot_http_last_modified if source_snapshot_http_last_modified is defined else (form_state.values.get('source_snapshot_http_last_modified', '') if form_state is defined else '') %}
+{% set current_source_snapshot_extractor_name = source_snapshot_extractor_name if source_snapshot_extractor_name is defined else (form_state.values.get('source_snapshot_extractor_name', '') if form_state is defined else '') %}
+{% set current_source_snapshot_extractor_version = source_snapshot_extractor_version if source_snapshot_extractor_version is defined else (form_state.values.get('source_snapshot_extractor_version', '') if form_state is defined else '') %}
 <input type="hidden" id="generated_text" name="generated_text" value="{{ current_generated_text }}">
+<input type="hidden" id="source_snapshot_source_url" name="source_snapshot_source_url" value="{{ current_source_snapshot_source_url }}">
+<input type="hidden" id="source_snapshot_final_url" name="source_snapshot_final_url" value="{{ current_source_snapshot_final_url }}">
+<input type="hidden" id="source_snapshot_title" name="source_snapshot_title" value="{{ current_source_snapshot_title }}">
+<textarea id="source_snapshot_markdown" name="source_snapshot_markdown" hidden>{{ current_source_snapshot_markdown }}</textarea>
+<input type="hidden" id="source_snapshot_content_type" name="source_snapshot_content_type" value="{{ current_source_snapshot_content_type }}">
+<input type="hidden" id="source_snapshot_fetched_utc" name="source_snapshot_fetched_utc" value="{{ current_source_snapshot_fetched_utc }}">
+<input type="hidden" id="source_snapshot_http_etag" name="source_snapshot_http_etag" value="{{ current_source_snapshot_http_etag }}">
+<input type="hidden" id="source_snapshot_http_last_modified" name="source_snapshot_http_last_modified" value="{{ current_source_snapshot_http_last_modified }}">
+<input type="hidden" id="source_snapshot_extractor_name" name="source_snapshot_extractor_name" value="{{ current_source_snapshot_extractor_name }}">
+<input type="hidden" id="source_snapshot_extractor_version" name="source_snapshot_extractor_version" value="{{ current_source_snapshot_extractor_version }}">
 <div id="generate-feedback" class="form-text{% if feedback_class is defined and feedback_class %} {{ feedback_class }}{% endif %}">{{ feedback_message if feedback_message is defined else '' }}</div>
 <input type="hidden" id="generated_suggested_title" value="{{ suggested_title if suggested_title is defined else '' }}">
 <input type="hidden" id="generated_suggested_event_year" value="{{ suggested_event_year if suggested_event_year is defined else '' }}">

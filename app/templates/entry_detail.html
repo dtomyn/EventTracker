@@ -50,6 +50,52 @@
                         </section>
                     {% endif %}
 
+                    {% if source_snapshot %}
+                        <section class="mb-4">
+                            <div class="source-snapshot-card">
+                                <div class="source-snapshot-header">
+                                    <div>
+                                        <div class="source-snapshot-kicker">Markdown Snapshot</div>
+                                        <h2 class="h5 mb-2">Saved Source Snapshot</h2>
+                                        <p class="text-body-secondary mb-0">This stored Markdown capture is the durable source context for the entry.</p>
+                                    </div>
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        <a class="btn btn-outline-secondary btn-sm" href="{{ source_snapshot.final_url }}" target="_blank" rel="noreferrer">Open captured URL</a>
+                                        {% if source_snapshot.final_url != source_snapshot.source_url %}
+                                            <a class="btn btn-outline-secondary btn-sm" href="{{ source_snapshot.source_url }}" target="_blank" rel="noreferrer">Open original URL</a>
+                                        {% endif %}
+                                    </div>
+                                </div>
+
+                                <div class="source-snapshot-meta">
+                                    <span class="source-snapshot-pill">Captured {{ source_snapshot.fetched_utc | replace('T', ' ') | replace('+00:00', ' UTC') }}</span>
+                                    <span class="source-snapshot-pill">{{ source_snapshot.markdown_char_count }} chars</span>
+                                    <span class="source-snapshot-pill">{{ source_snapshot.extractor_name }} {{ source_snapshot.extractor_version }}</span>
+                                    {% if source_snapshot.content_type %}
+                                        <span class="source-snapshot-pill">{{ source_snapshot.content_type }}</span>
+                                    {% endif %}
+                                </div>
+
+                                {% if source_snapshot.raw_title %}
+                                    <p class="source-snapshot-caption mb-0">Captured title: <strong>{{ source_snapshot.raw_title }}</strong></p>
+                                {% endif %}
+
+                                <div class="source-snapshot-rendered">{{ source_snapshot.markdown | render_source_markdown | safe }}</div>
+
+                                <details class="source-snapshot-raw">
+                                    <summary>View raw Markdown</summary>
+                                    <pre class="source-snapshot-code"><code>{{ source_snapshot.markdown }}</code></pre>
+                                </details>
+                            </div>
+                        </section>
+                    {% elif entry.source_url %}
+                        <section class="mb-4">
+                            <div class="source-snapshot-missing">
+                                No saved Markdown snapshot is attached to this entry yet. Edit the entry, generate from the source URL, and save to capture one.
+                            </div>
+                        </section>
+                    {% endif %}
+
                     <section>
                         <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
                             <h2 class="h5 mb-0">Additional Links</h2>

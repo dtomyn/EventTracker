@@ -625,11 +625,21 @@ class TestBuildUserPromptDetailed(unittest.TestCase):
 
         extraction = ExtractionResult(
             source_url="https://example.com",
+            final_url="https://example.com/final",
             title="Example Page",
             text="Some extracted content here.",
+            markdown="# Example Page\n\nSome extracted content here.",
+            fetched_utc="2026-04-07T12:00:00+00:00",
+            content_type="text/html",
+            http_etag=None,
+            http_last_modified=None,
+            content_sha256="abc123",
+            extractor_name="markitdown",
+            extractor_version="0.1.5",
+            markdown_char_count=42,
         )
         prompt = _build_user_prompt("My event", extraction, None, "")
-        self.assertIn("Source context:", prompt)
+        self.assertIn("Source context in Markdown:", prompt)
         self.assertIn("Example Page", prompt)
 
     def test_with_preferred_tags(self) -> None:
@@ -645,14 +655,24 @@ class TestBuildUserPromptDetailed(unittest.TestCase):
 
         extraction = ExtractionResult(
             source_url="https://example.com",
+            final_url="https://example.com/final",
             title="Page Title",
             text="Page content.",
+            markdown="# Page Title\n\nPage content.",
+            fetched_utc="2026-04-07T12:00:00+00:00",
+            content_type="text/html",
+            http_etag=None,
+            http_last_modified=None,
+            content_sha256="def456",
+            extractor_name="markitdown",
+            extractor_version="0.1.5",
+            markdown_char_count=27,
         )
         prompt = _build_user_prompt(
             "My event", extraction, ["tag1"], "Be brief."
         )
         self.assertIn("Current title hint: My event", prompt)
-        self.assertIn("Source context:", prompt)
+        self.assertIn("Source context in Markdown:", prompt)
         self.assertIn("Additional summarization instructions: Be brief.", prompt)
         self.assertIn("Preferred existing tags for this timeline group: tag1", prompt)
 

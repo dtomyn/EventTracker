@@ -799,6 +799,172 @@ h3, .h3 { font-size: 1rem; font-weight: 600; line-height: 1.3; }
     font-style: italic;
 }
 
+.source-snapshot-card {
+    display: grid;
+    gap: 1rem;
+    padding: 1.25rem;
+    border: 1px solid var(--et-primary-border);
+    border-radius: 1rem;
+    background: linear-gradient(180deg, var(--et-summary-gradient-start) 0%, var(--et-summary-gradient-end) 100%);
+}
+
+.source-snapshot-card--compact {
+    padding: 1rem 1rem 1.1rem;
+}
+
+.source-snapshot-card > summary,
+.source-snapshot-raw > summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--et-text);
+}
+
+.source-snapshot-compact-body {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 0.85rem;
+}
+
+.source-snapshot-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.source-snapshot-kicker {
+    color: var(--et-text-muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 0.35rem;
+}
+
+.source-snapshot-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+}
+
+.source-snapshot-pill {
+    padding: 0.3rem 0.6rem;
+    border: 1px solid var(--et-primary-border);
+    border-radius: 999px;
+    background: var(--et-primary-bg);
+    color: var(--et-text-subtle);
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.68rem;
+}
+
+.source-snapshot-caption {
+    color: var(--et-text-secondary);
+    font-size: 0.9rem;
+}
+
+.source-snapshot-rendered {
+    padding: 1.1rem 1.15rem;
+    border: 1px solid var(--et-border-input);
+    border-radius: 0.85rem;
+    background: var(--et-card-bg-solid);
+    overflow-x: auto;
+}
+
+.source-snapshot-rendered--compact {
+    max-height: 24rem;
+    overflow: auto;
+}
+
+.source-snapshot-rendered > :last-child {
+    margin-bottom: 0;
+}
+
+.source-snapshot-rendered h1,
+.source-snapshot-rendered h2,
+.source-snapshot-rendered h3,
+.source-snapshot-rendered h4,
+.source-snapshot-rendered h5,
+.source-snapshot-rendered h6,
+.source-snapshot-rendered p,
+.source-snapshot-rendered ul,
+.source-snapshot-rendered ol,
+.source-snapshot-rendered blockquote,
+.source-snapshot-rendered pre,
+.source-snapshot-rendered table {
+    margin-bottom: 0.85rem;
+}
+
+.source-snapshot-rendered a {
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
+}
+
+.source-snapshot-rendered code,
+.source-snapshot-code,
+.source-snapshot-textarea {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.source-snapshot-rendered pre,
+.source-snapshot-code {
+    padding: 1rem;
+    border: 1px solid var(--et-border-light);
+    border-radius: 0.85rem;
+    background: var(--et-surface-bg);
+    font-size: 0.8rem;
+    line-height: 1.6;
+    overflow-x: auto;
+}
+
+.source-snapshot-rendered pre code,
+.source-snapshot-code code {
+    font-size: inherit;
+}
+
+.source-snapshot-rendered blockquote {
+    margin-left: 0;
+    padding: 0.75rem 1rem;
+    border-left: 4px solid var(--et-primary);
+    border-radius: 0.5rem;
+    background: var(--et-surface-bg);
+    color: var(--et-text-secondary);
+}
+
+.source-snapshot-rendered table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.source-snapshot-rendered th,
+.source-snapshot-rendered td {
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--et-border-light);
+    vertical-align: top;
+}
+
+.source-snapshot-rendered th {
+    background: var(--et-surface-bg);
+}
+
+.source-snapshot-raw {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.source-snapshot-textarea {
+    resize: vertical;
+    min-height: 10rem;
+}
+
+.source-snapshot-missing {
+    padding: 0.95rem 1rem;
+    border: 1px dashed var(--et-border-dashed);
+    border-radius: 0.85rem;
+    background: var(--et-card-bg-subtle);
+    color: var(--et-text-secondary);
+}
+
 .empty-state {
     background: var(--et-card-bg-empty);
     backdrop-filter: blur(8px);

@@ -17,6 +17,7 @@ import httpx
 
 from app.env import load_app_env
 from app.services import copilot_runtime
+from app.services.extraction import DEFAULT_HTTP_HEADERS
 from app.services.ai_generate import (
     DraftGenerationConfigurationError,
     load_ai_provider,
@@ -891,6 +892,7 @@ async def _exclude_unreachable_urls(
     async with httpx.AsyncClient(
         follow_redirects=True,
         timeout=get_group_web_search_url_check_timeout_seconds(),
+        headers=DEFAULT_HTTP_HEADERS,
     ) as client:
         checks = await _check_group_web_search_items(client, response.items)
 

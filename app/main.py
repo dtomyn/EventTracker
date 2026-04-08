@@ -33,6 +33,7 @@ from app.db import connection_context, init_db, is_sqlite_vec_enabled
 from app.env import load_app_env
 from app.models import (
     Entry,
+    EntrySourceSnapshot,
     SearchResult,
     StoryFormat,
     TimelineGroup,
@@ -69,7 +70,9 @@ from app.services.entries import (
     format_plain_text,
     get_default_timeline_group,
     get_entry,
+    get_entry_source_snapshot,
     list_group_tag_vocabulary,
+    list_entry_source_snapshots,
     get_timeline_group,
     list_timeline_entries_page,
     list_timeline_groups,
@@ -85,6 +88,7 @@ from app.services.entries import (
     rename_timeline_group,
     sanitize_rich_text,
     sanitize_search_snippet,
+    render_source_snapshot_markdown,
     save_entry,
     TimelineGroupValidationError,
     utc_now_iso,
@@ -130,6 +134,7 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 templates.env.filters["plain_text"] = format_plain_text
 templates.env.filters["render_entry_html"] = sanitize_rich_text
 templates.env.filters["render_search_snippet"] = sanitize_search_snippet
+templates.env.filters["render_source_markdown"] = render_source_snapshot_markdown
 
 _ALLOWED_STORY_HTML_TAGS = {"a", "h2", "p", "section"}
 _ALLOWED_STORY_HTML_ATTRIBUTES = {
@@ -471,6 +476,22 @@ class ExportedEntryLinkPayload(TypedDict):
     created_utc: str
 
 
+class ExportedEntrySourceSnapshotPayload(TypedDict):
+    entry_id: int
+    source_url: str
+    final_url: str
+    raw_title: str | None
+    markdown: str
+    fetched_utc: str
+    content_type: str | None
+    http_etag: str | None
+    http_last_modified: str | None
+    content_sha256: str
+    extractor_name: str
+    extractor_version: str
+    markdown_char_count: int
+
+
 class ExportedEntryPayload(TypedDict):
     id: int
     event_year: int
@@ -488,6 +509,7 @@ class ExportedEntryPayload(TypedDict):
     tags: list[str]
     links: list[ExportedEntryLinkPayload]
     display_date: str
+    source_snapshot: ExportedEntrySourceSnapshotPayload | None
 
 
 class EntriesExportPayload(TypedDict):
@@ -500,11 +522,13 @@ class EntryFormPageContext(TypedDict):
     form_state: EntryFormState
     entry_id: int | None
     timeline_filters: list[TimelineGroup]
+    source_snapshot: EntrySourceSnapshot | None
 
 
 class EntryDetailPageContext(TypedDict):
     page_title: str
     entry: Entry
+    source_snapshot: EntrySourceSnapshot | None
 
 
 class AdminGroupEditValue(TypedDict):
@@ -540,6 +564,16 @@ class GeneratedPreviewContext(TypedDict, total=False):
     suggested_tags_csv: str
     feedback_message: str
     feedback_class: str
+    source_snapshot_source_url: str
+    source_snapshot_final_url: str
+    source_snapshot_title: str
+    source_snapshot_markdown: str
+    source_snapshot_content_type: str
+    source_snapshot_fetched_utc: str
+    source_snapshot_http_etag: str
+    source_snapshot_http_last_modified: str
+    source_snapshot_extractor_name: str
+    source_snapshot_extractor_version: str
 
 
 class HtmlPreviewContext(TypedDict):
@@ -1636,11 +1670,20 @@ async def group_topics_graph(request: Request, group_id: int) -> HTMLResponse:
 def export_entries() -> JSONResponse:
     with connection_context() as connection:
         entries = list_timeline_entries(connection)
+        source_snapshots = list_entry_source_snapshots(
+            connection, (entry.id for entry in entries)
+        )
 
     exported_entries: list[ExportedEntryPayload] = []
     for entry in entries:
         data = cast(ExportedEntryPayload, asdict(entry))
         data.pop("preview_text", None)
+        snapshot = source_snapshots.get(entry.id)
+        data["source_snapshot"] = (
+            cast(ExportedEntrySourceSnapshotPayload, asdict(snapshot))
+            if snapshot is not None
+            else None
+        )
         exported_entries.append(data)
 
     export_timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
@@ -1686,6 +1729,7 @@ def new_entry_form(request: Request) -> HTMLResponse:
         "form_state": form_state,
         "entry_id": None,
         "timeline_filters": timeline_filters,
+        "source_snapshot": None,
     }
     return templates.TemplateResponse(
         request,
@@ -1698,12 +1742,14 @@ def new_entry_form(request: Request) -> HTMLResponse:
 def view_entry(request: Request, entry_id: int) -> HTMLResponse:
     with connection_context() as connection:
         entry = get_entry(connection, entry_id)
+        source_snapshot = get_entry_source_snapshot(connection, entry_id)
     if entry is None:
         raise HTTPException(status_code=404, detail="Entry not found")
 
     context: EntryDetailPageContext = {
         "page_title": entry.title or "Entry",
         "entry": entry,
+        "source_snapshot": source_snapshot,
     }
     return templates.TemplateResponse(
         request,
@@ -1734,6 +1780,7 @@ async def create_entry(
             "form_state": form_state,
             "entry_id": None,
             "timeline_filters": timeline_filters,
+            "source_snapshot": None,
         }
         return templates.TemplateResponse(
             request,
@@ -1747,11 +1794,12 @@ async def create_entry(
             entry_id = save_entry(connection, payload)
     except DuplicateEntrySourceUrlError as exc:
         form_state.errors["source_url"] = str(exc)
-        context = {
+        context: EntryFormPageContext = {
             "page_title": "New Entry",
             "form_state": form_state,
             "entry_id": None,
             "timeline_filters": timeline_filters,
+            "source_snapshot": None,
         }
         return templates.TemplateResponse(
             request,
@@ -1768,6 +1816,7 @@ async def create_entry(
 def edit_entry_form(request: Request, entry_id: int) -> HTMLResponse:
     with connection_context() as connection:
         entry = get_entry(connection, entry_id)
+        source_snapshot = get_entry_source_snapshot(connection, entry_id)
         timeline_filters = list_timeline_groups(connection)
     if entry is None:
         raise HTTPException(status_code=404, detail="Entry not found")
@@ -1777,6 +1826,7 @@ def edit_entry_form(request: Request, entry_id: int) -> HTMLResponse:
         "form_state": form_state_from_entry(entry),
         "entry_id": entry_id,
         "timeline_filters": timeline_filters,
+        "source_snapshot": source_snapshot,
     }
     return templates.TemplateResponse(
         request,
@@ -1792,8 +1842,10 @@ async def update_entry_route(
     form = await request.form()
     form_state, payload = validate_entry_form(form)
     timeline_filters: list[TimelineGroup] = []
+    source_snapshot: EntrySourceSnapshot | None = None
     with connection_context() as connection:
         timeline_filters = list_timeline_groups(connection)
+        source_snapshot = get_entry_source_snapshot(connection, entry_id)
         if (
             payload is not None
             and get_timeline_group(connection, payload.group_id) is None
@@ -1807,6 +1859,7 @@ async def update_entry_route(
             "form_state": form_state,
             "entry_id": entry_id,
             "timeline_filters": timeline_filters,
+            "source_snapshot": source_snapshot,
         }
         return templates.TemplateResponse(
             request,
@@ -1823,11 +1876,12 @@ async def update_entry_route(
             update_entry(connection, entry_id, payload)
     except DuplicateEntrySourceUrlError as exc:
         form_state.errors["source_url"] = str(exc)
-        context = {
+        context: EntryFormPageContext = {
             "page_title": "Edit Entry",
             "form_state": form_state,
             "entry_id": entry_id,
             "timeline_filters": timeline_filters,
+            "source_snapshot": source_snapshot,
         }
         return templates.TemplateResponse(
             request,
@@ -2111,13 +2165,29 @@ async def generate_entry_preview(
         "feedback_message": (
             extraction_error
             or (
-                "Summary, title, date, and tag suggestions generated with source context."
+                "Summary, title, date, and tag suggestions generated with source context. The source snapshot will be saved as Markdown when you save the entry."
                 if extraction is not None
                 else "Summary, title, date, and tag suggestions generated from the current input."
             )
         ),
         "feedback_class": "text-warning" if extraction_error else "text-success",
     }
+    if extraction is not None:
+        context.update(
+            {
+                "source_snapshot_source_url": extraction.source_url,
+                "source_snapshot_final_url": extraction.final_url,
+                "source_snapshot_title": extraction.title or "",
+                "source_snapshot_markdown": extraction.markdown,
+                "source_snapshot_content_type": extraction.content_type or "",
+                "source_snapshot_fetched_utc": extraction.fetched_utc,
+                "source_snapshot_http_etag": extraction.http_etag or "",
+                "source_snapshot_http_last_modified": extraction.http_last_modified
+                or "",
+                "source_snapshot_extractor_name": extraction.extractor_name,
+                "source_snapshot_extractor_version": extraction.extractor_version,
+            }
+        )
     return templates.TemplateResponse(
         request,
         "partials/generated_preview.html",
@@ -2153,7 +2223,7 @@ async def dev_extract(source_url: str) -> JSONResponse:
     success_payload: DevExtractSuccessPayload = {
         "ok": True,
         "title": extraction.title,
-        "preview": extraction.text[:500],
+        "preview": extraction.markdown[:500],
     }
     return JSONResponse(success_payload)
 

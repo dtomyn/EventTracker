@@ -7,7 +7,7 @@ import unittest
 
 from app.db import connection_context, init_db
 from app.models import Entry, EntryLink
-from app.schemas import EntryLinkPayload, EntryPayload
+from app.schemas import EntryLinkPayload, EntryPayload, EntrySourceSnapshotPayload
 from app.services.entries import (
     _is_valid_url,
     _parse_int,
@@ -18,6 +18,7 @@ from app.services.entries import (
     encode_timeline_cursor,
     format_plain_text,
     form_state_from_entry,
+    get_entry_source_snapshot,
     get_heatmap_counts,
     list_group_tag_vocabulary,
     list_saved_entry_urls,
@@ -32,6 +33,7 @@ from app.services.entries import (
     preview_text,
     save_entry,
     timeline_playback_profile,
+    update_entry,
     validate_entry_form,
     validate_link_rows,
 )
@@ -314,6 +316,160 @@ class TestEntryFormValidation(unittest.TestCase):
             "Focus on the technical outcome only.",
         )
         self.assertFalse(hasattr(payload, "summary_instructions"))
+
+    def test_validate_entry_form_attaches_matching_source_snapshot(self) -> None:
+        state, payload = validate_entry_form(
+            {
+                "event_year": "2026",
+                "event_month": "4",
+                "event_day": "6",
+                "group_id": "1",
+                "title": "Timeline milestone",
+                "source_url": "https://example.com/source",
+                "summary_instructions": "",
+                "generated_text": "",
+                "final_text": "<p>Draft summary.</p>",
+                "tags": "release, milestone",
+                "source_snapshot_source_url": "https://example.com/source",
+                "source_snapshot_final_url": "https://example.com/source",
+                "source_snapshot_title": "Example source",
+                "source_snapshot_markdown": "# Example source\n\nCaptured markdown.",
+                "source_snapshot_content_type": "text/html",
+                "source_snapshot_fetched_utc": "2026-04-07T12:00:00+00:00",
+                "source_snapshot_http_etag": '"etag-1"',
+                "source_snapshot_http_last_modified": "Tue, 07 Apr 2026 12:00:00 GMT",
+                "source_snapshot_extractor_name": "markitdown",
+                "source_snapshot_extractor_version": "0.1.5",
+            }
+        )
+
+        self.assertEqual(state.errors, {})
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        self.assertIsNotNone(payload.source_snapshot)
+        assert payload.source_snapshot is not None
+        self.assertEqual(payload.source_snapshot.source_url, "https://example.com/source")
+        self.assertIn("Captured markdown.", payload.source_snapshot.markdown)
+
+    def test_validate_entry_form_ignores_stale_source_snapshot(self) -> None:
+        state, payload = validate_entry_form(
+            {
+                "event_year": "2026",
+                "event_month": "4",
+                "event_day": "6",
+                "group_id": "1",
+                "title": "Timeline milestone",
+                "source_url": "https://example.com/updated-source",
+                "summary_instructions": "",
+                "generated_text": "",
+                "final_text": "<p>Draft summary.</p>",
+                "tags": "release, milestone",
+                "source_snapshot_source_url": "https://example.com/source",
+                "source_snapshot_markdown": "# Old markdown",
+            }
+        )
+
+        self.assertEqual(state.errors, {})
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        self.assertIsNone(payload.source_snapshot)
+
+
+class TestEntrySourceSnapshots(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.previous_db_path = os.environ.get("EVENTTRACKER_DB_PATH")
+        os.environ["EVENTTRACKER_DB_PATH"] = str(
+            Path(self.temp_dir.name) / "EventTracker-test.db"
+        )
+        init_db()
+
+    def tearDown(self) -> None:
+        if self.previous_db_path is None:
+            os.environ.pop("EVENTTRACKER_DB_PATH", None)
+        else:
+            os.environ["EVENTTRACKER_DB_PATH"] = self.previous_db_path
+        self.temp_dir.cleanup()
+
+    def _snapshot(self, source_url: str) -> EntrySourceSnapshotPayload:
+        return EntrySourceSnapshotPayload(
+            source_url=source_url,
+            final_url=source_url,
+            raw_title="Example source",
+            markdown="# Example source\n\nCaptured markdown.",
+            fetched_utc="2026-04-07T12:00:00+00:00",
+            content_type="text/html",
+            http_etag='"etag-1"',
+            http_last_modified="Tue, 07 Apr 2026 12:00:00 GMT",
+            extractor_name="markitdown",
+            extractor_version="0.1.5",
+        )
+
+    def test_save_entry_persists_source_snapshot(self) -> None:
+        with connection_context() as connection:
+            entry_id = save_entry(
+                connection,
+                EntryPayload(
+                    event_year=2026,
+                    event_month=4,
+                    event_day=7,
+                    group_id=1,
+                    title="Stored snapshot entry",
+                    source_url="https://example.com/source",
+                    generated_text=None,
+                    final_text="<p>Stored summary.</p>",
+                    tags=["source"],
+                    links=[],
+                    source_snapshot=self._snapshot("https://example.com/source"),
+                ),
+            )
+            snapshot = get_entry_source_snapshot(connection, entry_id)
+
+        self.assertIsNotNone(snapshot)
+        assert snapshot is not None
+        self.assertEqual(snapshot.source_url, "https://example.com/source")
+        self.assertEqual(snapshot.final_url, "https://example.com/source")
+        self.assertEqual(snapshot.extractor_name, "markitdown")
+        self.assertGreater(snapshot.markdown_char_count, 0)
+
+    def test_update_entry_deletes_snapshot_when_source_url_changes(self) -> None:
+        with connection_context() as connection:
+            entry_id = save_entry(
+                connection,
+                EntryPayload(
+                    event_year=2026,
+                    event_month=4,
+                    event_day=7,
+                    group_id=1,
+                    title="Stored snapshot entry",
+                    source_url="https://example.com/source",
+                    generated_text=None,
+                    final_text="<p>Stored summary.</p>",
+                    tags=["source"],
+                    links=[],
+                    source_snapshot=self._snapshot("https://example.com/source"),
+                ),
+            )
+
+            update_entry(
+                connection,
+                entry_id,
+                EntryPayload(
+                    event_year=2026,
+                    event_month=4,
+                    event_day=8,
+                    group_id=1,
+                    title="Updated entry",
+                    source_url="https://example.com/updated-source",
+                    generated_text=None,
+                    final_text="<p>Updated summary.</p>",
+                    tags=["updated"],
+                    links=[],
+                ),
+            )
+            snapshot = get_entry_source_snapshot(connection, entry_id)
+
+        self.assertIsNone(snapshot)
 
 
 class TestComputeSortKey(unittest.TestCase):

@@ -10,6 +10,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.db import connection_context
+from app.schemas import EntryPayload, EntrySourceSnapshotPayload
 from app.main import (
     _CSRF_COOKIE_NAME,
     _generate_csrf_token,
@@ -22,6 +23,7 @@ from app.services.ai_generate import (
     GeneratedEntrySuggestion,
     get_draft_generator,
 )
+from app.services.entries import save_entry
 from app.services.embeddings import SemanticMatch
 from app.services.embeddings import load_embedding_settings
 from app.services.extraction import ExtractionResult
@@ -323,6 +325,88 @@ class TestAppSmokeTests(unittest.TestCase):
 
         self.assertIsNotNone(entries)
         self.assertEqual(entries["count"], 1)
+
+    def test_entry_detail_renders_saved_source_snapshot_markdown(self) -> None:
+        with TestClient(app) as client:
+            with connection_context() as connection:
+                entry_id = save_entry(
+                    connection,
+                    EntryPayload(
+                        event_year=2026,
+                        event_month=4,
+                        event_day=7,
+                        group_id=1,
+                        title="Snapshot detail entry",
+                        source_url="https://example.com/source",
+                        generated_text=None,
+                        final_text="<p>Summary body.</p>",
+                        tags=["snapshot"],
+                        links=[],
+                        source_snapshot=EntrySourceSnapshotPayload(
+                            source_url="https://example.com/source",
+                            final_url="https://example.com/final-source",
+                            raw_title="Captured source title",
+                            markdown=(
+                                "# Captured source\n\n"
+                                "[Reference](https://example.com/reference)\n\n"
+                                "```\ncode sample\n```"
+                            ),
+                            fetched_utc="2026-04-07T12:00:00+00:00",
+                            content_type="text/html",
+                            http_etag=None,
+                            http_last_modified=None,
+                            extractor_name="markitdown",
+                            extractor_version="0.1.5",
+                        ),
+                    ),
+                )
+
+            response = client.get(f"/entries/{entry_id}/view")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Saved Source Snapshot", response.text)
+        self.assertIn("<h3>Captured source</h3>", response.text)
+        self.assertIn("View raw Markdown", response.text)
+        self.assertIn("Open captured URL", response.text)
+        self.assertIn('href="https://example.com/reference"', response.text)
+
+    def test_edit_entry_form_shows_saved_source_snapshot_panel(self) -> None:
+        with TestClient(app) as client:
+            with connection_context() as connection:
+                entry_id = save_entry(
+                    connection,
+                    EntryPayload(
+                        event_year=2026,
+                        event_month=4,
+                        event_day=7,
+                        group_id=1,
+                        title="Snapshot edit entry",
+                        source_url="https://example.com/source",
+                        generated_text=None,
+                        final_text="<p>Summary body.</p>",
+                        tags=[],
+                        links=[],
+                        source_snapshot=EntrySourceSnapshotPayload(
+                            source_url="https://example.com/source",
+                            final_url="https://example.com/source",
+                            raw_title="Captured source title",
+                            markdown="# Captured source\n\nReusable markdown body.",
+                            fetched_utc="2026-04-07T12:00:00+00:00",
+                            content_type="text/html",
+                            http_etag=None,
+                            http_last_modified=None,
+                            extractor_name="markitdown",
+                            extractor_version="0.1.5",
+                        ),
+                    ),
+                )
+
+            response = client.get(f"/entries/{entry_id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Saved source snapshot", response.text)
+        self.assertIn('id="saved_source_snapshot_markdown"', response.text)
+        self.assertIn("Reusable markdown body.", response.text)
 
     def test_edit_entry_rejects_duplicate_source_url_within_group(self) -> None:
         with TestClient(app) as client:
@@ -1456,8 +1540,18 @@ class TestAppSmokeTests(unittest.TestCase):
                 "app.main.extract_url_text",
                 return_value=ExtractionResult(
                     source_url="https://example.com/article",
+                    final_url="https://example.com/article",
                     title="Source title",
                     text="Source text for timeline draft generation.",
+                    markdown="# Source title\n\nSource text for timeline draft generation.",
+                    fetched_utc="2026-04-07T12:00:00+00:00",
+                    content_type="text/html",
+                    http_etag=None,
+                    http_last_modified=None,
+                    content_sha256="snapshot-hash",
+                    extractor_name="markitdown",
+                    extractor_version="0.1.5",
+                    markdown_char_count=59,
                 ),
             ):
                 with patch(

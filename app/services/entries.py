@@ -4,23 +4,34 @@ import base64
 import calendar
 from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, date, datetime
+import hashlib
 from html import escape
 import json
 import logging
+import markdown
 import sqlite3
 import time
-from typing import Literal, TypedDict, cast
+from typing import Any, Literal, TypedDict, cast
 from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup, Tag
 
-from app.models import Entry, EntryLink, TimelineGroup
-from app.schemas import EntryFormState, EntryLinkPayload, EntryPayload
+from app.models import Entry, EntryLink, EntrySourceSnapshot, HeatmapData, TimelineGroup
+from app.schemas import (
+    EntryFormState,
+    EntryLinkPayload,
+    EntryPayload,
+    EntrySourceSnapshotPayload,
+)
 from app.services.embeddings import (
     EmbeddingConfigurationError,
     EmbeddingError,
     EmbeddingIndexMismatchError,
     sync_entry_embedding,
+)
+from app.services.extraction import (
+    DEFAULT_SOURCE_EXTRACTOR_NAME,
+    DEFAULT_SOURCE_EXTRACTOR_VERSION,
 )
 
 
@@ -77,7 +88,29 @@ ALLOWED_RICH_TEXT_TAGS = {
     "u",
     "ul",
 }
+ALLOWED_SOURCE_SNAPSHOT_TAGS = ALLOWED_RICH_TEXT_TAGS | {
+    "a",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "hr",
+    "pre",
+    "table",
+    "tbody",
+    "td",
+    "th",
+    "thead",
+    "tr",
+}
 ALLOWED_SEARCH_SNIPPET_TAGS = ALLOWED_RICH_TEXT_TAGS | {"mark"}
+ALLOWED_SOURCE_SNAPSHOT_ATTRIBUTES: dict[str, set[str]] = {
+    "a": {"href"},
+    "td": {"colspan", "rowspan"},
+    "th": {"colspan", "rowspan", "scope"},
+}
 
 
 class TimelineGroupValidationError(ValueError):
@@ -144,6 +177,16 @@ def blank_form_state() -> EntryFormState:
             "generated_text": "",
             "final_text": "",
             "tags": "",
+            "source_snapshot_source_url": "",
+            "source_snapshot_final_url": "",
+            "source_snapshot_title": "",
+            "source_snapshot_markdown": "",
+            "source_snapshot_content_type": "",
+            "source_snapshot_fetched_utc": "",
+            "source_snapshot_http_etag": "",
+            "source_snapshot_http_last_modified": "",
+            "source_snapshot_extractor_name": "",
+            "source_snapshot_extractor_version": "",
         },
         errors={},
         link_rows=[],
@@ -163,6 +206,16 @@ def form_state_from_entry(entry: Entry) -> EntryFormState:
             "generated_text": entry.generated_text or "",
             "final_text": entry.final_text,
             "tags": ", ".join(entry.tags),
+            "source_snapshot_source_url": "",
+            "source_snapshot_final_url": "",
+            "source_snapshot_title": "",
+            "source_snapshot_markdown": "",
+            "source_snapshot_content_type": "",
+            "source_snapshot_fetched_utc": "",
+            "source_snapshot_http_etag": "",
+            "source_snapshot_http_last_modified": "",
+            "source_snapshot_extractor_name": "",
+            "source_snapshot_extractor_version": "",
         },
         errors={},
         link_rows=(
@@ -188,6 +241,36 @@ def validate_entry_form(
         "generated_text": str(form_data.get("generated_text", "")).strip(),
         "final_text": str(form_data.get("final_text", "")).strip(),
         "tags": str(form_data.get("tags", "")).strip(),
+        "source_snapshot_source_url": str(
+            form_data.get("source_snapshot_source_url", "")
+        ).strip(),
+        "source_snapshot_final_url": str(
+            form_data.get("source_snapshot_final_url", "")
+        ).strip(),
+        "source_snapshot_title": str(
+            form_data.get("source_snapshot_title", "")
+        ).strip(),
+        "source_snapshot_markdown": str(
+            form_data.get("source_snapshot_markdown", "")
+        ).replace("\r\n", "\n").strip(),
+        "source_snapshot_content_type": str(
+            form_data.get("source_snapshot_content_type", "")
+        ).strip(),
+        "source_snapshot_fetched_utc": str(
+            form_data.get("source_snapshot_fetched_utc", "")
+        ).strip(),
+        "source_snapshot_http_etag": str(
+            form_data.get("source_snapshot_http_etag", "")
+        ).strip(),
+        "source_snapshot_http_last_modified": str(
+            form_data.get("source_snapshot_http_last_modified", "")
+        ).strip(),
+        "source_snapshot_extractor_name": str(
+            form_data.get("source_snapshot_extractor_name", "")
+        ).strip(),
+        "source_snapshot_extractor_version": str(
+            form_data.get("source_snapshot_extractor_version", "")
+        ).strip(),
     }
     link_rows = parse_link_rows(form_data)
     errors: dict[str, str] = {}
@@ -231,6 +314,7 @@ def validate_entry_form(
     links = validate_link_rows(link_rows, errors)
 
     tags = normalize_tags(values["tags"])
+    source_snapshot = _build_source_snapshot_payload(values, source_url=source_url)
     state = EntryFormState(
         values=values,
         errors=errors,
@@ -250,8 +334,58 @@ def validate_entry_form(
         final_text=values["final_text"],
         tags=tags,
         links=links,
+        source_snapshot=source_snapshot,
     )
     return state, payload
+
+
+def _build_source_snapshot_payload(
+    values: Mapping[str, str], *, source_url: str | None
+) -> EntrySourceSnapshotPayload | None:
+    markdown = values.get("source_snapshot_markdown", "").replace("\r\n", "\n").strip()
+    snapshot_source_url = values.get("source_snapshot_source_url", "") or None
+    if source_url is None or not markdown or snapshot_source_url != source_url:
+        return None
+
+    final_url = values.get("source_snapshot_final_url", "") or source_url
+    if not _is_valid_url(final_url):
+        final_url = source_url
+
+    fetched_utc = values.get("source_snapshot_fetched_utc", "") or utc_now_iso()
+    if not _looks_like_iso_datetime(fetched_utc):
+        fetched_utc = utc_now_iso()
+
+    extractor_name = (
+        values.get("source_snapshot_extractor_name", "")
+        or DEFAULT_SOURCE_EXTRACTOR_NAME
+    )
+    extractor_version = (
+        values.get("source_snapshot_extractor_version", "")
+        or DEFAULT_SOURCE_EXTRACTOR_VERSION
+    )
+
+    return EntrySourceSnapshotPayload(
+        source_url=source_url,
+        final_url=final_url,
+        raw_title=values.get("source_snapshot_title", "") or None,
+        markdown=markdown,
+        fetched_utc=fetched_utc,
+        content_type=values.get("source_snapshot_content_type", "") or None,
+        http_etag=values.get("source_snapshot_http_etag", "") or None,
+        http_last_modified=(
+            values.get("source_snapshot_http_last_modified", "") or None
+        ),
+        extractor_name=extractor_name,
+        extractor_version=extractor_version,
+    )
+
+
+def _looks_like_iso_datetime(value: str) -> bool:
+    try:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return True
 
 
 def parse_link_rows(form_data: Mapping[str, object]) -> list[dict[str, str]]:
@@ -407,6 +541,8 @@ def save_entry(connection: sqlite3.Connection, payload: EntryPayload) -> int:
     entry_id = int(cursor.lastrowid)
     sync_entry_tags(connection, entry_id, payload.tags)
     sync_entry_links(connection, entry_id, payload.links)
+    if payload.source_snapshot is not None:
+        upsert_entry_source_snapshot(connection, entry_id, payload.source_snapshot)
     _sync_embedding_without_failing(connection, entry_id, payload.final_text)
     _invalidate_saved_urls_cache()
     return entry_id
@@ -415,6 +551,15 @@ def save_entry(connection: sqlite3.Connection, payload: EntryPayload) -> int:
 def update_entry(
     connection: sqlite3.Connection, entry_id: int, payload: EntryPayload
 ) -> None:
+    existing_row = connection.execute(
+        "SELECT source_url FROM entries WHERE id = ?",
+        (entry_id,),
+    ).fetchone()
+    previous_source_url = (
+        str(existing_row["source_url"])
+        if existing_row is not None and existing_row["source_url"] is not None
+        else None
+    )
     _ensure_unique_source_url(
         connection,
         group_id=payload.group_id,
@@ -454,8 +599,148 @@ def update_entry(
     )
     sync_entry_tags(connection, entry_id, payload.tags)
     sync_entry_links(connection, entry_id, payload.links)
+    if payload.source_snapshot is not None:
+        upsert_entry_source_snapshot(connection, entry_id, payload.source_snapshot)
+    elif previous_source_url != payload.source_url:
+        delete_entry_source_snapshot(connection, entry_id)
     _sync_embedding_without_failing(connection, entry_id, payload.final_text)
     _invalidate_saved_urls_cache()
+
+
+def upsert_entry_source_snapshot(
+    connection: sqlite3.Connection,
+    entry_id: int,
+    payload: EntrySourceSnapshotPayload,
+) -> None:
+    normalized_markdown = payload.markdown.replace("\r\n", "\n").strip()
+    if not normalized_markdown:
+        delete_entry_source_snapshot(connection, entry_id)
+        return
+
+    markdown_bytes = normalized_markdown.encode("utf-8")
+    connection.execute(
+        """
+        INSERT INTO entry_source_snapshots (
+            entry_id,
+            source_url,
+            final_url,
+            raw_title,
+            source_markdown,
+            fetched_utc,
+            content_type,
+            http_etag,
+            http_last_modified,
+            content_sha256,
+            extractor_name,
+            extractor_version,
+            markdown_char_count
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(entry_id) DO UPDATE SET
+            source_url = excluded.source_url,
+            final_url = excluded.final_url,
+            raw_title = excluded.raw_title,
+            source_markdown = excluded.source_markdown,
+            fetched_utc = excluded.fetched_utc,
+            content_type = excluded.content_type,
+            http_etag = excluded.http_etag,
+            http_last_modified = excluded.http_last_modified,
+            content_sha256 = excluded.content_sha256,
+            extractor_name = excluded.extractor_name,
+            extractor_version = excluded.extractor_version,
+            markdown_char_count = excluded.markdown_char_count
+        """,
+        (
+            entry_id,
+            payload.source_url,
+            payload.final_url,
+            payload.raw_title,
+            normalized_markdown,
+            payload.fetched_utc,
+            payload.content_type,
+            payload.http_etag,
+            payload.http_last_modified,
+            hashlib.sha256(markdown_bytes).hexdigest(),
+            payload.extractor_name,
+            payload.extractor_version,
+            len(normalized_markdown),
+        ),
+    )
+
+
+def delete_entry_source_snapshot(connection: sqlite3.Connection, entry_id: int) -> None:
+    connection.execute(
+        "DELETE FROM entry_source_snapshots WHERE entry_id = ?",
+        (entry_id,),
+    )
+
+
+def get_entry_source_snapshot(
+    connection: sqlite3.Connection, entry_id: int
+) -> EntrySourceSnapshot | None:
+    row = connection.execute(
+        """
+        SELECT
+            entry_id,
+            source_url,
+            final_url,
+            raw_title,
+            source_markdown AS markdown,
+            fetched_utc,
+            content_type,
+            http_etag,
+            http_last_modified,
+            content_sha256,
+            extractor_name,
+            extractor_version,
+            markdown_char_count
+        FROM entry_source_snapshots
+        WHERE entry_id = ?
+        """,
+        (entry_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return entry_source_snapshot_from_row(row)
+
+
+def list_entry_source_snapshots(
+    connection: sqlite3.Connection, entry_ids: Iterable[int] | None = None
+) -> dict[int, EntrySourceSnapshot]:
+    parameters: list[int] = []
+    where_sql = ""
+    if entry_ids is not None:
+        parameters = [int(entry_id) for entry_id in entry_ids]
+        if not parameters:
+            return {}
+        placeholders = ",".join("?" for _ in parameters)
+        where_sql = f"WHERE entry_id IN ({placeholders})"
+
+    rows = connection.execute(
+        f"""
+        SELECT
+            entry_id,
+            source_url,
+            final_url,
+            raw_title,
+            source_markdown AS markdown,
+            fetched_utc,
+            content_type,
+            http_etag,
+            http_last_modified,
+            content_sha256,
+            extractor_name,
+            extractor_version,
+            markdown_char_count
+        FROM entry_source_snapshots
+        {where_sql}
+        """,
+        parameters,
+    ).fetchall()
+    return {
+        snapshot.entry_id: snapshot
+        for snapshot in (entry_source_snapshot_from_row(row) for row in rows)
+    }
 
 
 def sync_entry_tags(
@@ -900,8 +1185,6 @@ def get_heatmap_counts(
 
     Entries without ``event_day`` are distributed evenly across their month.
     """
-    from app.models import HeatmapData
-
     group_filter = "AND e.group_id = ?" if group_id is not None else ""
     base_params: tuple[object, ...] = (year,) if group_id is None else (year, group_id)
 
@@ -1191,6 +1474,23 @@ def sanitize_rich_text(value: str) -> str:
     return _sanitize_html(value, ALLOWED_RICH_TEXT_TAGS)
 
 
+def render_source_snapshot_markdown(value: str) -> str:
+    """Render stored source Markdown into sanitized HTML for detail and edit views."""
+    if not value:
+        return ""
+
+    rendered_html = markdown.markdown(
+        value,
+        extensions=["extra", "nl2br", "sane_lists"],
+    )
+    rendered_html = _demote_source_snapshot_headings(rendered_html)
+    return _sanitize_html(
+        rendered_html,
+        ALLOWED_SOURCE_SNAPSHOT_TAGS,
+        allowed_attributes=ALLOWED_SOURCE_SNAPSHOT_ATTRIBUTES,
+    )
+
+
 def sanitize_search_snippet(value: str) -> str:
     return _sanitize_html(value, ALLOWED_SEARCH_SNIPPET_TAGS)
 
@@ -1224,6 +1524,24 @@ def entry_from_row(row: sqlite3.Row) -> Entry:
         links=links,
         display_date=display_date,
         preview_text=preview_text(row["final_text"]),
+    )
+
+
+def entry_source_snapshot_from_row(row: sqlite3.Row) -> EntrySourceSnapshot:
+    return EntrySourceSnapshot(
+        entry_id=row["entry_id"],
+        source_url=row["source_url"],
+        final_url=row["final_url"],
+        raw_title=row["raw_title"],
+        markdown=row["markdown"],
+        fetched_utc=row["fetched_utc"],
+        content_type=row["content_type"],
+        http_etag=row["http_etag"],
+        http_last_modified=row["http_last_modified"],
+        content_sha256=row["content_sha256"],
+        extractor_name=row["extractor_name"],
+        extractor_version=row["extractor_version"],
+        markdown_char_count=row["markdown_char_count"],
     )
 
 
@@ -1277,7 +1595,37 @@ def _is_valid_url(value: str) -> bool:
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
-def _sanitize_html(value: str, allowed_tags: set[str]) -> str:
+def _is_safe_rendered_href(value: str) -> bool:
+    if value.startswith("#"):
+        return True
+    parsed = urlparse(value)
+    return parsed.scheme in {"http", "https", "mailto"} and bool(
+        parsed.netloc or parsed.scheme == "mailto"
+    )
+
+
+def _demote_source_snapshot_headings(value: str) -> str:
+    soup = BeautifulSoup(value, "html.parser")
+    heading_map = {
+        "h1": "h3",
+        "h2": "h4",
+        "h3": "h5",
+        "h4": "h6",
+        "h5": "h6",
+    }
+    for tag in soup.find_all(tuple(heading_map)):
+        if not isinstance(tag, Tag):
+            continue
+        tag.name = heading_map[tag.name]
+    return str(soup)
+
+
+def _sanitize_html(
+    value: str,
+    allowed_tags: set[str],
+    *,
+    allowed_attributes: Mapping[str, set[str]] | None = None,
+) -> str:
     if not value:
         return ""
 
@@ -1291,6 +1639,29 @@ def _sanitize_html(value: str, allowed_tags: set[str]) -> str:
         if tag.name not in allowed_tags:
             tag.unwrap()
             continue
-        tag.attrs = {}
+
+        allowed_tag_attributes = (
+            allowed_attributes.get(tag.name, set()) if allowed_attributes else set()
+        )
+        sanitized_attributes: dict[str, str] = {}
+        for attribute_name, attribute_value in tag.attrs.items():
+            if attribute_name not in allowed_tag_attributes:
+                continue
+
+            normalized_value = str(attribute_value).strip()
+            if not normalized_value:
+                continue
+
+            if tag.name == "a" and attribute_name == "href":
+                if not _is_safe_rendered_href(normalized_value):
+                    continue
+                sanitized_attributes["href"] = normalized_value
+                sanitized_attributes["target"] = "_blank"
+                sanitized_attributes["rel"] = "noreferrer noopener"
+                continue
+
+            sanitized_attributes[attribute_name] = normalized_value
+
+        tag.attrs = cast(Any, sanitized_attributes)
 
     return str(soup)
