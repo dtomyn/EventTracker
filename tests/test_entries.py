@@ -1012,18 +1012,19 @@ class TestHeatmapCounts(unittest.TestCase):
         self.assertEqual(result.counts.get("2025-03-15"), 3)  # 2 from group 1 + 1 from group 2
         self.assertEqual(result.year, 2025)
 
-    def test_distributes_dayless_entries_across_month(self) -> None:
+    def test_places_dayless_entries_on_first_of_month(self) -> None:
         with connection_context() as conn:
             result = get_heatmap_counts(conn, year=2025)
-        # The dayless June entry should be distributed to some day in June
+        self.assertEqual(result.counts.get("2025-06-01"), 1)
         june_keys = [k for k in result.counts if k.startswith("2025-06-")]
-        self.assertEqual(sum(result.counts[k] for k in june_keys), 1)
+        self.assertEqual(june_keys, ["2025-06-01"])
 
     def test_filters_by_group_id(self) -> None:
         with connection_context() as conn:
             result = get_heatmap_counts(conn, year=2025, group_id=1)
         # Only group 1: 2 entries on Mar 15 + 1 dayless in June
         self.assertEqual(result.counts.get("2025-03-15"), 2)
+        self.assertEqual(result.counts.get("2025-06-01"), 1)
         self.assertEqual(result.total, 3)
 
     def test_returns_years_available(self) -> None:
@@ -1039,7 +1040,7 @@ class TestHeatmapCounts(unittest.TestCase):
         self.assertEqual(result.counts, {})
         self.assertIn(2024, result.years_available)
 
-    def test_multiple_dayless_entries_distribute_evenly(self) -> None:
+    def test_multiple_dayless_entries_accumulate_on_first_of_month(self) -> None:
         with connection_context() as conn:
             for i in range(3):
                 conn.execute(
@@ -1050,6 +1051,5 @@ class TestHeatmapCounts(unittest.TestCase):
             conn.commit()
             result = get_heatmap_counts(conn, year=2025)
         sept_keys = [k for k in result.counts if k.startswith("2025-09-")]
-        # 3 entries should be spread across 3 different days
-        self.assertEqual(len(sept_keys), 3)
-        self.assertEqual(sum(result.counts[k] for k in sept_keys), 3)
+        self.assertEqual(sept_keys, ["2025-09-01"])
+        self.assertEqual(result.counts.get("2025-09-01"), 3)

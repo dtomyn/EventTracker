@@ -28,6 +28,10 @@ class TestHeatmapAPI(unittest.TestCase):
                 "INSERT INTO entries (event_year, event_month, event_day, sort_key, group_id, title, final_text, created_utc, updated_utc) "
                 "VALUES (2025, 3, 15, 20250315, 1, 'B', '<p>B</p>', '2025-03-15T00:00:00+00:00', '2025-03-15T00:00:00+00:00')"
             )
+            conn.execute(
+                "INSERT INTO entries (event_year, event_month, event_day, sort_key, group_id, title, final_text, created_utc, updated_utc) "
+                "VALUES (2025, 6, NULL, 20250600, 1, 'C', '<p>C</p>', '2025-06-01T00:00:00+00:00', '2025-06-01T00:00:00+00:00')"
+            )
             conn.commit()
 
         from app.main import app
@@ -44,13 +48,14 @@ class TestHeatmapAPI(unittest.TestCase):
         data = resp.json()
         self.assertEqual(data["year"], 2025)
         self.assertEqual(data["counts"]["2025-03-15"], 2)
-        self.assertEqual(data["total"], 2)
+        self.assertEqual(data["counts"]["2025-06-01"], 1)
+        self.assertEqual(data["total"], 3)
 
     def test_heatmap_filters_by_group(self) -> None:
         resp = self.client.get("/api/heatmap?year=2025&group_id=1")
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
-        self.assertEqual(data["total"], 2)
+        self.assertEqual(data["total"], 3)
 
     def test_heatmap_defaults_to_latest_year(self) -> None:
         resp = self.client.get("/api/heatmap")
@@ -76,6 +81,12 @@ class TestHeatmapAPI(unittest.TestCase):
         self.assertIn("text/html", resp.headers["content-type"])
         self.assertIn("A", resp.text)
         self.assertIn("B", resp.text)
+
+    def test_heatmap_entries_first_day_includes_dayless_entries(self) -> None:
+        resp = self.client.get("/timeline/heatmap/entries?year=2025&month=6&day=1")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("text/html", resp.headers["content-type"])
+        self.assertIn("C", resp.text)
 
     def test_heatmap_entries_empty_date(self) -> None:
         resp = self.client.get("/timeline/heatmap/entries?year=2025&month=1&day=1")
