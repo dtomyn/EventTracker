@@ -121,7 +121,7 @@ uv run --with pillow python .\scripts\generate_demo_assets.py --also-no-search-a
 - Supports `Story Mode` for the current scope, turning matching entries into a narrative arc with sections, saved snapshots, and linked citations.
 - Organizes entries into timeline groups, seeded with a default `Agentic Coding` group.
 - Lets users create, rename, delete, and mark the default group at `/admin/groups`, and store an optional per-group web search query.
-- Generates AI draft suggestions (with suggested tags) from either a title alone or a title plus temporary extracted URL content.
+- Generates AI draft suggestions (with suggested tags) from either a title alone or a title plus extracted URL content. YouTube URLs are supported: the app extracts the video transcript and upload date via `youtube-transcript-api`, which the AI uses to generate a meaningful summary and infer the event date.
 - Exports all saved entries as JSON from `/entries/export`.
 - Imports legacy HTML lists or prior JSON exports with `scripts/import_entries.py`.
 - Shows a Copilot-backed `On the web` sidebar for the selected group when that group has a stored web search query.
@@ -241,6 +241,7 @@ The app currently stores:
 - `topic_cluster_cache`: cached tag-graph JSON per group, keyed by group id, written by `scripts/compute_topic_clusters.py`.
 - `tags` and `entry_tags`: normalized tag mapping.
 - `entry_links`: additional per-entry websites with required notes.
+- `entry_source_snapshots`: extracted source URL content stored as Markdown, one per entry. Populated on entry save when a source URL is present and extraction succeeds. For YouTube URLs, stores the video transcript and upload date.
 - `entries_fts`: derived FTS5 index over `entries.final_text` only.
 - `embedding_index_meta`: metadata for the embedding model and dimensions.
 - `entry_embeddings`: sqlite-vec index when embeddings are configured and the extension is available.
@@ -251,9 +252,9 @@ Important implementation details:
 - `final_text` is required.
 - `group_id` is required when saving an entry.
 - `sort_key` is derived as `YYYYMMDD`, using `00` when day is missing.
-- Extracted URL content is not stored in the database.
+- Extracted URL content is stored in `entry_source_snapshots` as Markdown when a source URL is present and extraction succeeds.
 - Saved Story Mode snapshots are stored as point-in-time results and are not auto-regenerated when entries change later.
-- URL extraction fetches remote content server-side and is intended only for local or otherwise trusted deployments.
+- URL extraction fetches remote content server-side and is intended only for local or otherwise trusted deployments. YouTube URLs are detected and handled separately: the video transcript is fetched via `youtube-transcript-api` and the upload date is extracted from the page metadata.
 - Embeddings are derived only from `final_text`.
 - FTS indexes `final_text` only.
 - AI-generated topic tags are merged into the normal tag set and persist across runs. Running the compute script again will not remove or duplicate existing tags.
@@ -290,6 +291,22 @@ erDiagram
     string url
     string note
     string created_utc
+  }
+
+  ENTRY_SOURCE_SNAPSHOTS {
+    int entry_id PK
+    string source_url
+    string final_url
+    string raw_title
+    string source_markdown
+    string fetched_utc
+    string content_type
+    string http_etag
+    string http_last_modified
+    string content_sha256
+    string extractor_name
+    string extractor_version
+    int markdown_char_count
   }
 
   TAGS {
@@ -354,6 +371,7 @@ erDiagram
 
   TIMELINE_GROUPS ||--o{ ENTRIES : contains
   ENTRIES ||--o{ ENTRY_LINKS : has
+  ENTRIES ||--o| ENTRY_SOURCE_SNAPSHOTS : snapshot
   ENTRIES ||--o{ ENTRY_TAGS : maps
   TAGS ||--o{ ENTRY_TAGS : maps
   TIMELINE_GROUPS ||--o{ TIMELINE_STORIES : scopes
@@ -537,6 +555,7 @@ Current behavior:
 `GET /dev/extract`
 
 - Fetches and extracts paragraph text from a source URL for debugging extraction behavior.
+- YouTube URLs return the video transcript and upload date instead of page HTML.
 - Intended for localhost or similarly trusted environments because it performs server-side fetches of the provided URL.
 
 `GET /visualization`
@@ -765,6 +784,19 @@ Current import behavior:
 - embeddings can be rebuilt later
 - imported entries are assigned to group id `1`, which is the seeded default group in a fresh database
 
+### Refresh source snapshots
+
+To batch extract or re-extract source URL content as Markdown snapshots for existing entries:
+
+```powershell
+uv run python -m scripts.refresh_source_snapshots             # all entries with a source_url
+uv run python -m scripts.refresh_source_snapshots --missing    # only entries without a snapshot yet
+uv run python -m scripts.refresh_source_snapshots --group 3    # limit to a specific group
+uv run python -m scripts.refresh_source_snapshots --dry-run    # preview without fetching
+```
+
+YouTube URLs are automatically detected and processed using transcript extraction instead of HTML conversion. The script is rerunnable: existing snapshots are overwritten with fresh content.
+
 ### Backup and restore
 
 The app stores all primary data in a single SQLite file.
@@ -861,6 +893,7 @@ scripts/  # Developer and maintenance entry points
   init_db.py
   merge_and_shrink_pdf.py
   merge_pdfs.py
+  refresh_source_snapshots.py
   run_dev.py
   test_cluster.py
   test_labels.py

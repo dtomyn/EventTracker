@@ -17,6 +17,7 @@ This app helps you keep those notes tidy.
 - Group notes together, like putting all your dinosaur toys in one bin and all your car toys in another bin.
 - Search for notes when you want to find something again.
 - Ask the computer to help write a first draft for your note.
+- Paste a YouTube link and the app will listen to the whole video for you, grab what was said, and help you write a note about it.
 - Look on the web for new things to add.
 - Press a button and ask, "Can you tell me the story of these notes?"
 
@@ -34,7 +35,7 @@ So instead of having lots of messy notes everywhere, the app says:
 - Entry: one saved note about one thing that happened.
 - Group: a bucket that holds notes that belong together.
 - Search: a way to ask, "Can you find the note about this thing?"
-- AI help: a smart helper that can suggest words for your note.
+- AI help: a smart helper that can suggest words for your note. It can also listen to YouTube videos and turn them into notes.
 - Story Mode: a helper that reads lots of notes and tells the big story in order.
 
 ## A tiny example
@@ -49,6 +50,14 @@ You could use EventTracker to:
 2. let the app help make a summary
 3. check the words
 4. save it on your timeline
+
+Or if you watched a YouTube video about how robots work, you could:
+
+1. paste the YouTube link
+2. the app reads the words from the video all by itself
+3. it figures out when the video was made
+4. it writes a short summary of what the video was about
+5. you check it, and save it on your timeline
 
 Then later, you could come back and say:
 
