@@ -21,6 +21,30 @@ class EntryLink:
 
 
 @dataclass(slots=True)
+class EntryConnection:
+    id: int
+    connected_entry_id: int
+    connected_entry_title: str
+    connected_entry_date: str
+    connected_entry_group: str
+    note: str
+    direction: str  # "outgoing" | "incoming"
+    created_utc: str
+
+
+@dataclass(slots=True)
+class SuggestedConnection:
+    id: int
+    suggested_entry_id: int
+    suggested_entry_title: str
+    suggested_entry_date: str
+    suggested_entry_group: str
+    distance: float
+    suggested_note: str
+    created_utc: str
+
+
+@dataclass(slots=True)
 class Entry:
     id: int
     event_year: int
@@ -37,6 +61,7 @@ class Entry:
     updated_utc: str
     tags: list[str] = field(default_factory=list)
     links: list[EntryLink] = field(default_factory=list)
+    connections: list[EntryConnection] = field(default_factory=list)
     display_date: str = ""
     preview_text: str = ""
 

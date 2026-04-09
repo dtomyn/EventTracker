@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="row justify-content-center">
+        <div class="col-xl-10">
+            <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-4">
+                <div>
+                    <h1 class="h3 mb-1">Event Chat</h1>
+                    <p class="text-body-secondary mb-0">Ask grounded questions about your stored events. Answers are generated only from retrieved entries in the selected scope.</p>
+                </div>
+                <span class="badge text-bg-light border px-3 py-2">{{ selected_group_name }}</span>
+            </div>
+
+            {% if not chat_provider_ready %}
+                <div class="alert alert-warning" role="alert">{{ chat_provider_message }}</div>
+            {% endif %}
+
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-body p-4">
+                    <form method="post" action="/chat/query" data-chat-form>
+                        {{ csrf_hidden_input(request) }}
+                        <div class="row g-3 align-items-end">
+                            <div class="col-12 col-lg-8">
+                                <label class="form-label" for="chat-question">Question</label>
+                                <textarea
+                                    class="form-control"
+                                    id="chat-question"
+                                    name="question"
+                                    rows="3"
+                                    maxlength="500"
+                                    placeholder="What changed most in this scope recently?"
+                                    required
+                                ></textarea>
+                            </div>
+                            <div class="col-12 col-lg-4">
+                                <label class="form-label" for="chat-group">Scope</label>
+                                <select class="form-select" id="chat-group" name="group_id">
+                                    <option value="all" {% if selected_group_query_value == "all" %}selected{% endif %}>All groups</option>
+                                    {% for timeline_filter in timeline_filters %}
+                                        <option value="{{ timeline_filter.id }}" {% if selected_group_id == timeline_filter.id %}selected{% endif %}>{{ timeline_filter.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-12 d-flex flex-wrap align-items-center gap-3">
+                                <button class="btn btn-primary" type="submit" data-chat-submit {% if not chat_provider_ready %}data-disabled-forever="true" disabled{% endif %}>Ask</button>
+                                <p class="text-body-secondary small mb-0">Each question is answered independently from retrieved entries only.</p>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <section class="card shadow-sm border-0">
+                <div class="card-body p-4 p-lg-5">
+                    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                        <div>
+                            <h2 class="h5 mb-1">Answer</h2>
+                            <p class="text-body-secondary mb-0" data-chat-status>Ask a question to search your events and stream a grounded answer.</p>
+                        </div>
+                        <span class="badge text-bg-light border" data-chat-active-group>{{ selected_group_name }}</span>
+                    </div>
+
+                    <div class="chat-answer-body border rounded-3 bg-body-tertiary p-3 mt-3" data-chat-answer aria-live="polite"></div>
+                    <div class="alert alert-danger mt-3 mb-0" role="alert" data-chat-error hidden></div>
+
+                    <div class="mt-4" data-chat-citations-shell hidden>
+                        <div class="d-flex justify-content-between align-items-center gap-3 mb-3 flex-wrap">
+                            <h3 class="h6 mb-0">Related Events</h3>
+                            <span class="text-body-secondary small" data-chat-citation-count></span>
+                        </div>
+                        <div class="row g-3" data-chat-citations></div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        (() => {
+            const form = document.querySelector("[data-chat-form]");
+            const questionInput = document.getElementById("chat-question");
+            const groupSelect = document.getElementById("chat-group");
+            const submitButton = document.querySelector("[data-chat-submit]");
+            const statusNode = document.querySelector("[data-chat-status]");
+            const answerNode = document.querySelector("[data-chat-answer]");
+            const errorNode = document.querySelector("[data-chat-error]");
+            const citationsShellNode = document.querySelector("[data-chat-citations-shell]");
+            const citationsNode = document.querySelector("[data-chat-citations]");
+            const citationCountNode = document.querySelector("[data-chat-citation-count]");
+            const activeGroupNode = document.querySelector("[data-chat-active-group]");
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "";
+
+            if (!form || !questionInput || !groupSelect || !submitButton || !statusNode || !answerNode || !errorNode || !citationsShellNode || !citationsNode || !citationCountNode || !activeGroupNode) {
+                return;
+            }
+
+            let activeController = null;
+
+            const escapeHtml = (value) => String(value)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/\"/g, "&quot;")
+                .replace(/'/g, "&#39;");
+
+            const resetView = () => {
+                answerNode.textContent = "";
+                errorNode.hidden = true;
+                errorNode.textContent = "";
+                citationsShellNode.hidden = true;
+                citationsNode.innerHTML = "";
+                citationCountNode.textContent = "";
+            };
+
+            const setLoading = (isLoading) => {
+                submitButton.disabled = isLoading || submitButton.hasAttribute("data-disabled-forever");
+                questionInput.disabled = isLoading;
+                groupSelect.disabled = isLoading;
+            };
+
+            const renderCitations = (items) => {
+                if (!Array.isArray(items) || items.length === 0) {
+                    citationsNode.innerHTML = "";
+                    citationCountNode.textContent = "No related events retrieved.";
+                    citationsShellNode.hidden = false;
+                    return;
+                }
+
+                citationsNode.innerHTML = items.map((item) => {
+                    const tags = Array.isArray(item.tags) ? item.tags : [];
+                    const tagHtml = tags.map((tag) => `<span class="badge text-bg-light border">${escapeHtml(tag)}</span>`).join("");
+                    const meta = [item.display_date, item.group_name].filter(Boolean).map((value) => escapeHtml(value)).join(" | ");
+                    return `
+                        <div class="col-12 col-lg-6">
+                            <article class="card h-100 border-0 shadow-sm">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
+                                        <a class="fw-semibold text-decoration-none" href="${escapeHtml(item.url)}">${escapeHtml(item.title)}</a>
+                                        <span class="text-body-secondary small">#${escapeHtml(item.entry_id)}</span>
+                                    </div>
+                                    <p class="text-body-secondary small mb-2">${meta}</p>
+                                    <p class="mb-3">${escapeHtml(item.preview_text || "")}</p>
+                                    <div class="d-flex flex-wrap gap-2">${tagHtml}</div>
+                                </div>
+                            </article>
+                        </div>
+                    `;
+                }).join("");
+                citationCountNode.textContent = `${items.length} related event${items.length === 1 ? "" : "s"}`;
+                citationsShellNode.hidden = false;
+            };
+
+            const handleStreamEvent = (eventName, payload) => {
+                if (eventName === "answer_chunk") {
+                    answerNode.textContent += String(payload.text || "");
+                    statusNode.textContent = "Streaming grounded answer...";
+                    return;
+                }
+
+                if (eventName === "citations") {
+                    renderCitations(payload.items || []);
+                    return;
+                }
+
+                if (eventName === "error") {
+                    errorNode.hidden = false;
+                    errorNode.textContent = String(payload.message || "Could not generate an answer.");
+                    statusNode.textContent = "Event chat failed.";
+                    return;
+                }
+
+                if (eventName === "complete") {
+                    statusNode.textContent = payload.ok ? "Grounded answer complete." : "Event chat finished with an error.";
+                }
+            };
+
+            const processEventBlock = (block) => {
+                let eventName = "message";
+                const dataLines = [];
+
+                block.split(/\r?\n/).forEach((line) => {
+                    if (line.startsWith("event:")) {
+                        eventName = line.slice(6).trim();
+                        return;
+                    }
+                    if (line.startsWith("data:")) {
+                        dataLines.push(line.slice(5).trimStart());
+                    }
+                });
+
+                if (dataLines.length === 0) {
+                    return;
+                }
+
+                const payload = JSON.parse(dataLines.join("\n"));
+                handleStreamEvent(eventName, payload);
+            };
+
+            const consumeSseStream = async (response) => {
+                if (!response.body) {
+                    throw new Error("Streaming is not available in this browser.");
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = "";
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+
+                    let boundaryIndex = buffer.indexOf("\n\n");
+                    while (boundaryIndex >= 0) {
+                        const eventBlock = buffer.slice(0, boundaryIndex);
+                        buffer = buffer.slice(boundaryIndex + 2);
+                        if (eventBlock.trim()) {
+                            processEventBlock(eventBlock);
+                        }
+                        boundaryIndex = buffer.indexOf("\n\n");
+                    }
+
+                    if (done) {
+                        if (buffer.trim()) {
+                            processEventBlock(buffer);
+                        }
+                        return;
+                    }
+                }
+            };
+
+            form.addEventListener("submit", async (event) => {
+                event.preventDefault();
+
+                if (activeController) {
+                    activeController.abort();
+                }
+
+                activeController = new AbortController();
+                const formData = new FormData(form);
+                resetView();
+                setLoading(true);
+
+                const selectedGroupLabel = groupSelect.options[groupSelect.selectedIndex]?.text || "Selected group";
+                activeGroupNode.textContent = selectedGroupLabel;
+                statusNode.textContent = "Searching your events...";
+
+                try {
+                    const response = await fetch(form.action, {
+                        method: "POST",
+                        headers: {
+                            "accept": "text/event-stream",
+                            "x-csrf-token": csrfToken,
+                        },
+                        body: formData,
+                        signal: activeController.signal,
+                    });
+
+                    await consumeSseStream(response);
+                } catch (error) {
+                    if (error instanceof DOMException && error.name === "AbortError") {
+                        return;
+                    }
+                    errorNode.hidden = false;
+                    errorNode.textContent = "Could not connect to event chat.";
+                    statusNode.textContent = "Event chat failed.";
+                } finally {
+                    setLoading(false);
+                    activeController = null;
+                }
+            });
+        })();
+    </script>
+{% endblock %}

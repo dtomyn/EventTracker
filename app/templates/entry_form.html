@@ -181,6 +181,51 @@
                                     <button class="btn btn-outline-secondary btn-sm" type="button" id="add-link-row">Add Link</button>
                                 </div>
                             </div>
+
+                            <div class="col-12">
+                                {% set has_connections = form_state.connection_rows | length > 0 and form_state.connection_rows[0].entry_id %}
+                                <a class="entry-form-collapse-toggle" href="#connected-entries-collapse" role="button" aria-expanded="{{ 'true' if has_connections else 'false' }}" aria-controls="connected-entries-collapse" data-collapse-toggle>
+                                    <span class="collapse-chevron">&#9656;</span> Connected Entries
+                                </a>
+                                <div class="collapse {{ 'show' if has_connections else '' }}" id="connected-entries-collapse">
+                                    <div class="vstack gap-3 mt-2" id="entry-connections-container">
+                                        {% for conn_row in form_state.connection_rows %}
+                                            {% set row_index = loop.index0 %}
+                                            <div class="border rounded p-3" data-connection-row>
+                                                <div class="row g-3 align-items-start">
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Linked Entry</label>
+                                                        <input type="hidden" name="connection_entry_id" value="{{ conn_row.entry_id }}" data-connection-entry-id>
+                                                        <input type="hidden" name="connection_entry_title" value="{{ conn_row.entry_title }}" data-connection-entry-title>
+                                                        <div class="connection-selected-entry{% if not conn_row.entry_id %} d-none{% endif %}" data-connection-selected>
+                                                            <span class="badge text-bg-light border d-inline-flex align-items-center gap-1">
+                                                                <span data-connection-badge-text>{{ conn_row.entry_title }}</span>
+                                                                <button type="button" class="btn-close btn-close-sm ms-1" aria-label="Clear selection" data-connection-clear style="font-size: 0.55em;"></button>
+                                                            </span>
+                                                        </div>
+                                                        <div class="connection-search-wrapper position-relative{% if conn_row.entry_id %} d-none{% endif %}" data-connection-search-wrapper>
+                                                            <input class="form-control" type="text" placeholder="Search entries by title..." data-connection-search autocomplete="off">
+                                                            <div class="list-group position-absolute w-100 shadow-sm d-none" style="z-index: 1050; max-height: 240px; overflow-y: auto;" data-connection-results></div>
+                                                        </div>
+                                                        {% if form_state.errors.get('connection_entry_id_' ~ row_index) %}<div class="invalid-feedback d-block">{{ form_state.errors['connection_entry_id_' ~ row_index] }}</div>{% endif %}
+                                                    </div>
+                                                    <div class="col-md-5">
+                                                        <label class="form-label" for="connection_note_{{ row_index }}">Relationship Note</label>
+                                                        <input class="form-control" id="connection_note_{{ row_index }}" name="connection_note" value="{{ conn_row.note }}" placeholder="e.g. caused by, follow-up to">
+                                                    </div>
+                                                    <div class="col-md-1 d-flex align-items-end">
+                                                        <button class="btn btn-outline-danger w-100" type="button" data-remove-connection-row aria-label="Remove connection row">x</button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center gap-3 mt-2">
+                                    <div class="form-text mb-0">Link this entry to related entries for cross-referencing.</div>
+                                    <button class="btn btn-outline-secondary btn-sm" type="button" id="add-connection-row">Add Connection</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -199,6 +244,8 @@
         const previewContainer = document.getElementById('generated-preview-container');
         const linkContainer = document.getElementById('entry-links-container');
         const addLinkRowButton = document.getElementById('add-link-row');
+        const connectionContainer = document.getElementById('entry-connections-container');
+        const addConnectionRowButton = document.getElementById('add-connection-row');
         const finalTextField = document.getElementById('final_text');
         const sourceUrlField = document.getElementById('source_url');
         const htmlPreviewEndpoint = '/entries/preview-html';
@@ -410,6 +457,54 @@
             });
         }
 
+        function applySuggestedConnections() {
+            const el = document.getElementById('generated_suggested_connections');
+            if (!el) return;
+            let connections;
+            try {
+                connections = JSON.parse(el.dataset.connections || '[]');
+            } catch { return; }
+            if (!connections.length) return;
+
+            // Remove existing empty connection rows (rows without a selected entry).
+            connectionContainer.querySelectorAll('[data-connection-row]').forEach(row => {
+                if (!row.querySelector('[data-connection-entry-id]').value) {
+                    row.remove();
+                }
+            });
+
+            // Collect already-selected entry IDs so we don't add duplicates.
+            const existingIds = new Set();
+            connectionContainer.querySelectorAll('[data-connection-entry-id]').forEach(input => {
+                if (input.value) existingIds.add(input.value);
+            });
+
+            for (const conn of connections) {
+                const entryId = String(conn.entry_id);
+                if (existingIds.has(entryId)) continue;
+                const row = createConnectionRow(entryId, conn.title, conn.suggested_note || '');
+                // Update badge text to include date and group, matching manual selection display.
+                const badgeText = conn.group_name
+                    ? `${conn.title} (${conn.display_date} - ${conn.group_name})`
+                    : `${conn.title} (${conn.display_date})`;
+                const badge = row.querySelector('[data-connection-badge-text]');
+                if (badge) badge.textContent = badgeText;
+                connectionContainer.appendChild(row);
+                existingIds.add(entryId);
+            }
+
+            // Expand the Connected Entries section if we added rows.
+            const connectionsCollapse = document.getElementById('connected-entries-collapse');
+            if (connectionsCollapse && !connectionsCollapse.classList.contains('show')) {
+                connectionsCollapse.classList.add('show');
+                const toggle = document.querySelector('[aria-controls="connected-entries-collapse"]');
+                if (toggle) toggle.setAttribute('aria-expanded', 'true');
+            }
+
+            // Highlight the section.
+            requestAnimationFrame(() => highlightField('entry-connections-container'));
+        }
+
         generateButton.addEventListener('click', async () => {
             const currentSummaryText = finalTextField.value;
             setGenerateLoading(true);
@@ -425,6 +520,7 @@
                 payload.append('summary_instructions', summaryInstructionsField.value);
             }
             payload.append('generated_text', currentSummaryText);
+            payload.append('entry_id', getCurrentEntryId());
             payload.append('csrf_token', getCsrfToken());
 
             try {
@@ -457,6 +553,7 @@
                         finalTextField.focus();
                     }
                     applySuggestedMetadata();
+                    applySuggestedConnections();
                 }
             } catch {
                 previewContainer.innerHTML = renderGenerationFeedback('text-danger', 'Summary generation request failed. You can still write manually.');
@@ -497,6 +594,166 @@
             if (!target) return;
             const isExpanded = target.classList.toggle('show');
             toggle.setAttribute('aria-expanded', String(isExpanded));
+        });
+
+        // === Connected Entries logic ===
+        function getCurrentEntryId() {
+            const match = window.location.pathname.match(/\/entries\/(\d+)/);
+            return match ? match[1] : '';
+        }
+
+        function createConnectionRow(entryId = '', entryTitle = '', note = '') {
+            const rowIndex = connectionContainer.querySelectorAll('[data-connection-row]').length;
+            const wrapper = document.createElement('div');
+            wrapper.className = 'border rounded p-3';
+            wrapper.setAttribute('data-connection-row', '');
+            const hasSelection = entryId !== '';
+            wrapper.innerHTML = `
+                <div class="row g-3 align-items-start">
+                    <div class="col-md-6">
+                        <label class="form-label">Linked Entry</label>
+                        <input type="hidden" name="connection_entry_id" value="" data-connection-entry-id>
+                        <input type="hidden" name="connection_entry_title" value="" data-connection-entry-title>
+                        <div class="connection-selected-entry${hasSelection ? '' : ' d-none'}" data-connection-selected>
+                            <span class="badge text-bg-light border d-inline-flex align-items-center gap-1">
+                                <span data-connection-badge-text></span>
+                                <button type="button" class="btn-close btn-close-sm ms-1" aria-label="Clear selection" data-connection-clear style="font-size: 0.55em;"></button>
+                            </span>
+                        </div>
+                        <div class="connection-search-wrapper position-relative${hasSelection ? ' d-none' : ''}" data-connection-search-wrapper>
+                            <input class="form-control" type="text" placeholder="Search entries by title..." data-connection-search autocomplete="off">
+                            <div class="list-group position-absolute w-100 shadow-sm d-none" style="z-index: 1050; max-height: 240px; overflow-y: auto;" data-connection-results></div>
+                        </div>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label" for="connection_note_${rowIndex}">Relationship Note</label>
+                        <input class="form-control" id="connection_note_${rowIndex}" name="connection_note" placeholder="e.g. caused by, follow-up to">
+                    </div>
+                    <div class="col-md-1 d-flex align-items-end">
+                        <button class="btn btn-outline-danger w-100" type="button" data-remove-connection-row aria-label="Remove connection row">x</button>
+                    </div>
+                </div>
+            `;
+            wrapper.querySelector('[data-connection-entry-id]').value = entryId;
+            wrapper.querySelector('[data-connection-entry-title]').value = entryTitle;
+            wrapper.querySelector('[data-connection-badge-text]').textContent = entryTitle;
+            wrapper.querySelector(`#connection_note_${rowIndex}`).value = note;
+            return wrapper;
+        }
+
+        function ensureAtLeastOneConnectionRow() {
+            if (!connectionContainer.querySelector('[data-connection-row]')) {
+                connectionContainer.appendChild(createConnectionRow());
+            }
+        }
+
+        addConnectionRowButton.addEventListener('click', () => {
+            const connectionsCollapse = document.getElementById('connected-entries-collapse');
+            if (connectionsCollapse && !connectionsCollapse.classList.contains('show')) {
+                connectionsCollapse.classList.add('show');
+                const toggle = document.querySelector('[aria-controls="connected-entries-collapse"]');
+                if (toggle) toggle.setAttribute('aria-expanded', 'true');
+            }
+            connectionContainer.appendChild(createConnectionRow());
+        });
+
+        connectionContainer.addEventListener('click', (event) => {
+            const removeBtn = event.target.closest('[data-remove-connection-row]');
+            if (removeBtn) {
+                removeBtn.closest('[data-connection-row]')?.remove();
+                ensureAtLeastOneConnectionRow();
+                return;
+            }
+
+            const clearBtn = event.target.closest('[data-connection-clear]');
+            if (clearBtn) {
+                const row = clearBtn.closest('[data-connection-row]');
+                if (!row) return;
+                row.querySelector('[data-connection-entry-id]').value = '';
+                row.querySelector('[data-connection-entry-title]').value = '';
+                row.querySelector('[data-connection-badge-text]').textContent = '';
+                row.querySelector('[data-connection-selected]').classList.add('d-none');
+                const searchWrapper = row.querySelector('[data-connection-search-wrapper]');
+                searchWrapper.classList.remove('d-none');
+                searchWrapper.querySelector('[data-connection-search]').value = '';
+                return;
+            }
+
+            const resultItem = event.target.closest('[data-connection-result-id]');
+            if (resultItem) {
+                const row = resultItem.closest('[data-connection-row]');
+                if (!row) return;
+                const entryId = resultItem.getAttribute('data-connection-result-id');
+                const title = resultItem.getAttribute('data-connection-result-title');
+                const displayDate = resultItem.getAttribute('data-connection-result-date');
+                const groupName = resultItem.getAttribute('data-connection-result-group');
+                const badgeText = groupName ? `${title} (${displayDate} - ${groupName})` : `${title} (${displayDate})`;
+                row.querySelector('[data-connection-entry-id]').value = entryId;
+                row.querySelector('[data-connection-entry-title]').value = title;
+                row.querySelector('[data-connection-badge-text]').textContent = badgeText;
+                row.querySelector('[data-connection-selected]').classList.remove('d-none');
+                row.querySelector('[data-connection-search-wrapper]').classList.add('d-none');
+                row.querySelector('[data-connection-results]').classList.add('d-none');
+                return;
+            }
+        });
+
+        const connectionSearchTimers = new WeakMap();
+
+        connectionContainer.addEventListener('input', (event) => {
+            const searchInput = event.target.closest('[data-connection-search]');
+            if (!searchInput) return;
+            const existingTimer = connectionSearchTimers.get(searchInput);
+            if (existingTimer) window.clearTimeout(existingTimer);
+            const timerId = window.setTimeout(() => {
+                connectionSearchTimers.delete(searchInput);
+                void fetchConnectionResults(searchInput);
+            }, 300);
+            connectionSearchTimers.set(searchInput, timerId);
+        });
+
+        async function fetchConnectionResults(searchInput) {
+            const query = searchInput.value.trim();
+            const row = searchInput.closest('[data-connection-row]');
+            const resultsEl = row.querySelector('[data-connection-results]');
+            if (!query) {
+                resultsEl.classList.add('d-none');
+                resultsEl.innerHTML = '';
+                return;
+            }
+            const excludeId = getCurrentEntryId();
+            let url = `/api/entries/search?q=${encodeURIComponent(query)}`;
+            if (excludeId) url += `&exclude_id=${excludeId}`;
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    resultsEl.classList.add('d-none');
+                    return;
+                }
+                const results = await response.json();
+                if (results.length === 0) {
+                    resultsEl.innerHTML = '<div class="list-group-item text-body-secondary small">No matching entries found.</div>';
+                    resultsEl.classList.remove('d-none');
+                    return;
+                }
+                resultsEl.innerHTML = results.map(r =>
+                    `<button type="button" class="list-group-item list-group-item-action small" data-connection-result-id="${r.id}" data-connection-result-title="${r.title.replace(/"/g, '&quot;')}" data-connection-result-date="${r.display_date.replace(/"/g, '&quot;')}" data-connection-result-group="${r.group_name.replace(/"/g, '&quot;')}">
+                        <div class="fw-medium">${r.title}</div>
+                        <div class="text-body-secondary" style="font-size: 0.8em;">${r.display_date} &middot; ${r.group_name}</div>
+                    </button>`
+                ).join('');
+                resultsEl.classList.remove('d-none');
+            } catch {
+                resultsEl.classList.add('d-none');
+            }
+        }
+
+        // Close connection search dropdowns when clicking outside
+        document.addEventListener('click', (event) => {
+            if (event.target.closest('[data-connection-results]') || event.target.closest('[data-connection-search]')) return;
+            document.querySelectorAll('[data-connection-results]').forEach(el => {
+                el.classList.add('d-none');
+            });
         });
 
         if (!sourceUrlField.value && !document.getElementById('title').value) {

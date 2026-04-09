@@ -12,6 +12,12 @@ class EntryLinkPayload:
 
 
 @dataclass(slots=True)
+class EntryConnectionPayload:
+    target_entry_id: int
+    note: str
+
+
+@dataclass(slots=True)
 class EntrySourceSnapshotPayload:
     source_url: str
     final_url: str
@@ -37,6 +43,7 @@ class EntryPayload:
     final_text: str
     tags: list[str]
     links: list[EntryLinkPayload]
+    connections: list[EntryConnectionPayload] = field(default_factory=list)
     source_snapshot: EntrySourceSnapshotPayload | None = None
 
 
@@ -45,6 +52,7 @@ class EntryFormState:
     values: dict[str, str] = field(default_factory=dict)
     errors: dict[str, str] = field(default_factory=dict)
     link_rows: list[dict[str, str]] = field(default_factory=list)
+    connection_rows: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass(slots=True)

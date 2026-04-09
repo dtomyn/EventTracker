@@ -127,6 +127,18 @@ POST_ENTRY_SCHEMA_STATEMENTS = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS entry_connections (
+        id              INTEGER PRIMARY KEY,
+        source_entry_id INTEGER NOT NULL,
+        target_entry_id INTEGER NOT NULL,
+        note            TEXT NOT NULL DEFAULT '',
+        created_utc     TEXT NOT NULL,
+        FOREIGN KEY (source_entry_id) REFERENCES entries(id) ON DELETE CASCADE,
+        FOREIGN KEY (target_entry_id) REFERENCES entries(id) ON DELETE CASCADE,
+        UNIQUE(source_entry_id, target_entry_id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS entry_source_snapshots (
         entry_id INTEGER PRIMARY KEY,
         source_url TEXT NOT NULL,
@@ -149,6 +161,8 @@ POST_ENTRY_SCHEMA_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_entry_tags_tag_id ON entry_tags(tag_id)",
     "CREATE INDEX IF NOT EXISTS idx_entry_links_entry_id ON entry_links(entry_id)",
     "CREATE INDEX IF NOT EXISTS idx_entries_group_source_url ON entries(group_id, source_url) WHERE source_url IS NOT NULL",
+    "CREATE INDEX IF NOT EXISTS idx_entry_connections_source ON entry_connections(source_entry_id)",
+    "CREATE INDEX IF NOT EXISTS idx_entry_connections_target ON entry_connections(target_entry_id)",
     """
     CREATE TABLE IF NOT EXISTS topic_cluster_cache (
         group_id INTEGER PRIMARY KEY,
@@ -157,6 +171,23 @@ POST_ENTRY_SCHEMA_STATEMENTS = [
         FOREIGN KEY (group_id) REFERENCES timeline_groups(id) ON DELETE CASCADE
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS suggested_connections (
+        id                 INTEGER PRIMARY KEY,
+        entry_id           INTEGER NOT NULL,
+        suggested_entry_id INTEGER NOT NULL,
+        distance           REAL NOT NULL,
+        suggested_note     TEXT NOT NULL DEFAULT '',
+        status             TEXT NOT NULL DEFAULT 'pending',
+        created_utc        TEXT NOT NULL,
+        updated_utc        TEXT NOT NULL,
+        FOREIGN KEY (entry_id) REFERENCES entries(id) ON DELETE CASCADE,
+        FOREIGN KEY (suggested_entry_id) REFERENCES entries(id) ON DELETE CASCADE,
+        UNIQUE(entry_id, suggested_entry_id)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_suggested_connections_entry ON suggested_connections(entry_id, status)",
+    "CREATE INDEX IF NOT EXISTS idx_suggested_connections_suggested ON suggested_connections(suggested_entry_id)",
 ]
 
 TIMELINE_STORY_SCHEMA_STATEMENTS = [

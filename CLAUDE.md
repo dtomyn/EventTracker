@@ -60,6 +60,7 @@ uv run pyright                             # Python type checking (curated file 
   - `ai_generate.py` — AI draft generation (OpenAI or Copilot provider)
   - `embeddings.py` — Optional sqlite-vec embeddings
   - `extraction.py` — URL text extraction (server-side fetch)
+  - `event_chat.py` — Retrieval-augmented conversational Q&A over stored events
   - `group_web_search.py` — Copilot-backed web search sidebar
   - `copilot_runtime.py` / `copilot_sdk.py` — GitHub Copilot integration
   - `topics.py` — Topic clustering and tag graph

@@ -32,6 +32,7 @@
                 </form>
                 <div class="d-flex gap-2 justify-content-end">
                     <a class="btn btn-outline-secondary" href="/entries/export">Export</a>
+                    <a class="btn btn-outline-secondary" href="/chat{% if selected_group_query_value %}?group_id={{ selected_group_query_value }}{% endif %}">Chat</a>
                     <a class="btn btn-outline-secondary" href="/admin/groups">Admin</a>
                     <button class="btn btn-outline-secondary" type="button" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
                         <svg id="theme-icon-light" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" class="d-none">

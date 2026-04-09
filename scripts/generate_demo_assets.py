@@ -53,18 +53,20 @@ FULL_FRAME_NAMES = [
     "09-query-entered.png",
     "10-filter-results.png",
     "11-search-results.png",
-    # Phase 4: Entry creation
-    "12-url-entered.png",
-    "13-generating.png",
-    "14-summary-generated.png",
-    # Phase 5: Entry viewing
-    "15-entry-detail.png",
-    # Phase 6: Admin
-    "16-admin-groups.png",
-    # Phase 7: Dark mode and story
-    "17-dark-mode.png",
-    "18-story-mode-screen.png",
-    "19-story-generated.png",
+    # Phase 4: Event Chat
+    "12-chat-page.png",
+    # Phase 5: Entry creation
+    "13-url-entered.png",
+    "14-generating.png",
+    "15-summary-generated.png",
+    # Phase 6: Entry viewing
+    "16-entry-detail.png",
+    # Phase 7: Admin
+    "17-admin-groups.png",
+    # Phase 8: Dark mode and story
+    "18-dark-mode.png",
+    "19-story-mode-screen.png",
+    "20-story-generated.png",
 ]
 NO_SEARCH_FRAME_NAMES = [
     "01-home.png",
@@ -75,14 +77,15 @@ NO_SEARCH_FRAME_NAMES = [
     "06-months-clicked.png",
     "07-years-clicked.png",
     "08-tag-clusters.png",
-    "12-url-entered.png",
-    "13-generating.png",
-    "14-summary-generated.png",
-    "15-entry-detail.png",
-    "16-admin-groups.png",
-    "17-dark-mode.png",
-    "18-story-mode-screen.png",
-    "19-story-generated.png",
+    "12-chat-page.png",
+    "13-url-entered.png",
+    "14-generating.png",
+    "15-summary-generated.png",
+    "16-entry-detail.png",
+    "17-admin-groups.png",
+    "18-dark-mode.png",
+    "19-story-mode-screen.png",
+    "20-story-generated.png",
 ]
 
 
@@ -307,53 +310,60 @@ def capture_assets(page: Page, base_url: str, output_dir: Path) -> list[Path]:
     page.wait_for_load_state("networkidle")
     save_screenshot(page, output_paths[idx]); idx += 1
 
-    # ── Phase 4: Entry creation ──────────────────────────────────────────
+    # ── Phase 4: Event Chat ─────────────────────────────────────────────
 
-    # 12 - New entry with URL entered
+    # 12 - Event Chat page
+    page.goto(f"{base_url}/chat")
+    page.wait_for_load_state("networkidle")
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # ── Phase 5: Entry creation ──────────────────────────────────────────
+
+    # 13 - New entry with URL entered
     page.get_by_role("link", name="New Entry").click()
     page.wait_for_load_state("networkidle")
     page.get_by_label("Source URL").fill(SUMMARY_SOURCE_URL)
     save_screenshot(page, output_paths[idx]); idx += 1
 
-    # 13 - Generation in progress
+    # 14 - Generation in progress
     page.locator("#generate-button").click()
     page.wait_for_timeout(600)
     save_screenshot(page, output_paths[idx]); idx += 1
 
-    # 14 - Summary generated
+    # 15 - Summary generated
     wait_for_generated_summary(page)
     save_screenshot(page, output_paths[idx]); idx += 1
 
-    # ── Phase 5: Entry viewing ───────────────────────────────────────────
+    # ── Phase 6: Entry viewing ───────────────────────────────────────────
 
-    # 15 - Entry detail page (with source snapshot)
+    # 16 - Entry detail page (with source snapshot)
     page.goto(f"{base_url}/entries/{ENTRY_DETAIL_ID}/view")
     page.wait_for_load_state("networkidle")
     page.wait_for_timeout(300)
     save_screenshot(page, output_paths[idx]); idx += 1
 
-    # ── Phase 6: Admin ───────────────────────────────────────────────────
+    # ── Phase 7: Admin ───────────────────────────────────────────────────
 
-    # 16 - Admin groups page
+    # 17 - Admin groups page
     page.goto(f"{base_url}/admin/groups")
     page.wait_for_load_state("networkidle")
     save_screenshot(page, output_paths[idx]); idx += 1
 
-    # ── Phase 7: Dark mode and Story Mode ────────────────────────────────
+    # ── Phase 8: Dark mode and Story Mode ────────────────────────────────
 
-    # 17 - Dark mode on timeline
+    # 18 - Dark mode on timeline
     page.goto(f"{base_url}/")
     page.wait_for_load_state("networkidle")
     page.locator("#theme-toggle").click()
     page.wait_for_timeout(600)
     save_screenshot(page, output_paths[idx]); idx += 1
 
-    # 18 - Story Mode screen
+    # 19 - Story Mode screen
     page.get_by_role("link", name="Story Mode").click()
     page.wait_for_load_state("networkidle")
     save_screenshot(page, output_paths[idx]); idx += 1
 
-    # 19 - Story generated
+    # 20 - Story generated
     page.locator("[data-story-generate-button]").click(no_wait_after=True)
     wait_for_story_result(page)
     page.wait_for_timeout(500)

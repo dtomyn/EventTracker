@@ -5,17 +5,14 @@ from contextlib import asynccontextmanager
 from dataclasses import asdict
 from datetime import datetime
 import asyncio
-import hashlib
-import hmac
 from html import escape
 import json
 import logging
 import os
 from pathlib import Path
-import secrets
 import sqlite3
 from typing import Any, TypedDict, cast
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup, Tag
 from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request
@@ -60,6 +57,7 @@ from app.services.ai_story_mode import (
 )
 from app.services.entries import (
     blank_form_state,
+    build_connection_graph,
     build_timeline_groups,
     create_timeline_group,
     decode_timeline_cursor,
@@ -70,6 +68,7 @@ from app.services.entries import (
     format_plain_text,
     get_default_timeline_group,
     get_entry,
+    get_entry_connections,
     get_entry_source_snapshot,
     list_group_tag_vocabulary,
     list_entry_source_snapshots,
@@ -79,6 +78,7 @@ from app.services.entries import (
     list_timeline_entries,
     plain_text_from_html,
     list_saved_entry_urls,
+    search_entries_for_connection,
     TimelineEntryGroup,
     list_timeline_month_buckets,
     list_timeline_summary_groups,
@@ -106,12 +106,25 @@ from app.services.group_web_search import (
     GroupWebSearchTimeoutError,
     search_group_web,
 )
+from app.services.event_chat import (
+    EVENT_CHAT_PROVIDER_REQUIRED_MESSAGE,
+    normalize_event_chat_question,
+    stream_event_chat_events,
+)
 from app.services.search import (
     DEFAULT_SEARCH_PAGE_SIZE,
     decode_search_cursor,
     filter_timeline_entries,
     paginate_search_results,
     search_entries,
+)
+from app.services.suggested_connections import (
+    accept_suggestion,
+    compute_suggestions_for_entry,
+    dismiss_suggestion,
+    find_similar_entries_by_text,
+    generate_relationship_notes,
+    get_pending_suggestions,
 )
 from app.services.topics import (
     build_tag_graph,
@@ -158,109 +171,17 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 # ---------------------------------------------------------------------------
 # CSRF protection
 # ---------------------------------------------------------------------------
+from app.csrf import (
+    _CSRF_COOKIE_NAME,
+    _generate_csrf_token,
+    _get_csrf_secret_file,
+    _load_or_create_csrf_secret,
+    csrf_hidden_input,
+    csrf_middleware,
+)
 
-
-def _get_csrf_secret_file() -> Path:
-    return Path(__file__).resolve().parents[1] / "data" / "csrf_secret.txt"
-
-
-def _load_or_create_csrf_secret() -> str:
-    """Return a stable CSRF secret, persisting it across restarts.
-
-    Priority:
-    1. EVENTTRACKER_CSRF_SECRET env var (useful in production / CI)
-    2. data/csrf_secret.txt (auto-created on first run; survives dev reloads)
-    3. In-memory fallback (used only when the data dir is not writable)
-    """
-    env_secret = os.environ.get("EVENTTRACKER_CSRF_SECRET", "").strip()
-    if env_secret:
-        return env_secret
-    secret_file = _get_csrf_secret_file()
-    try:
-        if secret_file.exists():
-            stored = secret_file.read_text().strip()
-            if len(stored) >= 32:
-                return stored
-    except OSError:
-        pass
-    new_secret = secrets.token_hex(32)
-    try:
-        secret_file.parent.mkdir(parents=True, exist_ok=True)
-        secret_file.write_text(new_secret)
-    except OSError:
-        pass
-    return new_secret
-
-
-_CSRF_COOKIE_NAME = "csrf_token"
-_CSRF_FORM_FIELD = "csrf_token"
-_CSRF_HEADER_NAME = "x-csrf-token"
-_CSRF_SECRET = _load_or_create_csrf_secret()
-_CSRF_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
-
-
-def _generate_csrf_token(session_id: str) -> str:
-    """Derive a CSRF token from a per-session random value and a server secret."""
-    return hmac.new(
-        _CSRF_SECRET.encode(), session_id.encode(), hashlib.sha256
-    ).hexdigest()
-
-
-def _get_or_create_session_id(request: Request) -> tuple[str, bool]:
-    """Return (session_id, is_new) from the CSRF cookie, creating one if absent."""
-    existing = request.cookies.get(_CSRF_COOKIE_NAME)
-    if existing:
-        return existing, False
-    return secrets.token_hex(16), True
-
-
-@app.middleware("http")
-async def csrf_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
-    session_id, is_new = _get_or_create_session_id(request)
-    expected_token = _generate_csrf_token(session_id)
-
-    # Validate token on state-changing requests (skip during automated tests)
-    if request.method not in _CSRF_SAFE_METHODS and not os.environ.get("TESTING"):
-        # Try form field first, then header (for JS fetch calls)
-        submitted_token: str | None = None
-        content_type = (request.headers.get("content-type") or "").lower()
-        if "application/x-www-form-urlencoded" in content_type:
-            body = await request.body()
-            parsed_body = parse_qs(body.decode("utf-8"), keep_blank_values=True)
-            token_values = parsed_body.get(_CSRF_FORM_FIELD, [])
-            submitted_token = token_values[0] if token_values else None
-        if not submitted_token:
-            submitted_token = request.headers.get(_CSRF_HEADER_NAME)
-        if not hmac.compare_digest(submitted_token or "", expected_token):
-            from starlette.responses import PlainTextResponse
-            return PlainTextResponse("CSRF validation failed", status_code=403)
-
-    # Attach token to request state so templates can access it
-    request.state.csrf_token = expected_token
-
-    response = await call_next(request)
-
-    if is_new:
-        response.set_cookie(
-            _CSRF_COOKIE_NAME,
-            session_id,
-            httponly=True,
-            samesite="strict",
-            secure=request.url.scheme == "https",
-        )
-
-    return response
-
-
-# Make csrf_token available in all Jinja2 templates
-def _csrf_hidden_input(request: Request) -> Markup:
-    token = getattr(request.state, "csrf_token", "")
-    return Markup(
-        f'<input type="hidden" name="{_CSRF_FORM_FIELD}" value="{token}">'
-    )
-
-
-templates.env.globals["csrf_hidden_input"] = _csrf_hidden_input
+app.middleware("http")(csrf_middleware)
+templates.env.globals["csrf_hidden_input"] = csrf_hidden_input
 
 
 class TimelineWebSearchState(TypedDict):
@@ -352,6 +273,18 @@ class SearchPageContext(TypedDict):
     selected_group_query_value: str
     selected_group_name: str
     search_scope: SearchClientScope
+
+
+class ChatPageContext(TypedDict):
+    request: Request
+    page_title: str
+    query: str
+    timeline_filters: list[TimelineGroup]
+    selected_group_id: int | None
+    selected_group_query_value: str
+    selected_group_name: str
+    chat_provider_ready: bool
+    chat_provider_message: str | None
 
 
 class TimelineDetailsPayload(TypedDict):
@@ -562,6 +495,7 @@ class GeneratedPreviewContext(TypedDict, total=False):
     suggested_event_day: str
     suggested_tags: list[str]
     suggested_tags_csv: str
+    suggested_connections: list[dict[str, object]]
     feedback_message: str
     feedback_class: str
     source_snapshot_source_url: str
@@ -1176,6 +1110,65 @@ def ranked_search_results(
     return JSONResponse(payload)
 
 
+@app.get("/chat", response_class=HTMLResponse)
+def chat_page(request: Request, group_id: str = "") -> HTMLResponse:
+    with connection_context() as connection:
+        scope = _load_group_scope(connection, q="", group_id=group_id)
+        provider_ready = _is_copilot_provider()
+        context: ChatPageContext = {
+            "request": request,
+            "page_title": "Event Chat",
+            "query": "",
+            "timeline_filters": scope["timeline_filters"],
+            "selected_group_id": scope["selected_group_id"],
+            "selected_group_query_value": scope["selected_group_query_value"],
+            "selected_group_name": (
+                scope["selected_group"].name
+                if scope["selected_group"]
+                else "All groups"
+            ),
+            "chat_provider_ready": provider_ready,
+            "chat_provider_message": (
+                None if provider_ready else EVENT_CHAT_PROVIDER_REQUIRED_MESSAGE
+            ),
+        }
+    return templates.TemplateResponse(
+        request,
+        "chat.html",
+        cast(dict[str, object], context),
+    )
+
+
+@app.post("/chat/query")
+async def chat_query(
+    question: str = Form(""),
+    group_id: str = Form(""),
+) -> StreamingResponse:
+
+    try:
+        normalized_question = normalize_event_chat_question(question)
+    except ValueError as exc:
+        return _build_event_chat_error_stream(str(exc), status_code=400)
+
+    with connection_context() as connection:
+        scope = _load_group_scope(connection, q="", group_id=group_id)
+        selected_group_id = scope["selected_group_id"]
+
+    async def stream() -> AsyncGenerator[str, None]:
+        with connection_context() as connection:
+            async for event in stream_event_chat_events(
+                connection,
+                normalized_question,
+                group_id=selected_group_id,
+            ):
+                payload = {
+                    key: value for key, value in event.items() if key != "kind"
+                }
+                yield _encode_sse_event(str(event["kind"]), payload)
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
+
+
 @app.get("/story", response_class=HTMLResponse)
 def story_page(
     request: Request,
@@ -1596,9 +1589,10 @@ def timeline_heatmap_entries(
 ) -> HTMLResponse:
     with connection_context() as connection:
         group_filter = "AND e.group_id = ?" if group_id is not None else ""
-        params: tuple[object, ...] = (year, month, day)
+        include_month_only_entries = 1 if day == 1 else 0
+        params: tuple[object, ...] = (year, month, day, include_month_only_entries)
         if group_id is not None:
-            params = (year, month, day, group_id)
+            params = (year, month, day, include_month_only_entries, group_id)
 
         rows = connection.execute(
             f"""
@@ -1624,7 +1618,12 @@ def timeline_heatmap_entries(
             LEFT JOIN entry_tags et ON et.entry_id = e.id
             LEFT JOIN tags t ON t.id = et.tag_id
             LEFT JOIN entry_links el ON el.entry_id = e.id
-            WHERE e.event_year = ? AND e.event_month = ? AND e.event_day = ?
+                        WHERE e.event_year = ?
+                            AND e.event_month = ?
+                            AND (
+                                        e.event_day = ?
+                                        OR (? = 1 AND e.event_day IS NULL)
+                            )
                 {group_filter}
             GROUP BY e.id, tg.name
             ORDER BY e.sort_key DESC, e.updated_utc DESC
@@ -1664,6 +1663,71 @@ async def group_topics_graph(request: Request, group_id: int) -> HTMLResponse:
         "topic_graph.html",
         cast(dict[str, object], context)
     )
+
+
+@app.get("/api/entries/search")
+def api_search_entries(request: Request) -> JSONResponse:
+    q = str(request.query_params.get("q", "")).strip()
+    exclude_id_raw = str(request.query_params.get("exclude_id", "")).strip()
+    group_id_raw = str(request.query_params.get("group_id", "")).strip()
+    exclude_id = int(exclude_id_raw) if exclude_id_raw.isdigit() else None
+    group_id = int(group_id_raw) if group_id_raw.isdigit() else None
+    with connection_context() as connection:
+        results = search_entries_for_connection(
+            connection, q, exclude_entry_id=exclude_id, group_id=group_id
+        )
+    return JSONResponse(results)
+
+
+@app.get("/groups/{group_id}/connections/graph", response_class=HTMLResponse)
+async def group_connections_graph(request: Request, group_id: int) -> HTMLResponse:
+    with connection_context() as connection:
+        group = get_timeline_group(connection, group_id)
+        if group is None:
+            raise HTTPException(status_code=404, detail="Timeline group not found")
+    context = {
+        "request": request,
+        "page_title": f"{group.name} Connection Graph",
+        "group": group,
+        "selected_group_id": group.id,
+        "selected_group_query_value": str(group.id),
+        "query": "",
+    }
+    return templates.TemplateResponse(
+        request,
+        "connection_graph.html",
+        cast(dict[str, object], context),
+    )
+
+
+@app.get("/api/groups/{group_id}/connections")
+def api_group_connections(request: Request, group_id: int) -> JSONResponse:
+    include_tags = str(request.query_params.get("include_tags", "")).strip() == "1"
+    with connection_context() as connection:
+        group = get_timeline_group(connection, group_id)
+        if group is None:
+            raise HTTPException(status_code=404, detail="Timeline group not found")
+        graph = build_connection_graph(connection, group_id, include_tag_edges=include_tags)
+    return JSONResponse(graph)
+
+
+@app.post("/api/suggestions/{suggestion_id}/accept")
+def api_accept_suggestion(suggestion_id: int) -> JSONResponse:
+    with connection_context() as connection:
+        result = accept_suggestion(connection, suggestion_id, utc_now_iso())
+    if result is None:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    entry_id, suggested_entry_id = result
+    return JSONResponse({"ok": True, "entry_id": entry_id, "suggested_entry_id": suggested_entry_id})
+
+
+@app.post("/api/suggestions/{suggestion_id}/dismiss")
+def api_dismiss_suggestion(suggestion_id: int) -> JSONResponse:
+    with connection_context() as connection:
+        updated = dismiss_suggestion(connection, suggestion_id, utc_now_iso())
+    if not updated:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    return JSONResponse({"ok": True})
 
 
 @app.get("/entries/export")
@@ -1743,13 +1807,17 @@ def view_entry(request: Request, entry_id: int) -> HTMLResponse:
     with connection_context() as connection:
         entry = get_entry(connection, entry_id)
         source_snapshot = get_entry_source_snapshot(connection, entry_id)
+        connections = get_entry_connections(connection, entry_id) if entry else []
+        suggestions = get_pending_suggestions(connection, entry_id) if entry else []
     if entry is None:
         raise HTTPException(status_code=404, detail="Entry not found")
+    entry.connections = connections
 
-    context: EntryDetailPageContext = {
+    context = {
         "page_title": entry.title or "Entry",
         "entry": entry,
         "source_snapshot": source_snapshot,
+        "suggested_connections": suggestions,
     }
     return templates.TemplateResponse(
         request,
@@ -1809,6 +1877,9 @@ async def create_entry(
         )
     if payload.tags:
         background_tasks.add_task(_refresh_topic_clusters_bg, payload.group_id)
+    background_tasks.add_task(
+        compute_suggestions_for_entry, entry_id, payload.title
+    )
     return RedirectResponse(url=f"/entries/{entry_id}/view", status_code=303)
 
 
@@ -1818,6 +1889,8 @@ def edit_entry_form(request: Request, entry_id: int) -> HTMLResponse:
         entry = get_entry(connection, entry_id)
         source_snapshot = get_entry_source_snapshot(connection, entry_id)
         timeline_filters = list_timeline_groups(connection)
+        if entry is not None:
+            entry.connections = get_entry_connections(connection, entry_id)
     if entry is None:
         raise HTTPException(status_code=404, detail="Entry not found")
 
@@ -1891,6 +1964,9 @@ async def update_entry_route(
         )
     if payload.tags:
         background_tasks.add_task(_refresh_topic_clusters_bg, payload.group_id)
+    background_tasks.add_task(
+        compute_suggestions_for_entry, entry_id, payload.title
+    )
     return RedirectResponse(url=f"/entries/{entry_id}/view", status_code=303)
 
 
@@ -2044,6 +2120,7 @@ async def generate_entry_preview(
     source_url: str = Form(""),
     summary_instructions: str = Form(""),
     generated_text: str = Form(""),
+    entry_id: str = Form(""),
 ) -> HTMLResponse:
     prompt_title = title.strip()
     selected_group_id = _parse_group_id(group_id)
@@ -2188,6 +2265,30 @@ async def generate_entry_preview(
                 "source_snapshot_extractor_version": extraction.extractor_version,
             }
         )
+
+    # Best-effort: find semantically similar entries to suggest as connections.
+    try:
+        exclude_id = int(entry_id) if entry_id.strip().isdigit() else None
+        # Use title + beginning of draft for richer semantic signal.
+        draft_snippet = plain_text_from_html(suggestion.draft_html)[:500]
+        search_text = f"{suggestion.title}. {draft_snippet}".strip()
+        with connection_context() as conn:
+            similar = find_similar_entries_by_text(
+                conn, search_text, exclude_entry_id=exclude_id
+            )
+        if similar:
+            pairs = [
+                (suggestion.title, str(s["title"])) for s in similar
+            ]
+            notes = generate_relationship_notes(pairs)
+            for s, note in zip(similar, notes):
+                s["suggested_note"] = note
+            context["suggested_connections"] = similar
+    except Exception:
+        logging.getLogger(__name__).debug(
+            "Connection suggestion lookup skipped", exc_info=True
+        )
+
     return templates.TemplateResponse(
         request,
         "partials/generated_preview.html",
@@ -2824,6 +2925,20 @@ def _parse_story_citation_payloads(
 def _encode_sse_event(event_name: str, payload: Mapping[str, object]) -> str:
     body = json.dumps(payload, separators=(",", ":"), default=str)
     return f"event: {event_name}\ndata: {body}\n\n"
+
+
+def _build_event_chat_error_stream(
+    message: str, *, status_code: int
+) -> StreamingResponse:
+    async def stream() -> AsyncGenerator[str, None]:
+        yield _encode_sse_event("error", {"message": message})
+        yield _encode_sse_event("complete", {"ok": False})
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        status_code=status_code,
+    )
 
 
 def _list_entries_for_scope(

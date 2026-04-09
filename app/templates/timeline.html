@@ -35,6 +35,9 @@
             {% if selected_group_id and embeddings_enabled %}
                 <a class="btn btn-outline-primary ms-2" href="/groups/{{ selected_group_id }}/topics/graph">Tag Clusters</a>
             {% endif %}
+            {% if selected_group_id %}
+                <a class="btn btn-outline-primary ms-2" href="/groups/{{ selected_group_id }}/connections/graph">Connection Graph</a>
+            {% endif %}
             {% if is_filtered %}
                 <a class="btn btn-link px-0" href="/{% if selected_group_query_value %}?group_id={{ selected_group_query_value }}{% endif %}">Clear filter</a>
             {% endif %}

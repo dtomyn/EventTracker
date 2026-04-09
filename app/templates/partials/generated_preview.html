@@ -40,3 +40,10 @@
 		{% endfor %}
 	</div>
 {% endif %}
+{% if suggested_connections is defined and suggested_connections %}
+	<div id="generated_suggested_connections"
+		data-connections='{{ suggested_connections | tojson }}'
+		class="small text-body-secondary mt-2">
+		Suggested connections: {{ suggested_connections | length }} related {{ "entry" if suggested_connections | length == 1 else "entries" }} found
+	</div>
+{% endif %}

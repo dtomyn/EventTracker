@@ -23,6 +23,11 @@
                 {% endfor %}
             </div>
         {% endif %}
+        {% if entry.connections %}
+            <div class="text-body-secondary small mb-2">
+                <span class="badge text-bg-light border">{{ entry.connections | length }} connection{{ 's' if entry.connections | length != 1 else '' }}</span>
+            </div>
+        {% endif %}
         {% if entry.source_url %}
             <div>
                 <a href="{{ entry.source_url }}" class="small link-secondary" target="_blank" rel="noreferrer">{{ entry.source_url }}</a>

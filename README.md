@@ -15,6 +15,8 @@ This demo shows the main AI-assisted workflow in EventTracker, from live web dis
 - Entering a source URL in `New Entry` and generating a suggested summary, title, and date.
 - Reviewing the rendered preview before saving the entry.
 
+Event Chat is also available in the current app. It lets you ask natural-language questions about your stored events and receive grounded answers that cite specific entries.
+
 Timeline Story Mode is also available in the current app. It lets you launch a narrative view from the timeline, a search scope, or drilled year/month buckets, generate a story over the current scope, save that story as a snapshot, and follow inline citations down to a linked reference list.
 
 ## Quick start
@@ -119,6 +121,7 @@ uv run --with pillow python .\scripts\generate_demo_assets.py --also-no-search-a
 - Supports timeline filtering on `/` with the `q` query string. This keeps matches in timeline order instead of ranked order.
 - Supports ranked search at `/search`, combining FTS matches with semantic matches when embeddings are available.
 - Supports `Story Mode` for the current scope, turning matching entries into a narrative arc with sections, saved snapshots, and linked citations.
+- Supports `Event Chat` at `/chat`, a conversational Q&A interface that retrieves relevant entries via search, grounds answers in stored event context, and streams responses with inline citations linking back to entry detail pages.
 - Organizes entries into timeline groups, seeded with a default `Agentic Coding` group.
 - Lets users create, rename, delete, and mark the default group at `/admin/groups`, and store an optional per-group web search query.
 - Generates AI draft suggestions (with suggested tags) from either a title alone or a title plus extracted URL content. YouTube URLs are supported: the app extracts the video transcript and upload date via `youtube-transcript-api`, which the AI uses to generate a meaningful summary and infer the event date.
@@ -141,7 +144,7 @@ Strengths:
 - `scripts/run_dev.py` and `scripts/init_db.py` make operational entry points explicit instead of burying them in ad hoc shell commands.
 - `app/main.py` acts as a clear composition root for FastAPI, Jinja, filters, and route wiring.
 - `app/db.py` centralizes schema bootstrapping, SQLite feature enablement, FTS rebuilds, and sqlite-vec setup, which reduces hidden persistence behavior.
-- The service layer is split by capability, not by framework artifact, which fits the product surface well: entries, search, story mode, extraction, embeddings, and AI integrations are easy to locate.
+- The service layer is split by capability, not by framework artifact, which fits the product surface well: entries, search, story mode, event chat, extraction, embeddings, and AI integrations are easy to locate.
 - Server-rendered templates keep the frontend simple and aligned with the single-process SQLite architecture.
 
 Tradeoffs and risks:
@@ -158,7 +161,7 @@ Tradeoffs and risks:
 flowchart TD
   DevTools["uv + scripts\nrun_dev.py\ninit_db.py"]
   FastAPI["FastAPI app\napp/main.py"]
-  Services["Service layer\nentries, search, story, AI, extraction"]
+  Services["Service layer\nentries, search, story, chat, AI, extraction"]
   Templates["Jinja templates\nserver-rendered UI"]
   SQLite[("SQLite\nFTS5 + optional sqlite-vec")]
   Providers["External AI providers\nOpenAI / GitHub Copilot"]
@@ -190,7 +193,7 @@ flowchart TD
   SQLite[("SQLite DB")]
   AI["OpenAI / GitHub Copilot"]
 
-  Browser -->|Timeline, search, story, entry forms| Main
+  Browser -->|Timeline, search, chat, story, entry forms| Main
 
   Main -->|Render page| Templates
 
@@ -212,6 +215,11 @@ flowchart TD
   Main -->|Generate entry draft from URL/title| ExtractSvc
   ExtractSvc -->|Fetched source text| DraftSvc
 
+  EventChatSvc["event_chat.py"]
+  Main -->|Event chat Q&A| EventChatSvc
+  EventChatSvc -->|Retrieve entries| SearchSvc
+  EventChatSvc -->|Stream answer| AI
+
   Main -->|On the web sidebar| GroupWebSvc
   GroupWebSvc --> AI
 
@@ -229,6 +237,7 @@ flowchart TD
 - Search: SQLite FTS5 for keyword search and optional sqlite-vec for semantic recall.
 - AI draft generation: provider abstraction in `app/services/ai_generate.py`.
 - AI story generation: provider abstraction in `app/services/ai_story_mode.py`.
+- Event chat: retrieval-augmented Q&A in `app/services/event_chat.py`.
 
 ### Database model
 
@@ -425,6 +434,32 @@ Additional search endpoint:
 - `GET /search/results`: paginated HTML payload for additional ranked results.
 
 The ranked search page also exposes a Story Mode launch action for the current query and selected group.
+
+### Event Chat
+
+`GET /chat`
+
+- Renders a dedicated chat page with a question input, group scope selector, and streamed answer area.
+- Provides the current timeline group list and selected scope in the template context.
+- Uses the same default-group and `All groups` scoping model as the timeline and ranked search.
+- Shows a warning when the Copilot AI provider is not configured.
+
+`POST /chat/query`
+
+- Accepts a natural-language question and optional group scope.
+- Validates input: trims whitespace, rejects empty questions, enforces a 500-character maximum.
+- Retrieves relevant entries using the existing search service.
+- Builds bounded citation context from the top results.
+- Returns a `StreamingResponse` with `text/event-stream`.
+
+SSE events:
+
+- `answer_chunk`: incremental answer text grounded in retrieved entries.
+- `citations`: structured citation payloads with entry id, title, date, group, tags, preview, and link to entry detail page.
+- `complete`: terminal success event.
+- `error`: user-facing failure message.
+
+Each question is answered independently. There is no multi-turn conversational memory.
 
 ### Story Mode
 
@@ -800,6 +835,27 @@ uv run python -m scripts.refresh_source_snapshots --dry-run    # preview without
 
 YouTube URLs are automatically detected and processed using transcript extraction instead of HTML conversion. The script is rerunnable: existing snapshots are overwritten with fresh content.
 
+### Compute suggested connections
+
+To batch-compute AI-suggested connections for all entries that have embeddings:
+
+```powershell
+uv run python -m scripts.compute_suggested_connections
+```
+
+The script finds semantically similar entries using embedding distance, then generates short AI relationship notes for each pair. Existing pending suggestions are replaced; accepted and dismissed suggestions are preserved. Requires sqlite-vec and configured embeddings.
+
+### Accept suggested connections
+
+To bulk-accept all pending suggested connections, converting them into real entry connections:
+
+```powershell
+uv run python -m scripts.accept_suggested_connections            # accept all pending
+uv run python -m scripts.accept_suggested_connections --dry-run   # preview without changes
+```
+
+Use `--dry-run` first to review which connections will be created. Each accepted suggestion creates a bidirectional entry connection with the AI-generated relationship note.
+
 ### Backup and restore
 
 The app stores all primary data in a single SQLite file.
@@ -833,6 +889,7 @@ Current automated coverage includes:
 - heatmap API behavior
 - import parsing
 - embeddings service behavior
+- event chat retrieval, prompt assembly, citation rendering, and provider failure mapping
 - group web search behavior
 - admin group CRUD (E2E)
 - URL extraction
@@ -863,6 +920,7 @@ app/  # FastAPI application package
     copilot_sdk.py
     embeddings.py
     entries.py
+    event_chat.py
     extraction.py
     group_web_search.py
     search.py
@@ -875,6 +933,7 @@ app/  # FastAPI application package
     base.html
     entry_detail.html
     entry_form.html
+    chat.html
     search.html
     story.html
     timeline.html
@@ -922,6 +981,7 @@ tests/  # Unit and integration tests
   test_entries.py
   test_extraction.py
   test_heatmap_api.py
+  test_event_chat.py
   test_group_web_search.py
   test_import_entries.py
   test_init_db.py

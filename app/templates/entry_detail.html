@@ -126,6 +126,156 @@
                             <div class="border rounded p-3 text-body-secondary">No additional links saved for this event.</div>
                         {% endif %}
                     </section>
+
+                    {% set outgoing_connections = entry.connections | selectattr('direction', 'equalto', 'outgoing') | list %}
+                    {% set incoming_connections = entry.connections | selectattr('direction', 'equalto', 'incoming') | list %}
+                    {% if outgoing_connections or incoming_connections %}
+                        <section class="mt-4">
+                            <h2 class="h5 mb-3">Connections</h2>
+
+                            <div class="mb-3">
+                                <div class="d-flex align-items-center gap-2 mb-2">
+                                    <span class="fw-medium">Connected Entries</span>
+                                    <span class="badge text-bg-secondary">{{ outgoing_connections | length }}</span>
+                                </div>
+                                {% if outgoing_connections %}
+                                    <div class="list-group list-group-flush">
+                                        {% for conn in outgoing_connections %}
+                                            <div class="list-group-item px-0">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div>
+                                                        <a href="/entries/{{ conn.connected_entry_id }}/view" class="fw-medium text-decoration-none">{{ conn.connected_entry_title }}</a>
+                                                        <div class="text-body-secondary small">{{ conn.connected_entry_date }} &middot; {{ conn.connected_entry_group }}</div>
+                                                        {% if conn.note %}
+                                                            <div class="text-body-secondary small fst-italic mt-1">{{ conn.note }}</div>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                {% else %}
+                                    <div class="text-body-secondary small">No outgoing connections.</div>
+                                {% endif %}
+                            </div>
+
+                            <div>
+                                <div class="d-flex align-items-center gap-2 mb-2">
+                                    <span class="fw-medium">Referenced By</span>
+                                    <span class="badge text-bg-secondary">{{ incoming_connections | length }}</span>
+                                </div>
+                                {% if incoming_connections %}
+                                    <div class="list-group list-group-flush">
+                                        {% for conn in incoming_connections %}
+                                            <div class="list-group-item px-0">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div>
+                                                        <a href="/entries/{{ conn.connected_entry_id }}/view" class="fw-medium text-decoration-none">{{ conn.connected_entry_title }}</a>
+                                                        <div class="text-body-secondary small">{{ conn.connected_entry_date }} &middot; {{ conn.connected_entry_group }}</div>
+                                                        {% if conn.note %}
+                                                            <div class="text-body-secondary small fst-italic mt-1">{{ conn.note }}</div>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                {% else %}
+                                    <div class="text-body-secondary small">No entries reference this one.</div>
+                                {% endif %}
+                            </div>
+                        </section>
+                    {% endif %}
+
+                    {% if suggested_connections %}
+                        <section class="mt-4" id="suggested-connections-section">
+                            <h2 class="h5 mb-3">Suggested Connections <span class="badge text-bg-secondary" id="suggestions-count">{{ suggested_connections | length }}</span></h2>
+                            <p class="text-body-secondary small mb-3">Based on content similarity. Accept to create a connection, or dismiss.</p>
+                            <ul class="list-group list-group-flush" id="suggestions-list">
+                                {% for s in suggested_connections %}
+                                    <li class="list-group-item px-0" data-suggestion-id="{{ s.id }}">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div>
+                                                <a href="/entries/{{ s.suggested_entry_id }}/view" class="fw-medium text-decoration-none">{{ s.suggested_entry_title }}</a>
+                                                <div class="text-body-secondary small">{{ s.suggested_entry_date }} &middot; {{ s.suggested_entry_group }}</div>
+                                                {% if s.suggested_note %}
+                                                    <div class="text-body-secondary small fst-italic mt-1">{{ s.suggested_note }}</div>
+                                                {% endif %}
+                                            </div>
+                                            <div class="d-flex gap-1 flex-shrink-0 ms-3">
+                                                <button type="button" class="btn btn-outline-success btn-sm" data-accept-suggestion="{{ s.id }}" title="Accept suggestion">&#10003;</button>
+                                                <button type="button" class="btn btn-outline-secondary btn-sm" data-dismiss-suggestion="{{ s.id }}" title="Dismiss suggestion">&#10005;</button>
+                                            </div>
+                                        </div>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        </section>
+                        <script>
+                            (function () {
+                                const section = document.getElementById('suggested-connections-section');
+                                const list = document.getElementById('suggestions-list');
+                                const countBadge = document.getElementById('suggestions-count');
+
+                                function getCsrfToken() {
+                                    return document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith('csrf_token='))?.split('=')[1] || '';
+                                }
+
+                                function updateCount() {
+                                    const remaining = list.querySelectorAll('li[data-suggestion-id]').length;
+                                    countBadge.textContent = remaining;
+                                    if (remaining === 0) {
+                                        section.style.display = 'none';
+                                    }
+                                }
+
+                                function fadeOutAndRemove(li, callback) {
+                                    li.style.transition = 'opacity 0.3s';
+                                    li.style.opacity = '0';
+                                    setTimeout(function () {
+                                        li.remove();
+                                        updateCount();
+                                        if (callback) callback();
+                                    }, 300);
+                                }
+
+                                section.addEventListener('click', function (e) {
+                                    const acceptBtn = e.target.closest('[data-accept-suggestion]');
+                                    const dismissBtn = e.target.closest('[data-dismiss-suggestion]');
+                                    const btn = acceptBtn || dismissBtn;
+                                    if (!btn) return;
+
+                                    const suggestionId = btn.dataset.acceptSuggestion || btn.dataset.dismissSuggestion;
+                                    const li = btn.closest('li[data-suggestion-id]');
+                                    const isAccept = !!acceptBtn;
+                                    const url = isAccept
+                                        ? '/api/suggestions/' + suggestionId + '/accept'
+                                        : '/api/suggestions/' + suggestionId + '/dismiss';
+
+                                    btn.disabled = true;
+
+                                    fetch(url, {
+                                        method: 'POST',
+                                        headers: { 'X-CSRF-Token': getCsrfToken() }
+                                    })
+                                    .then(function (resp) {
+                                        if (!resp.ok) throw new Error('Request failed');
+                                        return resp.json();
+                                    })
+                                    .then(function () {
+                                        fadeOutAndRemove(li, function () {
+                                            if (isAccept) {
+                                                setTimeout(function () { location.reload(); }, 400);
+                                            }
+                                        });
+                                    })
+                                    .catch(function () {
+                                        btn.disabled = false;
+                                    });
+                                });
+                            })();
+                        </script>
+                    {% endif %}
                 </div>
             </article>
         </div>

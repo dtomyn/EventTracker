@@ -5,7 +5,13 @@
       "Bash(git commit:*)",
       "Read(//c/Users/darek.tomyn/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/skills/brainstorming/**)",
       "Bash(uv sync:*)",
-      "Bash(uv pip:*)"
+      "Bash(uv pip:*)",
+      "Bash(xargs basename:*)",
+      "WebFetch(domain:obsidian.md)",
+      "Bash(taskkill //F //PID 23792)",
+      "Bash(taskkill //F //IM python.exe)",
+      "Bash(netstat -ano)",
+      "Bash(TESTING=1 uv run python -m scripts.run_dev)"
     ]
   }
 }

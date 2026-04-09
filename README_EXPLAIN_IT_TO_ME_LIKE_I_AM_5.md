@@ -37,6 +37,7 @@ So instead of having lots of messy notes everywhere, the app says:
 - Search: a way to ask, "Can you find the note about this thing?"
 - AI help: a smart helper that can suggest words for your note. It can also listen to YouTube videos and turn them into notes.
 - Story Mode: a helper that reads lots of notes and tells the big story in order.
+- Chat: a way to ask questions like "What changed recently?" and get an answer built only from your saved notes.
 
 ## A tiny example
 

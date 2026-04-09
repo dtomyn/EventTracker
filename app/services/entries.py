@@ -1,23 +1,41 @@
 from __future__ import annotations
 
 import base64
-import calendar
 from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, date, datetime
 import hashlib
-from html import escape
 import json
 import logging
-import markdown
 import sqlite3
 import time
 from typing import Any, Literal, TypedDict, cast
 from urllib.parse import urlparse
 
-from bs4 import BeautifulSoup, Tag
-
-from app.models import Entry, EntryLink, EntrySourceSnapshot, HeatmapData, TimelineGroup
+from app.models import Entry, EntryConnection, EntryLink, EntrySourceSnapshot, HeatmapData, TimelineGroup
+from app.services.formatting import (
+    format_plain_text as format_plain_text,
+    plain_text_from_html as plain_text_from_html,
+    preview_text as preview_text,
+    render_source_snapshot_markdown as render_source_snapshot_markdown,
+    sanitize_rich_text as sanitize_rich_text,
+    sanitize_search_snippet as sanitize_search_snippet,
+)
+from app.services.groups import (
+    TimelineGroupValidationError as TimelineGroupValidationError,
+    clear_default_timeline_group as clear_default_timeline_group,
+    create_timeline_group as create_timeline_group,
+    delete_timeline_group as delete_timeline_group,
+    get_default_timeline_group as get_default_timeline_group,
+    get_timeline_group as get_timeline_group,
+    list_timeline_groups as list_timeline_groups,
+    normalize_timeline_group_name as normalize_timeline_group_name,
+    normalize_timeline_group_web_search_query as normalize_timeline_group_web_search_query,
+    rename_timeline_group as rename_timeline_group,
+    set_default_timeline_group as set_default_timeline_group,
+    MAX_TIMELINE_GROUP_WEB_SEARCH_QUERY_LENGTH,
+)
 from app.schemas import (
+    EntryConnectionPayload,
     EntryFormState,
     EntryLinkPayload,
     EntryPayload,
@@ -53,9 +71,9 @@ MONTH_NAMES = [
 logger = logging.getLogger(__name__)
 
 EMPTY_LINK_ROW = {"url": "", "note": ""}
+EMPTY_CONNECTION_ROW = {"entry_id": "", "entry_title": "", "note": ""}
 DEFAULT_TIMELINE_PAGE_SIZE = 25
 MAX_TIMELINE_PAGE_SIZE = 50
-MAX_TIMELINE_GROUP_WEB_SEARCH_QUERY_LENGTH = 400
 MAX_GENERATION_PREFERRED_TAGS = 50
 
 
@@ -74,49 +92,6 @@ def _invalidate_saved_urls_cache() -> None:
     _saved_urls_cache["ts"] = 0.0
 
 
-ALLOWED_RICH_TEXT_TAGS = {
-    "b",
-    "blockquote",
-    "br",
-    "code",
-    "em",
-    "i",
-    "li",
-    "ol",
-    "p",
-    "strong",
-    "u",
-    "ul",
-}
-ALLOWED_SOURCE_SNAPSHOT_TAGS = ALLOWED_RICH_TEXT_TAGS | {
-    "a",
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "h5",
-    "h6",
-    "hr",
-    "pre",
-    "table",
-    "tbody",
-    "td",
-    "th",
-    "thead",
-    "tr",
-}
-ALLOWED_SEARCH_SNIPPET_TAGS = ALLOWED_RICH_TEXT_TAGS | {"mark"}
-ALLOWED_SOURCE_SNAPSHOT_ATTRIBUTES: dict[str, set[str]] = {
-    "a": {"href"},
-    "td": {"colspan", "rowspan"},
-    "th": {"colspan", "rowspan", "scope"},
-}
-
-
-class TimelineGroupValidationError(ValueError):
-    def __init__(self, field: str, message: str) -> None:
-        super().__init__(message)
-        self.field = field
 
 
 class DuplicateEntrySourceUrlError(ValueError):
@@ -222,6 +197,18 @@ def form_state_from_entry(entry: Entry) -> EntryFormState:
             [{"url": link.url, "note": link.note} for link in entry.links]
             or [EMPTY_LINK_ROW.copy()]
         ),
+        connection_rows=(
+            [
+                {
+                    "entry_id": str(c.connected_entry_id),
+                    "entry_title": c.connected_entry_title,
+                    "note": c.note,
+                }
+                for c in entry.connections
+                if c.direction == "outgoing"
+            ]
+            or [EMPTY_CONNECTION_ROW.copy()]
+        ),
     )
 
 
@@ -273,6 +260,7 @@ def validate_entry_form(
         ).strip(),
     }
     link_rows = parse_link_rows(form_data)
+    connection_rows = parse_connection_rows(form_data)
     errors: dict[str, str] = {}
 
     event_year = _parse_int(
@@ -312,6 +300,7 @@ def validate_entry_form(
         errors["source_url"] = "Provide a valid http or https URL."
 
     links = validate_link_rows(link_rows, errors)
+    connections = validate_connection_rows(connection_rows, errors)
 
     tags = normalize_tags(values["tags"])
     source_snapshot = _build_source_snapshot_payload(values, source_url=source_url)
@@ -319,6 +308,7 @@ def validate_entry_form(
         values=values,
         errors=errors,
         link_rows=link_rows or [EMPTY_LINK_ROW.copy()],
+        connection_rows=connection_rows or [EMPTY_CONNECTION_ROW.copy()],
     )
     if errors or event_year is None or event_month is None or group_id is None:
         return state, None
@@ -334,6 +324,7 @@ def validate_entry_form(
         final_text=values["final_text"],
         tags=tags,
         links=links,
+        connections=connections,
         source_snapshot=source_snapshot,
     )
     return state, payload
@@ -424,6 +415,46 @@ def validate_link_rows(
         if errors.get(f"link_url_{index}") or errors.get(f"link_note_{index}"):
             continue
         validated.append(EntryLinkPayload(url=url, note=note))
+    return validated
+
+
+def parse_connection_rows(form_data: Mapping[str, object]) -> list[dict[str, str]]:
+    getlist = cast(
+        Callable[[str], Iterable[object]] | None,
+        getattr(form_data, "getlist", None),
+    )
+    raw_ids = list(getlist("connection_entry_id")) if getlist is not None else []
+    raw_titles = list(getlist("connection_entry_title")) if getlist is not None else []
+    raw_notes = list(getlist("connection_note")) if getlist is not None else []
+    row_count = max(len(raw_ids), len(raw_notes))
+    rows: list[dict[str, str]] = []
+    for index in range(row_count):
+        entry_id = str(raw_ids[index] if index < len(raw_ids) else "").strip()
+        entry_title = str(raw_titles[index] if index < len(raw_titles) else "").strip()
+        note = str(raw_notes[index] if index < len(raw_notes) else "").strip()
+        rows.append({"entry_id": entry_id, "entry_title": entry_title, "note": note})
+    return rows
+
+
+def validate_connection_rows(
+    connection_rows: list[dict[str, str]], errors: dict[str, str]
+) -> list[EntryConnectionPayload]:
+    validated: list[EntryConnectionPayload] = []
+    seen_ids: set[int] = set()
+    for index, row in enumerate(connection_rows):
+        entry_id_str = row["entry_id"]
+        note = row["note"]
+        if not entry_id_str:
+            continue
+        try:
+            target_id = int(entry_id_str)
+        except ValueError:
+            errors[f"connection_entry_id_{index}"] = "Invalid entry selection."
+            continue
+        if target_id in seen_ids:
+            continue
+        seen_ids.add(target_id)
+        validated.append(EntryConnectionPayload(target_entry_id=target_id, note=note))
     return validated
 
 
@@ -541,6 +572,7 @@ def save_entry(connection: sqlite3.Connection, payload: EntryPayload) -> int:
     entry_id = int(cursor.lastrowid)
     sync_entry_tags(connection, entry_id, payload.tags)
     sync_entry_links(connection, entry_id, payload.links)
+    sync_entry_connections(connection, entry_id, payload.connections)
     if payload.source_snapshot is not None:
         upsert_entry_source_snapshot(connection, entry_id, payload.source_snapshot)
     _sync_embedding_without_failing(connection, entry_id, payload.final_text)
@@ -599,6 +631,7 @@ def update_entry(
     )
     sync_entry_tags(connection, entry_id, payload.tags)
     sync_entry_links(connection, entry_id, payload.links)
+    sync_entry_connections(connection, entry_id, payload.connections)
     if payload.source_snapshot is not None:
         upsert_entry_source_snapshot(connection, entry_id, payload.source_snapshot)
     elif previous_source_url != payload.source_url:
@@ -808,6 +841,254 @@ def sync_entry_links(
             """,
             (entry_id, link.url, link.note, now),
         )
+
+
+def sync_entry_connections(
+    connection: sqlite3.Connection,
+    entry_id: int,
+    connections: list[EntryConnectionPayload],
+) -> None:
+    connection.execute(
+        "DELETE FROM entry_connections WHERE source_entry_id = ?", (entry_id,)
+    )
+    now = utc_now_iso()
+    for conn_payload in connections:
+        if conn_payload.target_entry_id == entry_id:
+            continue
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO entry_connections(
+                source_entry_id, target_entry_id, note, created_utc
+            )
+            VALUES (?, ?, ?, ?)
+            """,
+            (entry_id, conn_payload.target_entry_id, conn_payload.note, now),
+        )
+
+
+def get_entry_connections(
+    connection: sqlite3.Connection,
+    entry_id: int,
+) -> list[EntryConnection]:
+    rows = connection.execute(
+        """
+        SELECT ec.id, e.id AS connected_id, e.title, e.event_year, e.event_month,
+               e.event_day, tg.name AS group_name, ec.note,
+               'outgoing' AS direction, ec.created_utc
+        FROM entry_connections ec
+        JOIN entries e ON e.id = ec.target_entry_id
+        JOIN timeline_groups tg ON tg.id = e.group_id
+        WHERE ec.source_entry_id = ?
+
+        UNION ALL
+
+        SELECT ec.id, e.id AS connected_id, e.title, e.event_year, e.event_month,
+               e.event_day, tg.name AS group_name, ec.note,
+               'incoming' AS direction, ec.created_utc
+        FROM entry_connections ec
+        JOIN entries e ON e.id = ec.source_entry_id
+        JOIN timeline_groups tg ON tg.id = e.group_id
+        WHERE ec.target_entry_id = ?
+
+        ORDER BY direction, title
+        """,
+        (entry_id, entry_id),
+    ).fetchall()
+    results: list[EntryConnection] = []
+    for row in rows:
+        day = row["event_day"]
+        month_name = MONTH_NAMES[row["event_month"] - 1]
+        display_date = (
+            f"{month_name} {day}, {row['event_year']}"
+            if day
+            else f"{month_name} {row['event_year']}"
+        )
+        results.append(
+            EntryConnection(
+                id=row["id"],
+                connected_entry_id=row["connected_id"],
+                connected_entry_title=row["title"] or "",
+                connected_entry_date=display_date,
+                connected_entry_group=row["group_name"],
+                note=row["note"] or "",
+                direction=row["direction"],
+                created_utc=row["created_utc"],
+            )
+        )
+    return results
+
+
+def get_entry_connection_count(
+    connection: sqlite3.Connection,
+    entry_id: int,
+) -> int:
+    row = connection.execute(
+        """
+        SELECT COUNT(*) AS cnt FROM entry_connections
+        WHERE source_entry_id = ? OR target_entry_id = ?
+        """,
+        (entry_id, entry_id),
+    ).fetchone()
+    return int(row["cnt"]) if row else 0
+
+
+def search_entries_for_connection(
+    connection: sqlite3.Connection,
+    query: str,
+    exclude_entry_id: int | None = None,
+    group_id: int | None = None,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    query = query.strip()
+    if not query:
+        return []
+    like_pattern = f"%{query}%"
+    sql = """
+        SELECT e.id, e.title, e.event_year, e.event_month, e.event_day,
+               tg.name AS group_name
+        FROM entries e
+        JOIN timeline_groups tg ON tg.id = e.group_id
+        WHERE e.title LIKE ?
+    """
+    params: list[Any] = [like_pattern]
+    if exclude_entry_id is not None:
+        sql += " AND e.id != ?"
+        params.append(exclude_entry_id)
+    if group_id is not None:
+        sql += " AND e.group_id = ?"
+        params.append(group_id)
+    sql += " ORDER BY e.sort_key DESC LIMIT ?"
+    params.append(limit)
+    rows = connection.execute(sql, params).fetchall()
+    results: list[dict[str, Any]] = []
+    for row in rows:
+        day = row["event_day"]
+        month_name = MONTH_NAMES[row["event_month"] - 1]
+        display_date = (
+            f"{month_name} {day}, {row['event_year']}"
+            if day
+            else f"{month_name} {row['event_year']}"
+        )
+        results.append(
+            {
+                "id": row["id"],
+                "title": row["title"] or "",
+                "display_date": display_date,
+                "group_name": row["group_name"],
+            }
+        )
+    return results
+
+
+def build_connection_graph(
+    connection: sqlite3.Connection,
+    group_id: int,
+    include_tag_edges: bool = False,
+) -> dict[str, Any]:
+    entry_rows = connection.execute(
+        """
+        SELECT e.id, e.title, e.event_year, e.event_month, e.event_day,
+               tg.name AS group_name
+        FROM entries e
+        JOIN timeline_groups tg ON tg.id = e.group_id
+        WHERE e.group_id = ?
+          AND (
+              e.id IN (SELECT source_entry_id FROM entry_connections)
+              OR e.id IN (SELECT target_entry_id FROM entry_connections)
+          )
+        ORDER BY e.sort_key DESC
+        """,
+        (group_id,),
+    ).fetchall()
+
+    entry_ids = {row["id"] for row in entry_rows}
+    if not entry_ids:
+        return {"nodes": [], "edges": []}
+
+    conn_rows = connection.execute(
+        """
+        SELECT ec.source_entry_id, ec.target_entry_id, ec.note
+        FROM entry_connections ec
+        WHERE ec.source_entry_id IN ({placeholders})
+          AND ec.target_entry_id IN ({placeholders})
+        """.format(
+            placeholders=",".join("?" for _ in entry_ids)
+        ),
+        list(entry_ids) + list(entry_ids),
+    ).fetchall()
+
+    count_map: dict[int, int] = {}
+    for cr in conn_rows:
+        s, t = cr["source_entry_id"], cr["target_entry_id"]
+        count_map[s] = count_map.get(s, 0) + 1
+        count_map[t] = count_map.get(t, 0) + 1
+
+    nodes: list[dict[str, Any]] = []
+    for row in entry_rows:
+        day = row["event_day"]
+        month_name = MONTH_NAMES[row["event_month"] - 1]
+        display_date = (
+            f"{month_name} {day}, {row['event_year']}"
+            if day
+            else f"{month_name} {row['event_year']}"
+        )
+        nodes.append(
+            {
+                "id": row["id"],
+                "label": row["title"] or f"Entry #{row['id']}",
+                "size": count_map.get(row["id"], 1),
+                "display_date": display_date,
+                "group_name": row["group_name"],
+            }
+        )
+
+    edges: list[dict[str, Any]] = [
+        {
+            "source": cr["source_entry_id"],
+            "target": cr["target_entry_id"],
+            "weight": 1.0,
+            "note": cr["note"] or "",
+            "type": "explicit",
+        }
+        for cr in conn_rows
+    ]
+
+    if include_tag_edges:
+        tag_rows = connection.execute(
+            """
+            SELECT et1.entry_id AS id1, et2.entry_id AS id2, COUNT(*) AS shared
+            FROM entry_tags et1
+            JOIN entry_tags et2 ON et1.tag_id = et2.tag_id
+                AND et1.entry_id < et2.entry_id
+            WHERE et1.entry_id IN ({p}) AND et2.entry_id IN ({p})
+            GROUP BY et1.entry_id, et2.entry_id
+            HAVING shared >= 2
+            """.format(p=",".join("?" for _ in entry_ids)),
+            list(entry_ids) + list(entry_ids),
+        ).fetchall()
+
+        explicit_pairs = {
+            (cr["source_entry_id"], cr["target_entry_id"]) for cr in conn_rows
+        }
+        max_shared = max((r["shared"] for r in tag_rows), default=1)
+        for tr in tag_rows:
+            pair = (min(tr["id1"], tr["id2"]), max(tr["id1"], tr["id2"]))
+            if pair in explicit_pairs or (pair[1], pair[0]) in explicit_pairs:
+                continue
+            edges.append(
+                {
+                    "source": tr["id1"],
+                    "target": tr["id2"],
+                    "weight": tr["shared"] / max_shared,
+                    "note": "",
+                    "type": "tag",
+                }
+            )
+            for eid in (tr["id1"], tr["id2"]):
+                if eid not in entry_ids:
+                    entry_ids.add(eid)
+
+    return {"nodes": nodes, "edges": edges}
 
 
 def _sync_embedding_without_failing(
@@ -1183,7 +1464,7 @@ def get_heatmap_counts(
 ) -> HeatmapData:
     """Return per-day entry counts for a calendar year.
 
-    Entries without ``event_day`` are distributed evenly across their month.
+    Entries without ``event_day`` are counted on the first day of their month.
     """
     group_filter = "AND e.group_id = ?" if group_id is not None else ""
     base_params: tuple[object, ...] = (year,) if group_id is None else (year, group_id)
@@ -1206,7 +1487,7 @@ def get_heatmap_counts(
         key = f"{year}-{month:02d}-{day:02d}"
         counts[key] = counts.get(key, 0) + cnt
 
-    # Entries without a specific day — distribute evenly across the month
+    # Entries without a specific day count toward the first of the month.
     rows_without_day = connection.execute(
         f"""
         SELECT event_month, COUNT(*) AS cnt
@@ -1220,12 +1501,8 @@ def get_heatmap_counts(
 
     for row in rows_without_day:
         month, cnt = row[0], row[1]
-        days_in_month = calendar.monthrange(year, month)[1]
-        step = max(1, days_in_month // cnt) if cnt <= days_in_month else 1
-        for i in range(cnt):
-            day = (i * step) % days_in_month + 1
-            key = f"{year}-{month:02d}-{day:02d}"
-            counts[key] = counts.get(key, 0) + 1
+        key = f"{year}-{month:02d}-01"
+        counts[key] = counts.get(key, 0) + cnt
 
     # All years with entries (for year navigation)
     years_query = "SELECT DISTINCT event_year FROM entries"
@@ -1255,244 +1532,6 @@ def list_timeline_summary_groups(
     return build_timeline_groups(scoped_entries)
 
 
-def list_timeline_groups(connection: sqlite3.Connection) -> list[TimelineGroup]:
-    rows = connection.execute(
-        """
-        SELECT
-            tg.id,
-            tg.name,
-            tg.web_search_query,
-            tg.is_default,
-            COUNT(e.id) AS entry_count
-        FROM timeline_groups tg
-        LEFT JOIN entries e ON e.group_id = tg.id
-        GROUP BY tg.id, tg.name, tg.web_search_query, tg.is_default
-        ORDER BY tg.is_default DESC, LOWER(tg.name) ASC, tg.id ASC
-        """
-    ).fetchall()
-    return [
-        TimelineGroup(
-            id=int(row["id"]),
-            name=row["name"],
-            web_search_query=row["web_search_query"],
-            entry_count=int(row["entry_count"]),
-            is_default=bool(row["is_default"]),
-        )
-        for row in rows
-    ]
-
-
-def get_timeline_group(
-    connection: sqlite3.Connection, group_id: int
-) -> TimelineGroup | None:
-    row = connection.execute(
-        "SELECT id, name, web_search_query, is_default FROM timeline_groups WHERE id = ?",
-        (group_id,),
-    ).fetchone()
-    if row is None:
-        return None
-    return TimelineGroup(
-        id=int(row["id"]),
-        name=row["name"],
-        web_search_query=row["web_search_query"],
-        is_default=bool(row["is_default"]),
-    )
-
-
-def get_default_timeline_group(
-    connection: sqlite3.Connection,
-) -> TimelineGroup | None:
-    row = connection.execute(
-        "SELECT id, name, web_search_query, is_default FROM timeline_groups WHERE is_default = 1 ORDER BY id ASC LIMIT 1"
-    ).fetchone()
-    if row is None:
-        return None
-    return TimelineGroup(
-        id=int(row["id"]),
-        name=row["name"],
-        web_search_query=row["web_search_query"],
-        is_default=bool(row["is_default"]),
-    )
-
-
-def create_timeline_group(
-    connection: sqlite3.Connection,
-    raw_name: str,
-    raw_web_search_query: str = "",
-    *,
-    is_default: bool = False,
-) -> TimelineGroup:
-    name = normalize_timeline_group_name(raw_name)
-    web_search_query = normalize_timeline_group_web_search_query(raw_web_search_query)
-    if not name:
-        raise TimelineGroupValidationError("name", "Group name is required.")
-
-    try:
-        cursor = connection.execute(
-            "INSERT INTO timeline_groups(name, web_search_query, is_default) VALUES (?, ?, 0)",
-            (name, web_search_query),
-        )
-    except sqlite3.IntegrityError as exc:
-        raise TimelineGroupValidationError(
-            "name", "A group with that name already exists."
-        ) from exc
-
-    if cursor.lastrowid is None:
-        raise RuntimeError("Failed to determine the new timeline group id.")
-    group_id = int(cursor.lastrowid)
-    if is_default:
-        set_default_timeline_group(connection, group_id)
-
-    return TimelineGroup(
-        id=group_id,
-        name=name,
-        web_search_query=web_search_query,
-        is_default=is_default,
-    )
-
-
-def rename_timeline_group(
-    connection: sqlite3.Connection,
-    group_id: int,
-    raw_name: str,
-    raw_web_search_query: str = "",
-    *,
-    is_default: bool | None = None,
-) -> None:
-    name = normalize_timeline_group_name(raw_name)
-    web_search_query = normalize_timeline_group_web_search_query(raw_web_search_query)
-    if not name:
-        raise TimelineGroupValidationError("name", "Group name is required.")
-
-    try:
-        cursor = connection.execute(
-            "UPDATE timeline_groups SET name = ?, web_search_query = ? WHERE id = ?",
-            (name, web_search_query, group_id),
-        )
-    except sqlite3.IntegrityError as exc:
-        raise TimelineGroupValidationError(
-            "name", "A group with that name already exists."
-        ) from exc
-
-    if cursor.rowcount == 0:
-        raise LookupError("Timeline group not found.")
-
-    if is_default is True:
-        set_default_timeline_group(connection, group_id)
-    elif is_default is False:
-        clear_default_timeline_group(connection, group_id)
-
-
-def delete_timeline_group(connection: sqlite3.Connection, group_id: int) -> None:
-    row = connection.execute(
-        """
-        SELECT
-            tg.id,
-            tg.name,
-            tg.is_default,
-            COUNT(e.id) AS entry_count
-        FROM timeline_groups tg
-        LEFT JOIN entries e ON e.group_id = tg.id
-        WHERE tg.id = ?
-        GROUP BY tg.id, tg.name, tg.is_default
-        """,
-        (group_id,),
-    ).fetchone()
-    if row is None:
-        raise LookupError("Timeline group not found.")
-
-    if bool(row["is_default"]):
-        raise ValueError("The default timeline group cannot be deleted.")
-
-    if int(row["entry_count"]) > 0:
-        raise ValueError(
-            "This group cannot be deleted while it still has entries. Move those entries first."
-        )
-
-    connection.execute("DELETE FROM timeline_groups WHERE id = ?", (group_id,))
-
-
-def set_default_timeline_group(connection: sqlite3.Connection, group_id: int) -> None:
-    row = connection.execute(
-        "SELECT id FROM timeline_groups WHERE id = ?",
-        (group_id,),
-    ).fetchone()
-    if row is None:
-        raise LookupError("Timeline group not found.")
-
-    connection.execute(
-        "UPDATE timeline_groups SET is_default = 0 WHERE is_default <> 0"
-    )
-    connection.execute(
-        "UPDATE timeline_groups SET is_default = 1 WHERE id = ?",
-        (group_id,),
-    )
-
-
-def clear_default_timeline_group(connection: sqlite3.Connection, group_id: int) -> None:
-    connection.execute(
-        "UPDATE timeline_groups SET is_default = 0 WHERE id = ?",
-        (group_id,),
-    )
-
-
-def normalize_timeline_group_name(value: str) -> str:
-    return " ".join(value.strip().split())
-
-
-def normalize_timeline_group_web_search_query(value: str) -> str | None:
-    normalized = " ".join(value.strip().split())
-    if not normalized:
-        return None
-    if len(normalized) > MAX_TIMELINE_GROUP_WEB_SEARCH_QUERY_LENGTH:
-        raise TimelineGroupValidationError(
-            "web_search_query",
-            "Web search query must be 400 characters or fewer.",
-        )
-    return normalized
-
-
-def preview_text(value: str, max_length: int = 280) -> str:
-    clean = " ".join(plain_text_from_html(value).split())
-    if len(clean) <= max_length:
-        return clean
-    return clean[: max_length - 1].rstrip() + "\u2026"
-
-
-def format_plain_text(value: str) -> str:
-    escaped = escape(value)
-    return escaped.replace("\n", "<br>")
-
-
-def plain_text_from_html(value: str) -> str:
-    if not value:
-        return ""
-    return BeautifulSoup(value, "html.parser").get_text(" ", strip=True)
-
-
-def sanitize_rich_text(value: str) -> str:
-    return _sanitize_html(value, ALLOWED_RICH_TEXT_TAGS)
-
-
-def render_source_snapshot_markdown(value: str) -> str:
-    """Render stored source Markdown into sanitized HTML for detail and edit views."""
-    if not value:
-        return ""
-
-    rendered_html = markdown.markdown(
-        value,
-        extensions=["extra", "nl2br", "sane_lists"],
-    )
-    rendered_html = _demote_source_snapshot_headings(rendered_html)
-    return _sanitize_html(
-        rendered_html,
-        ALLOWED_SOURCE_SNAPSHOT_TAGS,
-        allowed_attributes=ALLOWED_SOURCE_SNAPSHOT_ATTRIBUTES,
-    )
-
-
-def sanitize_search_snippet(value: str) -> str:
-    return _sanitize_html(value, ALLOWED_SEARCH_SNIPPET_TAGS)
 
 
 def entry_from_row(row: sqlite3.Row) -> Entry:
@@ -1595,73 +1634,3 @@ def _is_valid_url(value: str) -> bool:
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
-def _is_safe_rendered_href(value: str) -> bool:
-    if value.startswith("#"):
-        return True
-    parsed = urlparse(value)
-    return parsed.scheme in {"http", "https", "mailto"} and bool(
-        parsed.netloc or parsed.scheme == "mailto"
-    )
-
-
-def _demote_source_snapshot_headings(value: str) -> str:
-    soup = BeautifulSoup(value, "html.parser")
-    heading_map = {
-        "h1": "h3",
-        "h2": "h4",
-        "h3": "h5",
-        "h4": "h6",
-        "h5": "h6",
-    }
-    for tag in soup.find_all(tuple(heading_map)):
-        if not isinstance(tag, Tag):
-            continue
-        tag.name = heading_map[tag.name]
-    return str(soup)
-
-
-def _sanitize_html(
-    value: str,
-    allowed_tags: set[str],
-    *,
-    allowed_attributes: Mapping[str, set[str]] | None = None,
-) -> str:
-    if not value:
-        return ""
-
-    soup = BeautifulSoup(value, "html.parser")
-    for tag in soup.find_all(True):
-        if not isinstance(tag, Tag):
-            continue
-        if tag.name in {"script", "style"}:
-            tag.decompose()
-            continue
-        if tag.name not in allowed_tags:
-            tag.unwrap()
-            continue
-
-        allowed_tag_attributes = (
-            allowed_attributes.get(tag.name, set()) if allowed_attributes else set()
-        )
-        sanitized_attributes: dict[str, str] = {}
-        for attribute_name, attribute_value in tag.attrs.items():
-            if attribute_name not in allowed_tag_attributes:
-                continue
-
-            normalized_value = str(attribute_value).strip()
-            if not normalized_value:
-                continue
-
-            if tag.name == "a" and attribute_name == "href":
-                if not _is_safe_rendered_href(normalized_value):
-                    continue
-                sanitized_attributes["href"] = normalized_value
-                sanitized_attributes["target"] = "_blank"
-                sanitized_attributes["rel"] = "noreferrer noopener"
-                continue
-
-            sanitized_attributes[attribute_name] = normalized_value
-
-        tag.attrs = cast(Any, sanitized_attributes)
-
-    return str(soup)

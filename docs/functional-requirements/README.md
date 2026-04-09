@@ -23,3 +23,4 @@
 - `FR-008-data-portability-and-tools.md`: export, import, initialization, and developer utility behavior.
 - `FR-009-application-shell-and-theme.md`: shared navigation and theme behavior.
 - `FR-010-topic-clustering.md`: semantic topic clustering and D3.js mind map behavior.
+- `FR-011-event-chat.md`: retrieval-augmented conversational Q&A over stored events.

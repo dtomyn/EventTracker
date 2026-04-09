@@ -1,0 +1,404 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row align-items-center mb-4">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-1">
+                    <li class="breadcrumb-item"><a href="/?group_id={{ group.id }}" class="text-decoration-none">{{ group.name }}</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">Connection Graph</li>
+                </ol>
+            </nav>
+            <h1 class="h3 mb-0">Connection Graph</h1>
+        </div>
+        <div class="col-auto d-flex align-items-center gap-3">
+            <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" role="switch" id="include-tags-toggle">
+                <label class="form-check-label" for="include-tags-toggle">Show tag connections</label>
+            </div>
+            <a href="/?group_id={{ group.id }}" class="btn btn-outline-secondary">Back to Timeline</a>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 bg-dark-subtle position-relative">
+        <div id="loading-spinner" class="position-absolute top-50 start-50 translate-middle text-center" style="z-index: 10;">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading connections...</span>
+            </div>
+            <p class="mt-2 text-muted">Loading connection graph...</p>
+        </div>
+        <div class="card-body p-0">
+            <div id="graph-container" style="min-height: 600px; width: 100%; position: relative;">
+                <div class="position-absolute top-0 end-0 p-3" style="z-index: 5;">
+                    <div class="btn-group shadow-sm" role="group" aria-label="Graph zoom controls">
+                        <button id="zoom-out-button" type="button" class="btn btn-light" aria-label="Zoom out" disabled>
+                            -
+                        </button>
+                        <button id="zoom-in-button" type="button" class="btn btn-light" aria-label="Zoom in" disabled>
+                            +
+                        </button>
+                    </div>
+                </div>
+                <svg id="connection-graph-svg" style="width: 100%; height: 100%; min-height: 600px; display: block;"></svg>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const groupId = {{ group.id }};
+        const container = document.getElementById("graph-container");
+        const svgElement = document.getElementById("connection-graph-svg");
+        const loadingSpinner = document.getElementById("loading-spinner");
+        const zoomInButton = document.getElementById("zoom-in-button");
+        const zoomOutButton = document.getElementById("zoom-out-button");
+        const includeTagsToggle = document.getElementById("include-tags-toggle");
+
+        let currentSimulation = null;
+        let currentZoomBehavior = null;
+        let currentSvg = null;
+        let selectedNodeId = null;
+
+        function setZoomButtonsDisabled(disabled) {
+            zoomInButton.disabled = disabled;
+            zoomOutButton.disabled = disabled;
+        }
+
+        function applyZoom(scaleFactor) {
+            if (!currentSvg || !currentZoomBehavior) {
+                return;
+            }
+
+            currentSvg
+                .transition()
+                .duration(180)
+                .call(currentZoomBehavior.scaleBy, scaleFactor);
+        }
+
+        zoomInButton.addEventListener("click", () => applyZoom(1.2));
+        zoomOutButton.addEventListener("click", () => applyZoom(0.8));
+
+        includeTagsToggle.addEventListener("change", () => {
+            loadGraph();
+        });
+
+        function truncateLabel(text, maxLen) {
+            if (!text) return "";
+            return text.length > maxLen ? text.substring(0, maxLen - 1) + "\u2026" : text;
+        }
+
+        function renderGraph(data) {
+            loadingSpinner.style.display = 'none';
+
+            // Always use the current SVG element from the DOM (it may have been recreated)
+            const activeSvgElement = document.getElementById("connection-graph-svg");
+
+            if (!data.nodes || data.nodes.length === 0) {
+                setZoomButtonsDisabled(true);
+                container.innerHTML = '<p class="text-muted text-center pt-5 mt-5">No connections yet. Connect entries from the entry form to build your knowledge graph.</p>';
+                return;
+            }
+
+            const nodeSizes = data.nodes.map(node => node.size);
+            const minNodeSize = d3.min(nodeSizes) ?? 1;
+            const maxNodeSize = d3.max(nodeSizes) ?? 1;
+            const midpointNodeSize = minNodeSize === maxNodeSize ? maxNodeSize : minNodeSize + ((maxNodeSize - minNodeSize) / 2);
+            const themeStyles = getComputedStyle(document.documentElement);
+            const baseSuccess = themeStyles.getPropertyValue("--bs-success").trim() || "#198754";
+            const basePrimary = themeStyles.getPropertyValue("--bs-primary").trim() || "#0d6efd";
+            const baseDanger = themeStyles.getPropertyValue("--bs-danger").trim() || "#dc3545";
+            const bodyBackground = themeStyles.getPropertyValue("--bs-body-bg").trim() || "#ffffff";
+            const radiusScale = minNodeSize === maxNodeSize
+                ? () => 22
+                : d3.scaleSqrt().domain([minNodeSize, maxNodeSize]).range([12, 38]);
+            const strokeWidthScale = minNodeSize === maxNodeSize
+                ? () => 2
+                : d3.scaleLinear().domain([minNodeSize, maxNodeSize]).range([1.5, 3.5]);
+            const fontSizeScale = minNodeSize === maxNodeSize
+                ? () => 11
+                : d3.scaleLinear().domain([minNodeSize, maxNodeSize]).range([9, 14]);
+            const colorScale = minNodeSize === maxNodeSize
+                ? () => basePrimary
+                : d3.scaleLinear()
+                    .domain([minNodeSize, midpointNodeSize, maxNodeSize])
+                    .range([baseSuccess, basePrimary, baseDanger])
+                    .interpolate(d3.interpolateHcl);
+
+            function getNodeRadius(node) {
+                return radiusScale(node.size);
+            }
+
+            function getNodeStrokeWidth(node) {
+                return strokeWidthScale(node.size);
+            }
+
+            function getNodeFill(node) {
+                return colorScale(node.size);
+            }
+
+            function getNodeHoverFill(node) {
+                const color = d3.color(getNodeFill(node));
+                return color ? color.brighter(0.6).formatHex() : getNodeFill(node);
+            }
+
+            const width = container.clientWidth;
+            const height = 600;
+
+            const svg = d3.select(activeSvgElement);
+            svg.selectAll("*").remove();
+            currentSvg = svg;
+            selectedNodeId = null;
+
+            // Setup force simulation
+            const simulation = d3.forceSimulation(data.nodes)
+                .force("link", d3.forceLink(data.edges).id(d => d.id).distance(120).strength(d => d.weight * 0.7))
+                .force("charge", d3.forceManyBody().strength(-200))
+                .force("center", d3.forceCenter(width / 2, height / 2))
+                .force("collide", d3.forceCollide().radius(d => radiusScale(d.size) + 8).iterations(2));
+
+            currentSimulation = simulation;
+
+            const g = svg.append("g");
+
+            // Add zoom capabilities
+            const zoom = d3.zoom()
+                .scaleExtent([0.1, 4])
+                .on("zoom", (event) => {
+                    g.attr("transform", event.transform);
+                });
+            svg.call(zoom);
+            svg.on("dblclick.zoom", null);
+            currentZoomBehavior = zoom;
+            setZoomButtonsDisabled(false);
+
+            // Click on empty space to deselect
+            svg.on("click", function(event) {
+                if (event.target === activeSvgElement) {
+                    clearSelection();
+                }
+            });
+
+            // Build adjacency map for highlight logic
+            const adjacencyMap = new Map();
+            data.nodes.forEach(n => adjacencyMap.set(n.id, new Set()));
+            data.edges.forEach(e => {
+                const sourceId = typeof e.source === "object" ? e.source.id : e.source;
+                const targetId = typeof e.target === "object" ? e.target.id : e.target;
+                adjacencyMap.get(sourceId)?.add(targetId);
+                adjacencyMap.get(targetId)?.add(sourceId);
+            });
+
+            const link = g.append("g")
+                .selectAll("line")
+                .data(data.edges)
+                .join("line")
+                .style("stroke", "var(--bs-border-color)")
+                .attr("stroke-opacity", d => d.type === "tag" ? 0.3 : 0.7)
+                .attr("stroke-width", d => d.type === "tag" ? 1 : 2)
+                .attr("stroke-dasharray", d => d.type === "tag" ? "5,5" : null);
+
+            link.append("title")
+                .text(d => d.note || "");
+
+            const nodeGroup = g.append("g")
+                .selectAll("g")
+                .data(data.nodes)
+                .join("g")
+                .style("cursor", "pointer")
+                .call(d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended))
+                .on("click", function(event, d) {
+                    event.stopPropagation();
+
+                    if (event.defaultPrevented || d.wasDragged) {
+                        d.wasDragged = false;
+                        return;
+                    }
+
+                    if (selectedNodeId === d.id) {
+                        clearSelection();
+                    } else {
+                        selectNode(d.id);
+                    }
+                })
+                .on("dblclick", (event, d) => {
+                    event.stopPropagation();
+
+                    if (event.defaultPrevented || d.wasDragged) {
+                        d.wasDragged = false;
+                        return;
+                    }
+
+                    window.location.href = `/entries/${d.id}/view`;
+                })
+                .on("mouseover", function(event, d) {
+                    if (selectedNodeId !== null) return;
+                    d3.select(this)
+                        .select("circle")
+                        .style("fill", getNodeHoverFill(d))
+                        .style("stroke-width", `${getNodeStrokeWidth(d) + 1.25}px`);
+
+                    // Highlight connected edges
+                    const neighbors = adjacencyMap.get(d.id) || new Set();
+                    link.attr("stroke-opacity", e => {
+                        const srcId = typeof e.source === "object" ? e.source.id : e.source;
+                        const tgtId = typeof e.target === "object" ? e.target.id : e.target;
+                        if (srcId === d.id || tgtId === d.id) {
+                            return e.type === "tag" ? 0.6 : 1.0;
+                        }
+                        return e.type === "tag" ? 0.1 : 0.2;
+                    });
+                })
+                .on("mouseout", function(event, d) {
+                    if (selectedNodeId !== null) return;
+                    d3.select(this)
+                        .select("circle")
+                        .style("fill", getNodeFill(d))
+                        .style("stroke-width", `${getNodeStrokeWidth(d)}px`);
+
+                    // Restore edge opacity
+                    link.attr("stroke-opacity", e => e.type === "tag" ? 0.3 : 0.7);
+                });
+
+            function selectNode(nodeId) {
+                selectedNodeId = nodeId;
+                const neighbors = adjacencyMap.get(nodeId) || new Set();
+
+                nodeGroup.style("opacity", d => {
+                    return (d.id === nodeId || neighbors.has(d.id)) ? 1.0 : 0.15;
+                });
+
+                link.attr("stroke-opacity", e => {
+                    const srcId = typeof e.source === "object" ? e.source.id : e.source;
+                    const tgtId = typeof e.target === "object" ? e.target.id : e.target;
+                    if (srcId === nodeId || tgtId === nodeId) {
+                        return e.type === "tag" ? 0.6 : 1.0;
+                    }
+                    return 0.05;
+                });
+            }
+
+            function clearSelection() {
+                selectedNodeId = null;
+                nodeGroup.style("opacity", 1.0);
+                link.attr("stroke-opacity", e => e.type === "tag" ? 0.3 : 0.7);
+            }
+
+            // Node circles
+            nodeGroup.append("circle")
+                .attr("r", d => getNodeRadius(d))
+                .style("fill", d => getNodeFill(d))
+                .style("stroke", bodyBackground)
+                .style("stroke-width", d => `${getNodeStrokeWidth(d)}px`);
+
+            nodeGroup.append("title")
+                .text(d => {
+                    const label = d.label || "Entry";
+                    const dateLine = d.display_date || "";
+                    const groupLine = d.group_name || "";
+                    const meta = [dateLine, groupLine].filter(Boolean).join(" | ");
+                    const suffix = d.size === 1 ? "connection" : "connections";
+                    return `${label}\n${meta}\n${d.size} ${suffix}`;
+                });
+
+            // Labels
+            nodeGroup.append("text")
+                .text(d => truncateLabel(d.label || "Entry", 25))
+                .attr("text-anchor", "middle")
+                .attr("dy", d => getNodeRadius(d) + fontSizeScale(d.size) + 2)
+                .attr("font-size", d => `${fontSizeScale(d.size)}px`)
+                .attr("font-weight", "500")
+                .style("fill", "var(--bs-body-color)")
+                .style("pointer-events", "none");
+
+            function ticked() {
+                link
+                    .attr("x1", d => d.source.x)
+                    .attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x)
+                    .attr("y2", d => d.target.y);
+
+                nodeGroup
+                    .attr("transform", d => `translate(${d.x},${d.y})`);
+            }
+
+            simulation.on("tick", ticked);
+
+            function dragstarted(event) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                event.subject.wasDragged = false;
+                event.subject.fx = event.subject.x;
+                event.subject.fy = event.subject.y;
+            }
+
+            function dragged(event) {
+                event.subject.wasDragged = true;
+                event.subject.fx = event.x;
+                event.subject.fy = event.y;
+            }
+
+            function dragended(event) {
+                if (!event.active) simulation.alphaTarget(0);
+                event.subject.fx = null;
+                event.subject.fy = null;
+            }
+
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                svg.attr("width", container.clientWidth);
+                simulation.force("center", d3.forceCenter(container.clientWidth / 2, height / 2));
+                simulation.alpha(0.3).restart();
+            });
+        }
+
+        function loadGraph() {
+            // If a previous render replaced container contents (empty state or error),
+            // restore the original SVG element so renderGraph can target it.
+            if (!document.getElementById("connection-graph-svg")) {
+                container.innerHTML = '';
+                const controlsDiv = document.createElement("div");
+                controlsDiv.className = "position-absolute top-0 end-0 p-3";
+                controlsDiv.style.zIndex = "5";
+                controlsDiv.innerHTML = `
+                    <div class="btn-group shadow-sm" role="group" aria-label="Graph zoom controls">
+                        <button id="zoom-out-button" type="button" class="btn btn-light" aria-label="Zoom out" disabled>-</button>
+                        <button id="zoom-in-button" type="button" class="btn btn-light" aria-label="Zoom in" disabled>+</button>
+                    </div>`;
+                container.appendChild(controlsDiv);
+                const newSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+                newSvg.id = "connection-graph-svg";
+                newSvg.style.cssText = "width: 100%; height: 100%; min-height: 600px; display: block;";
+                container.appendChild(newSvg);
+            }
+
+            loadingSpinner.style.display = '';
+            let url = `/api/groups/${groupId}/connections`;
+            if (includeTagsToggle.checked) {
+                url += "?include_tags=1";
+            }
+
+            fetch(url)
+                .then(res => {
+                    if (!res.ok) throw new Error("Failed to load connections");
+                    return res.json();
+                })
+                .then(data => {
+                    renderGraph(data);
+                })
+                .catch(err => {
+                    loadingSpinner.style.display = 'none';
+                    setZoomButtonsDisabled(true);
+                    container.innerHTML = `<p class="text-danger text-center pt-5 mt-5">Error loading connections: ${err.message}</p>`;
+                });
+        }
+
+        // Initial load
+        loadGraph();
+    });
+</script>
+{% endblock %}

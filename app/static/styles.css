@@ -1,3 +1,8 @@
+.chat-answer-body {
+    min-height: 10rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+}
 :root,
 [data-bs-theme="light"] {
     /* Backgrounds */
