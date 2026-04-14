@@ -63,6 +63,24 @@ class TestHeatmapAPI(unittest.TestCase):
         data = resp.json()
         self.assertEqual(data["year"], 2025)
 
+    def test_heatmap_group_default_year_uses_group_scope(self) -> None:
+        with connection_context() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO timeline_groups (id, name) VALUES (2, 'Other')"
+            )
+            conn.execute(
+                "INSERT INTO entries (event_year, event_month, event_day, sort_key, group_id, title, final_text, created_utc, updated_utc) "
+                "VALUES (2026, 1, 5, 20260105, 2, 'Later', '<p>Later</p>', '2026-01-05T00:00:00+00:00', '2026-01-05T00:00:00+00:00')"
+            )
+            conn.commit()
+
+        resp = self.client.get("/api/heatmap?group_id=1")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["year"], 2025)
+        self.assertEqual(data["total"], 3)
+        self.assertEqual(data["years_available"], [2025])
+
     def test_heatmap_empty_year(self) -> None:
         resp = self.client.get("/api/heatmap?year=2020")
         self.assertEqual(resp.status_code, 200)

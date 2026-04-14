@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from inspect import Parameter, signature
 from contextlib import AbstractAsyncContextManager, AsyncExitStack
 from functools import lru_cache
-from typing import Callable, Protocol, TypeVar, cast
+from typing import Any, Callable, Protocol, TypeVar, cast
 
 
 COPILOT_SDK_REQUIRED_MESSAGE = (
@@ -131,7 +132,20 @@ async def create_copilot_session(
         config["reasoning_effort"] = reasoning_effort
     if streaming:
         config["streaming"] = True
-    return await client.create_session(config)
+
+    create_session = cast(Any, client).create_session
+    try:
+        parameters = tuple(signature(create_session).parameters.values())
+    except (TypeError, ValueError):
+        parameters = ()
+
+    supports_keyword_config = any(
+        parameter.kind in (Parameter.KEYWORD_ONLY, Parameter.VAR_KEYWORD)
+        for parameter in parameters
+    )
+    if supports_keyword_config:
+        return await create_session(**config)
+    return await create_session(config)
 
 
 async def prepare_copilot_client(

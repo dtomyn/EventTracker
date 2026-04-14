@@ -14,6 +14,9 @@ def _load_sdk_module():
 
 _sdk_module = _load_sdk_module()
 CopilotClient = _sdk_module.CopilotClient
-PermissionHandler = _sdk_module.PermissionHandler
+try:
+    PermissionHandler = _sdk_module.PermissionHandler
+except AttributeError:
+    PermissionHandler = import_module(f"{_sdk_module.__name__}.session").PermissionHandler
 
 __all__ = ["CopilotClient", "PermissionHandler"]

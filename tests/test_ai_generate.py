@@ -317,9 +317,40 @@ class TestCopilotSdkWrapper(unittest.TestCase):
         from app.services import copilot_sdk
 
         self.assertEqual(copilot_sdk.CopilotClient.__module__, "copilot.client")
-        self.assertEqual(
+        self.assertIn(
             copilot_sdk.PermissionHandler.__module__,
-            "copilot.types",
+            {"copilot.session", "copilot.types"},
+        )
+
+    def test_create_copilot_session_supports_keyword_config(self) -> None:
+        client = SimpleNamespace(create_session=AsyncMock(return_value="session"))
+
+        async def exercise() -> None:
+            with patch(
+                "app.services.copilot_runtime.get_permission_handler",
+                return_value="approve-all",
+            ):
+                session = await copilot_runtime.create_copilot_session(
+                    cast(Any, client),
+                    model_id="gpt-5",
+                    system_message="System prompt",
+                    reasoning_effort="medium",
+                    streaming=True,
+                )
+
+            self.assertEqual(session, "session")
+
+        _run_async(exercise())
+
+        client.create_session.assert_awaited_once_with(
+            model="gpt-5",
+            on_permission_request="approve-all",
+            reasoning_effort="medium",
+            streaming=True,
+            system_message={
+                "mode": "append",
+                "content": "System prompt",
+            },
         )
 
     def test_prepare_copilot_client_supports_start_stop_lifecycle(self) -> None:

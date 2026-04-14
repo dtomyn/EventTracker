@@ -128,7 +128,7 @@ class TestAppSmokeTests(unittest.TestCase):
 
     def test_load_or_create_csrf_secret_persists_generated_secret(self) -> None:
         secret_path = Path(self.temp_dir.name) / "csrf_secret.txt"
-        with patch("app.main._get_csrf_secret_file", return_value=secret_path):
+        with patch("app.csrf._get_csrf_secret_file", return_value=secret_path):
             first = _load_or_create_csrf_secret()
             second = _load_or_create_csrf_secret()
 

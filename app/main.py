@@ -2019,9 +2019,15 @@ def api_heatmap(year: int | None = None, group_id: int | None = None) -> JSONRes
     with connection_context() as connection:
         resolved_year: int
         if year is None:
-            row = connection.execute(
-                "SELECT MAX(event_year) FROM entries"
-            ).fetchone()
+            if group_id is None:
+                row = connection.execute(
+                    "SELECT MAX(event_year) FROM entries"
+                ).fetchone()
+            else:
+                row = connection.execute(
+                    "SELECT MAX(event_year) FROM entries WHERE group_id = ?",
+                    (group_id,),
+                ).fetchone()
             resolved_year = int(row[0]) if row and row[0] else datetime.now().year
         else:
             resolved_year = year
