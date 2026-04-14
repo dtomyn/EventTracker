@@ -17,7 +17,7 @@ This demo shows the main AI-assisted workflow in EventTracker, from live web dis
 
 Event Chat is also available in the current app. It lets you ask natural-language questions about your stored events and receive grounded answers that cite specific entries.
 
-Timeline Story Mode is also available in the current app. It lets you launch a narrative view from the timeline, a search scope, or drilled year/month buckets, generate a story over the current scope, save that story as a snapshot, and follow inline citations down to a linked reference list.
+Timeline Story Mode is also available in the current app. It lets you launch a narrative view from the timeline, a search scope, or drilled year/month buckets, generate a story over the current scope, optionally turn that narrative into an executive presentation, save the result as a snapshot, and follow inline citations down to a linked reference list.
 
 ## Quick start
 
@@ -30,6 +30,28 @@ uv run python -m scripts.run_dev --reload
 ```
 
 Then open `http://127.0.0.1:35231/` in your browser.
+
+This repo is currently pinned to Python 3.12 for local setup. Python 3.14 is not supported yet because a transitive dependency (`onnxruntime` via `markitdown`/`magika`) does not publish compatible wheels for this project stack.
+
+## Optional Story presentation setup
+
+Executive presentation generation in Story Mode uses a small Node-based deck renderer in addition to the Python app. Install the repository npm dependency once if you want presentation generation, fullscreen preview, or HTML deck download:
+
+```powershell
+npm install
+```
+
+Core timeline, search, entry editing, Event Chat, and narrative Story Mode still work without this optional presentation runtime.
+
+## How Story presentations are created
+
+At a high level, Story Mode presentation generation is a second step that starts from an already-generated narrative:
+
+1. Generate a scoped Story Mode narrative from the current timeline, search, year, or month scope.
+2. Choose `Generate presentation`, which asks the AI layer for a structured executive deck grounded in the same scoped entries and citations as the narrative.
+3. EventTracker turns that structured deck into deterministic Marpit markdown, compiles it through `scripts/render_story_deck.mjs` with `@marp-team/marpit`, and sanitizes the compiled HTML and CSS.
+4. The Story page shows an embedded preview and can open a fullscreen preview or download a standalone HTML copy before anything is saved.
+5. When you save the story snapshot, EventTracker stores both the narrative snapshot and the compiled presentation artifact so saved stories can reopen in either `Narrative` or `Presentation` view without recompiling the deck.
 
 ## Requirements documents
 
@@ -120,7 +142,7 @@ uv run --with pillow python .\scripts\generate_demo_assets.py --also-no-search-a
 - Defaults the main timeline and ranked search to the current default timeline group. Users can switch to a specific group or `All groups`.
 - Supports timeline filtering on `/` with the `q` query string. This keeps matches in timeline order instead of ranked order.
 - Supports ranked search at `/search`, combining FTS matches with semantic matches when embeddings are available.
-- Supports `Story Mode` for the current scope, turning matching entries into a narrative arc with sections, saved snapshots, and linked citations.
+- Supports `Story Mode` for the current scope, turning matching entries into a narrative arc with sections, linked citations, optional executive presentation previews, standalone HTML deck download, and saved Narrative or Presentation views.
 - Supports `Event Chat` at `/chat`, a conversational Q&A interface that retrieves relevant entries via search, grounds answers in stored event context, and streams responses with inline citations linking back to entry detail pages.
 - Organizes entries into timeline groups, seeded with a default `Agentic Coding` group.
 - Lets users create, rename, delete, and mark the default group at `/admin/groups`, and store an optional per-group web search query.
@@ -355,6 +377,21 @@ erDiagram
     string note
   }
 
+  TIMELINE_STORY_ARTIFACTS {
+    int id PK
+    int story_id
+    string artifact_kind
+    string source_format
+    string source_text
+    string compiled_html
+    string compiled_css
+    string metadata_json
+    string generated_utc
+    string compiled_utc
+    string compiler_name
+    string compiler_version
+  }
+
   ENTRIES_FTS {
     int rowid PK
     string final_text
@@ -385,6 +422,7 @@ erDiagram
   TAGS ||--o{ ENTRY_TAGS : maps
   TIMELINE_GROUPS ||--o{ TIMELINE_STORIES : scopes
   TIMELINE_STORIES ||--o{ TIMELINE_STORY_ENTRIES : cites
+  TIMELINE_STORIES ||--o{ TIMELINE_STORY_ARTIFACTS : has
   ENTRIES ||--o{ TIMELINE_STORY_ENTRIES : referenced_by
   ENTRIES ||--|| ENTRIES_FTS : indexed_as
   ENTRIES ||--o| ENTRY_EMBEDDINGS : embedded_as
@@ -481,10 +519,18 @@ Each question is answered independently. There is no multi-turn conversational m
 - Shows a visible in-page progress state while the request is being submitted.
 - Returns a server-rendered page containing the generated narrative, inline citation jumps, and a save action.
 
+`POST /story/generate-deck`
+
+- Accepts an already-generated narrative plus the current Story Mode scope.
+- Uses the same scoped entries and citation grounding as the current narrative result.
+- Generates a structured executive deck, compiles it into standalone HTML and CSS, and returns a server-rendered page with an embedded preview.
+- Exposes fullscreen preview and standalone HTML download actions before the story is saved.
+
 `POST /story/save`
 
 - Saves the generated story as a snapshot tied to the current scope.
 - Stores the rendered narrative plus the exact cited entry ids and citation order.
+- Stores the compiled `executive_deck` artifact too when presentation generation succeeded before save.
 - Redirects to the saved story page after success.
 
 `GET /story/{id}`
@@ -492,14 +538,28 @@ Each question is answered independently. There is no multi-turn conversational m
 - Loads a previously saved story snapshot.
 - Keeps the bottom citation list linked to the original entry detail pages.
 - Uses inline citation links inside the narrative to jump down to the matching citation in the reference list.
+- Offers `Narrative` and `Presentation` tabs when the saved story has a presentation artifact.
+
+`GET /story/{id}/presentation`
+
+- Loads the stored compiled presentation in a standalone slide viewer.
+- Supports keyboard, click, and button-based slide navigation over the saved deck.
+
+`POST /story/preview-presentation`
+
+- Opens an unsaved compiled presentation in a fullscreen preview page.
+- Reuses the same compiled HTML and CSS that the save flow would persist.
 
 Story Mode UI behavior:
 
 - Launch points exist on the timeline page, the ranked search page, and the year/month bucket cards.
 - The generated narrative is organized into sections.
+- Narrative generation is the first step; presentation generation is an optional second step that starts from the generated narrative.
 - Inline citations jump to the bottom citation list instead of leaving the story page.
 - The bottom citation list still links to the actual entry detail pages.
-- Saving a story preserves the current generated output as a snapshot.
+- Unsaved presentation results can be previewed inline, opened fullscreen, or downloaded as standalone HTML.
+- Saving a story preserves the current generated output as a snapshot, including the optional compiled presentation artifact.
+- Saved stories with a deck artifact can switch between Narrative and Presentation modes.
 
 ### Entry create, view, and edit
 

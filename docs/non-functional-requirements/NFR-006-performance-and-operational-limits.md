@@ -2,8 +2,8 @@
 
 - Category: Non-Functional
 - Status: Baseline
-- Scope: Bounded result sizes, caching, timeout behavior, and prompt-input limits used to keep local execution responsive.
-- Primary Sources: `app/services/entries.py`, `app/services/search.py`, `app/services/extraction.py`, `app/services/group_web_search.py`, `app/services/ai_story_mode.py`, `tests/test_search.py`, `tests/test_group_web_search.py`
+- Scope: Bounded result sizes, caching, timeout behavior, prompt-input limits, and local deck-compilation limits used to keep local execution responsive.
+- Primary Sources: `app/services/entries.py`, `app/services/search.py`, `app/services/extraction.py`, `app/services/group_web_search.py`, `app/services/ai_story_mode.py`, `app/services/story_deck.py`, `tests/test_search.py`, `tests/test_group_web_search.py`, `tests/test_ai_story_mode.py`, `tests/test_story_deck.py`
 
 ## Requirement Statements
 
@@ -14,14 +14,15 @@
 - NFR-006-05 The application shall use a 10-second network timeout and shall truncate extracted text to 4000 characters during source extraction.
 - NFR-006-06 The application shall default group web-search caching to a 300-second in-memory TTL.
 - NFR-006-07 The application shall target three to five items and shall not exceed five items in group web-search responses.
-- NFR-006-08 The application shall default story-generation input to the most recent 40 chronologically ordered entries when the scope contains more than that limit.
-- NFR-006-09 The application shall default each entry summary to a maximum of 280 characters during story prompt preparation.
+- NFR-006-08 The application shall default story and executive-deck generation input to the most recent 40 chronologically ordered entries when the scope contains more than that limit.
+- NFR-006-09 The application shall default each entry summary to a maximum of 280 characters during story and executive-deck prompt preparation.
 - NFR-006-10 The application shall limit the preferred-tag vocabulary passed to AI draft generation to 50 tags per group.
 - NFR-006-11 The application shall limit group `web_search_query` values to 400 characters.
 - NFR-006-12 The application shall default the group web-search backend timeout to 60 seconds, the broadened-search timeout to 45 seconds, and the per-URL reachability check timeout to 5 seconds.
 - NFR-006-13 The application shall derive the browser-side group web-search request timeout from the backend timeout plus a 5-second buffer.
+- NFR-006-14 The application shall bound local executive-presentation compilation with a 30-second renderer timeout.
 
 ## Acceptance Notes
 
 - Cursor-based pagination is used for timeline details and search results.
-- These limits bound prompt size, result rendering cost, and in-browser payload size for a local-first deployment model.
+- These limits bound prompt size, deck-compilation cost, result rendering cost, and in-browser payload size for a local-first deployment model.

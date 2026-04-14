@@ -3,7 +3,7 @@
 - Category: Non-Functional
 - Status: Baseline
 - Scope: CSRF protection, content sanitization, URL trust boundaries, server-side fetching constraints, and safe rendering expectations.
-- Primary Sources: `app/main.py`, `app/services/entries.py`, `app/services/extraction.py`, `app/templates/*`, `tests/test_entries.py`, `tests/test_ai_story_mode.py`
+- Primary Sources: `app/main.py`, `app/services/entries.py`, `app/services/extraction.py`, `app/services/story_deck.py`, `app/templates/*`, `tests/test_entries.py`, `tests/test_ai_story_mode.py`, `tests/test_story_deck.py`, `tests/test_story_routes.py`
 
 ## Requirement Statements
 
@@ -23,9 +23,11 @@
 - NFR-005-07 The application shall treat the developer extraction endpoint and server-side source fetching behavior as suitable only for local or otherwise trusted deployments unless additional controls are introduced.
 - NFR-005-08 The application shall limit the shared safe rich-text subset to `p`, `b`, `strong`, `i`, `em`, `u`, `ul`, `ol`, `li`, `br`, `blockquote`, and `code`, with `<mark>` additionally permitted only for search snippets.
 - NFR-005-09 The application shall limit the story HTML allowlist to `a`, `h2`, `p`, and `section`, permitting only `href`, `title`, and `class` attributes on `<a>` elements and `class` on the remaining elements, and shall restrict link targets to fragment-only (`#...`) and root-relative (`/...`) URLs.
+- NFR-005-10 The application shall sanitize compiled story-presentation HTML and CSS through a dedicated deck-rendering allowlist before previewing, saving, rendering, or exporting them.
 
 ## Acceptance Notes
 
 - Sanitization is central to entry preview, saved entry rendering, search snippets, and story rendering.
+- Narrative story rendering and compiled presentation rendering use separate sanitization paths so the prose allowlist does not need to widen for presentation markup.
 - CSRF tokens are available in all Jinja2 templates through a `csrf_hidden_input()` global that renders the hidden form field.
 - The repository does not introduce a separate remote-content sandbox beyond sanitization and trusted-deployment guidance.

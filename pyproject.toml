@@ -3,7 +3,7 @@ name = "EventTracker"
 version = "0.1.0"
 description = "Local-first personal timeline and journal app built with FastAPI and SQLite."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 dependencies = [
     "beautifulsoup4==4.13.3",
     "fastapi==0.116.1",

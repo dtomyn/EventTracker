@@ -32,6 +32,7 @@ from app.models import (
     Entry,
     EntrySourceSnapshot,
     SearchResult,
+    StoryArtifactKind,
     StoryFormat,
     TimelineGroup,
     TimelineStoryCitation,
@@ -39,6 +40,7 @@ from app.models import (
 )
 from app.schemas import (
     EntryFormState,
+    TimelineStoryArtifactSavePayload,
     TimelineStoryCitationPayload,
     TimelineStoryFormState,
     TimelineStorySavePayload,
@@ -51,10 +53,13 @@ from app.services.ai_generate import (
 )
 from app.services.ai_story_mode import (
     GeneratedTimelineStory,
+    StoryEventSink,
     StoryGenerationConfigurationError,
     StoryGenerationError,
+    generate_executive_deck,
     generate_timeline_story,
 )
+from app.services.story_deck import StoryDeckError, build_executive_deck_artifact
 from app.services.entries import (
     blank_form_state,
     build_connection_graph,
@@ -133,8 +138,10 @@ from app.services.topics import (
 )
 from app.services.story_mode import (
     get_story,
+    get_story_artifact,
     list_story_entries,
     resolve_story_scope,
+    save_story_artifact,
     save_story,
 )
 
@@ -376,6 +383,12 @@ class StoryResultContext(TypedDict):
     is_saved: bool
     citations: list[StoryCitationContext]
     save_citations_json: str
+    presentation_ready: bool
+    presentation_url: str | None
+    presentation_artifact_json: str | None
+    presentation_warning: str | None
+    presentation_compiled_html: str | None
+    presentation_compiled_css: str | None
 
 
 class StoryPageContext(TypedDict, total=False):
@@ -393,6 +406,7 @@ class StoryPageContext(TypedDict, total=False):
     feedback_message: str | None
     feedback_class: str
     story_result: StoryResultContext | None
+    story_view_mode: str
 
 
 class TimelineGroupWebSearchPayload(TypedDict):
@@ -1323,6 +1337,7 @@ async def generate_story_page(
         )
 
     generated_utc = utc_now_iso()
+
     story_result = _build_generated_story_result(
         generated_story,
         entries=entries,
@@ -1345,6 +1360,381 @@ async def generate_story_page(
     )
 
 
+@app.post("/story/generate-deck", response_class=HTMLResponse)
+async def generate_story_deck_page(
+    request: Request,
+    q: str = Form(""),
+    group_id: str = Form(""),
+    year: str = Form(""),
+    month: str = Form(""),
+    format: str = Form("executive_summary"),
+    title: str = Form(""),
+    narrative_html: str = Form(""),
+    narrative_text: str = Form(""),
+    generated_utc: str = Form(""),
+    provider_name: str = Form(""),
+    source_entry_count: str = Form("0"),
+    truncated_input: str = Form("false"),
+    error_text: str = Form(""),
+    citations_json: str = Form("[]"),
+) -> HTMLResponse:
+    """Generate an executive deck for an already-generated narrative."""
+    story_format = _parse_story_format(format)
+    with connection_context() as connection:
+        group_scope, story_scope = _load_story_page_scope(
+            connection,
+            q=q,
+            group_id=group_id,
+            year=year,
+            month=month,
+        )
+        entries = list_story_entries(connection, story_scope)
+
+    story_result_base = _build_posted_story_result(
+        story_format=story_format,
+        title=title,
+        narrative_html=narrative_html,
+        narrative_text=narrative_text,
+        generated_utc=generated_utc,
+        provider_name=provider_name,
+        source_entry_count=source_entry_count,
+        truncated_input=truncated_input,
+        error_text=error_text,
+        citations_json=citations_json,
+        presentation_artifact_json="",
+        entries=entries,
+    )
+
+    presentation_artifact_json: str | None = None
+    presentation_warning: str | None = None
+    presentation_compiled_html: str | None = None
+    presentation_compiled_css: str | None = None
+    presentation_ready = False
+    feedback_message = "Executive presentation generated."
+    feedback_class = "success"
+
+    try:
+        generated_deck = await generate_executive_deck(story_scope, entries)
+        presentation_artifact = build_executive_deck_artifact(
+            generated_deck,
+            story_scope,
+            entries,
+            generated_utc=generated_utc.strip() or utc_now_iso(),
+        )
+        presentation_artifact_json = _serialize_story_artifact_payload(
+            presentation_artifact
+        )
+        presentation_compiled_html = presentation_artifact.compiled_html
+        presentation_compiled_css = presentation_artifact.compiled_css
+        presentation_ready = True
+    except (
+        StoryGenerationConfigurationError,
+        StoryGenerationError,
+        StoryDeckError,
+    ) as exc:
+        presentation_warning = str(exc)
+        feedback_message = "Presentation generation encountered an issue."
+        feedback_class = "warning"
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "Executive presentation generation failed"
+        )
+        presentation_warning = (
+            "Executive presentation generation failed. The narrative remains "
+            "available and can still be saved."
+        )
+        feedback_message = "Presentation generation failed."
+        feedback_class = "danger"
+
+    if story_result_base is not None:
+        story_result_base["presentation_ready"] = presentation_ready
+        story_result_base["presentation_artifact_json"] = presentation_artifact_json
+        story_result_base["presentation_warning"] = presentation_warning
+        story_result_base["presentation_compiled_html"] = presentation_compiled_html
+        story_result_base["presentation_compiled_css"] = presentation_compiled_css
+
+    context = _build_story_page_context(
+        request,
+        group_scope=group_scope,
+        story_scope=story_scope,
+        story_format=story_format,
+        source_entry_count=len(entries),
+        feedback_message=feedback_message,
+        feedback_class=feedback_class,
+        story_result=story_result_base,
+    )
+    return templates.TemplateResponse(
+        request,
+        "story.html",
+        cast(dict[str, object], context),
+    )
+
+
+@app.post("/story/generate/stream")
+async def generate_story_stream(
+    request: Request,
+    q: str = Form(""),
+    group_id: str = Form(""),
+    year: str = Form(""),
+    month: str = Form(""),
+    format: str = Form("executive_summary"),
+) -> StreamingResponse:
+    """SSE stream that emits progress events during story generation."""
+    story_format = _parse_story_format(format)
+    with connection_context() as connection:
+        group_scope, story_scope = _load_story_page_scope(
+            connection,
+            q=q,
+            group_id=group_id,
+            year=year,
+            month=month,
+        )
+        entries = list_story_entries(connection, story_scope)
+
+    if not entries:
+        return _build_story_stream_error(
+            "No entries match this scope yet. Adjust the current filters or "
+            "add entries, then generate a story."
+        )
+
+    queue: asyncio.Queue[Mapping[str, object]] = asyncio.Queue()
+
+    def on_event(payload: Mapping[str, object]) -> None:
+        queue.put_nowait(payload)
+
+    async def run_generation() -> None:
+        try:
+            on_event({"kind": "status", "phase": "scope", "message": f"Gathering {len(entries)} entries from the current scope."})
+            generated_story = await generate_timeline_story(
+                story_scope, story_format, entries, event_sink=on_event,
+            )
+            generated_utc = utc_now_iso()
+            story_result = _build_generated_story_result(
+                generated_story,
+                entries=entries,
+                generated_utc=generated_utc,
+            )
+            context = _build_story_page_context(
+                request,
+                group_scope=group_scope,
+                story_scope=story_scope,
+                story_format=story_format,
+                source_entry_count=len(entries),
+                feedback_message="Story generated for the current scope.",
+                feedback_class="success",
+                story_result=story_result,
+            )
+            rendered = templates.get_template("story.html").render(
+                cast(dict[str, object], context)
+            )
+            on_event({"kind": "result", "html": rendered})
+        except (
+            StoryGenerationConfigurationError,
+            StoryGenerationError,
+            ValueError,
+        ) as exc:
+            on_event({"kind": "story_error", "message": str(exc)})
+        except Exception:
+            logging.getLogger(__name__).exception("Story generation stream failed")
+            on_event({
+                "kind": "story_error",
+                "message": "Story generation failed. You can adjust the scope and try again.",
+            })
+        finally:
+            on_event({"kind": "complete", "ok": True})
+
+    async def stream_events() -> AsyncGenerator[str, None]:
+        task = asyncio.create_task(run_generation())
+        try:
+            while True:
+                payload = await queue.get()
+                event_name = str(payload.get("kind") or "message")
+                yield _encode_sse_event(event_name, payload)
+                if event_name == "complete":
+                    break
+        finally:
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+    return StreamingResponse(
+        stream_events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.post("/story/generate-deck/stream")
+async def generate_story_deck_stream(
+    request: Request,
+    q: str = Form(""),
+    group_id: str = Form(""),
+    year: str = Form(""),
+    month: str = Form(""),
+    format: str = Form("executive_summary"),
+    title: str = Form(""),
+    narrative_html: str = Form(""),
+    narrative_text: str = Form(""),
+    generated_utc: str = Form(""),
+    provider_name: str = Form(""),
+    source_entry_count: str = Form("0"),
+    truncated_input: str = Form("false"),
+    error_text: str = Form(""),
+    citations_json: str = Form("[]"),
+) -> StreamingResponse:
+    """SSE stream that emits progress events during deck generation."""
+    story_format = _parse_story_format(format)
+    with connection_context() as connection:
+        group_scope, story_scope = _load_story_page_scope(
+            connection,
+            q=q,
+            group_id=group_id,
+            year=year,
+            month=month,
+        )
+        entries = list_story_entries(connection, story_scope)
+
+    story_result_base = _build_posted_story_result(
+        story_format=story_format,
+        title=title,
+        narrative_html=narrative_html,
+        narrative_text=narrative_text,
+        generated_utc=generated_utc,
+        provider_name=provider_name,
+        source_entry_count=source_entry_count,
+        truncated_input=truncated_input,
+        error_text=error_text,
+        citations_json=citations_json,
+        presentation_artifact_json="",
+        entries=entries,
+    )
+
+    queue: asyncio.Queue[Mapping[str, object]] = asyncio.Queue()
+
+    def on_event(payload: Mapping[str, object]) -> None:
+        queue.put_nowait(payload)
+
+    async def run_generation() -> None:
+        presentation_artifact_json: str | None = None
+        presentation_compiled_html: str | None = None
+        presentation_compiled_css: str | None = None
+        presentation_ready = False
+        feedback_message = "Executive presentation generated."
+        feedback_class = "success"
+
+        try:
+            on_event({"kind": "status", "phase": "scope", "message": f"Analyzing narrative and {len(entries)} scoped entries."})
+            generated_deck = await generate_executive_deck(
+                story_scope, entries, event_sink=on_event,
+            )
+            on_event({"kind": "status", "phase": "compile", "message": "Compiling presentation deck."})
+            presentation_artifact = build_executive_deck_artifact(
+                generated_deck,
+                story_scope,
+                entries,
+                generated_utc=generated_utc.strip() or utc_now_iso(),
+            )
+            presentation_artifact_json = _serialize_story_artifact_payload(
+                presentation_artifact
+            )
+            presentation_compiled_html = presentation_artifact.compiled_html
+            presentation_compiled_css = presentation_artifact.compiled_css
+            presentation_ready = True
+        except (
+            StoryGenerationConfigurationError,
+            StoryGenerationError,
+            StoryDeckError,
+        ) as exc:
+            on_event({"kind": "story_error", "message": str(exc)})
+            feedback_message = "Presentation generation encountered an issue."
+            feedback_class = "warning"
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "Executive presentation generation stream failed"
+            )
+            on_event({
+                "kind": "story_error",
+                "message": "Executive presentation generation failed. The narrative remains available.",
+            })
+            feedback_message = "Presentation generation failed."
+            feedback_class = "danger"
+
+        if story_result_base is not None:
+            story_result_base["presentation_ready"] = presentation_ready
+            story_result_base["presentation_artifact_json"] = presentation_artifact_json
+            story_result_base["presentation_warning"] = (
+                None if presentation_ready else feedback_message
+            )
+            story_result_base["presentation_compiled_html"] = presentation_compiled_html
+            story_result_base["presentation_compiled_css"] = presentation_compiled_css
+
+        context = _build_story_page_context(
+            request,
+            group_scope=group_scope,
+            story_scope=story_scope,
+            story_format=story_format,
+            source_entry_count=len(entries),
+            feedback_message=feedback_message,
+            feedback_class=feedback_class,
+            story_result=story_result_base,
+        )
+        rendered = templates.get_template("story.html").render(
+            cast(dict[str, object], context)
+        )
+        on_event({"kind": "result", "html": rendered})
+        on_event({"kind": "complete", "ok": True})
+
+    async def stream_events() -> AsyncGenerator[str, None]:
+        task = asyncio.create_task(run_generation())
+        try:
+            while True:
+                payload = await queue.get()
+                event_name = str(payload.get("kind") or "message")
+                yield _encode_sse_event(event_name, payload)
+                if event_name == "complete":
+                    break
+        finally:
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+    return StreamingResponse(
+        stream_events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+def _build_story_stream_error(message: str) -> StreamingResponse:
+    async def stream() -> AsyncGenerator[str, None]:
+        yield _encode_sse_event("story_error", {"message": message})
+        yield _encode_sse_event("complete", {"ok": False})
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @app.post("/story/save", response_model=None)
 def save_story_page(
     request: Request,
@@ -1362,6 +1752,7 @@ def save_story_page(
     truncated_input: str = Form("false"),
     error_text: str = Form(""),
     citations_json: str = Form("[]"),
+    presentation_artifact_json: str = Form(""),
 ) -> RedirectResponse | HTMLResponse:
     story_format = _parse_story_format(format)
     with connection_context() as connection:
@@ -1379,6 +1770,9 @@ def save_story_page(
                 source_entry_count
             )
             citations = _parse_story_citation_payloads(citations_json)
+            artifact_payload = _parse_story_artifact_payload(
+                presentation_artifact_json
+            )
             payload = TimelineStorySavePayload(
                 scope_type=story_scope.scope_type,
                 group_id=story_scope.group_id,
@@ -1401,6 +1795,8 @@ def save_story_page(
             if not payload.narrative_html:
                 raise ValueError("A generated story is required before saving.")
             story_id = save_story(connection, payload)
+            if artifact_payload is not None:
+                save_story_artifact(connection, story_id, artifact_payload)
         except ValueError as exc:
             story_result = _build_posted_story_result(
                 story_format=story_format,
@@ -1413,6 +1809,7 @@ def save_story_page(
                 truncated_input=truncated_input,
                 error_text=error_text,
                 citations_json=citations_json,
+                presentation_artifact_json=presentation_artifact_json,
                 entries=current_entries,
             )
             context = _build_story_page_context(
@@ -1436,11 +1833,16 @@ def save_story_page(
 
 
 @app.get("/story/{story_id:int}", response_class=HTMLResponse)
-def saved_story_page(request: Request, story_id: int) -> HTMLResponse:
+def saved_story_page(
+    request: Request,
+    story_id: int,
+    view: str = "narrative",
+) -> HTMLResponse:
     with connection_context() as connection:
         story = get_story(connection, story_id)
         if story is None:
             raise HTTPException(status_code=404, detail="Story not found")
+        story_artifact = get_story_artifact(connection, story_id, "executive_deck")
 
         timeline_filters = list_timeline_groups(connection)
         selected_group = (
@@ -1464,6 +1866,14 @@ def saved_story_page(request: Request, story_id: int) -> HTMLResponse:
                 for citation in story.citations
             },
         )
+
+    presentation_url = (
+        f"/story/{story_id}/presentation" if story_artifact is not None else None
+    )
+    story_view_mode = _parse_story_view_mode(
+        view,
+        has_presentation=story_artifact is not None,
+    )
 
     context: StoryPageContext = {
         "request": request,
@@ -1507,6 +1917,12 @@ def saved_story_page(request: Request, story_id: int) -> HTMLResponse:
             "error_text": story.error_text,
             "is_saved": True,
             "citations": citations,
+            "presentation_ready": story_artifact is not None,
+            "presentation_url": presentation_url,
+            "presentation_artifact_json": None,
+            "presentation_warning": None,
+            "presentation_compiled_html": story_artifact.compiled_html if story_artifact is not None else None,
+            "presentation_compiled_css": story_artifact.compiled_css if story_artifact is not None else None,
             "save_citations_json": json.dumps(
                 [
                     {
@@ -1519,10 +1935,66 @@ def saved_story_page(request: Request, story_id: int) -> HTMLResponse:
                 ]
             ),
         },
+        "story_view_mode": story_view_mode,
     }
     return templates.TemplateResponse(
         request,
         "story.html",
+        cast(dict[str, object], context),
+    )
+
+
+@app.get("/story/{story_id:int}/presentation", response_class=HTMLResponse)
+def saved_story_presentation_page(request: Request, story_id: int) -> HTMLResponse:
+    with connection_context() as connection:
+        story = get_story(connection, story_id)
+        if story is None:
+            raise HTTPException(status_code=404, detail="Story not found")
+        story_artifact = get_story_artifact(connection, story_id, "executive_deck")
+        if story_artifact is None or not story_artifact.compiled_html.strip():
+            raise HTTPException(status_code=404, detail="Story presentation not found")
+
+    context = {
+        "request": request,
+        "page_title": f"{story.title} Presentation",
+        "story": story,
+        "compiled_html": Markup(story_artifact.compiled_html),
+        "compiled_css": story_artifact.compiled_css,
+    }
+    return templates.TemplateResponse(
+        request,
+        "story_presentation.html",
+        cast(dict[str, object], context),
+    )
+
+
+@app.post("/story/preview-presentation", response_class=HTMLResponse)
+def preview_story_presentation_page(
+    request: Request,
+    title: str = Form("Presentation"),
+    compiled_html: str = Form(""),
+    compiled_css: str = Form(""),
+) -> HTMLResponse:
+    """Render a preview of a compiled presentation that has not been saved yet."""
+    from app.services.story_deck import sanitize_compiled_deck_html, sanitize_compiled_deck_css
+
+    safe_html = sanitize_compiled_deck_html(compiled_html)
+    safe_css = sanitize_compiled_deck_css(compiled_css)
+    if not safe_html.strip():
+        raise HTTPException(
+            status_code=400, detail="No compiled presentation HTML provided."
+        )
+
+    context = {
+        "request": request,
+        "page_title": f"{title.strip() or 'Presentation'} Preview",
+        "story": {"title": title.strip() or "Presentation"},
+        "compiled_html": Markup(safe_html),
+        "compiled_css": safe_css,
+    }
+    return templates.TemplateResponse(
+        request,
+        "story_presentation.html",
         cast(dict[str, object], context),
     )
 
@@ -2594,6 +3066,7 @@ def _build_story_page_context(
     feedback_message: str | None = None,
     feedback_class: str = "warning",
     story_result: StoryResultContext | None = None,
+    story_view_mode: str = "narrative",
 ) -> StoryPageContext:
     selected_group_name = (
         group_scope["selected_group"].name
@@ -2624,6 +3097,7 @@ def _build_story_page_context(
         "feedback_message": feedback_message,
         "feedback_class": feedback_class,
         "story_result": story_result,
+        "story_view_mode": story_view_mode,
     }
     return context
 
@@ -2633,6 +3107,9 @@ def _build_generated_story_result(
     *,
     entries: list[Entry],
     generated_utc: str,
+    presentation_ready: bool = False,
+    presentation_artifact_json: str | None = None,
+    presentation_warning: str | None = None,
 ) -> StoryResultContext:
     entry_lookup = {entry.id: entry for entry in entries}
     citations = _build_story_citation_contexts(
@@ -2662,6 +3139,12 @@ def _build_generated_story_result(
         "error_text": None,
         "is_saved": False,
         "citations": citations,
+        "presentation_ready": presentation_ready,
+        "presentation_url": None,
+        "presentation_artifact_json": presentation_artifact_json,
+        "presentation_warning": presentation_warning,
+        "presentation_compiled_html": None,
+        "presentation_compiled_css": None,
         "save_citations_json": json.dumps(
             [
                 {
@@ -2688,6 +3171,7 @@ def _build_posted_story_result(
     truncated_input: str,
     error_text: str,
     citations_json: str,
+    presentation_artifact_json: str,
     entries: list[Entry],
 ) -> StoryResultContext | None:
     if not title.strip() and not narrative_html.strip():
@@ -2723,6 +3207,12 @@ def _build_posted_story_result(
         "error_text": error_text.strip() or None,
         "is_saved": False,
         "citations": citations,
+        "presentation_ready": bool(presentation_artifact_json.strip()),
+        "presentation_url": None,
+        "presentation_artifact_json": presentation_artifact_json or None,
+        "presentation_warning": None,
+        "presentation_compiled_html": None,
+        "presentation_compiled_css": None,
         "save_citations_json": citations_json,
     }
 
@@ -2920,6 +3410,69 @@ def _parse_story_citation_payloads(
                 return []
             raise ValueError("Generated citations could not be parsed.") from exc
     return citations
+
+
+def _serialize_story_artifact_payload(
+    payload: TimelineStoryArtifactSavePayload,
+) -> str:
+    """Serialize a generated presentation artifact for the hidden save form field."""
+    return json.dumps(asdict(payload), separators=(",", ":"), sort_keys=True)
+
+
+def _parse_story_artifact_payload(
+    raw_value: str,
+) -> TimelineStoryArtifactSavePayload | None:
+    """Parse the hidden presentation artifact form payload when saving a story."""
+    normalized = raw_value.strip()
+    if not normalized:
+        return None
+
+    try:
+        parsed = json.loads(normalized)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Generated presentation artifact could not be parsed.") from exc
+
+    if not isinstance(parsed, dict):
+        raise ValueError("Generated presentation artifact could not be parsed.")
+
+    try:
+        payload = TimelineStoryArtifactSavePayload(
+            artifact_kind=cast(StoryArtifactKind, str(parsed["artifact_kind"])),
+            source_format=str(parsed["source_format"]),
+            source_text=str(parsed["source_text"]),
+            compiled_html=str(parsed.get("compiled_html", "")),
+            compiled_css=str(parsed.get("compiled_css", "")),
+            metadata_json=str(parsed.get("metadata_json", "{}")),
+            generated_utc=str(parsed.get("generated_utc", "")),
+            compiled_utc=(
+                str(parsed["compiled_utc"])
+                if parsed.get("compiled_utc") is not None
+                else None
+            ),
+            compiler_name=(
+                str(parsed["compiler_name"])
+                if parsed.get("compiler_name") is not None
+                else None
+            ),
+            compiler_version=(
+                str(parsed["compiler_version"])
+                if parsed.get("compiler_version") is not None
+                else None
+            ),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("Generated presentation artifact could not be parsed.") from exc
+
+    if payload.artifact_kind != "executive_deck":
+        raise ValueError("Generated presentation artifact could not be parsed.")
+    return payload
+
+
+def _parse_story_view_mode(raw_value: str, *, has_presentation: bool) -> str:
+    """Resolve the saved story view mode, falling back to narrative when needed."""
+    if has_presentation and raw_value.strip().lower() == "presentation":
+        return "presentation"
+    return "narrative"
 
 
 def _encode_sse_event(event_name: str, payload: Mapping[str, object]) -> str:

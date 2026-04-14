@@ -3,7 +3,7 @@
 - Category: Non-Functional
 - Status: Baseline
 - Scope: Fail-open behavior, fallback flows, recoverability, and non-fatal error handling.
-- Primary Sources: `README.md`, `app/main.py`, `app/services/entries.py`, `app/services/search.py`, `app/services/extraction.py`, `app/services/embeddings.py`, `app/services/group_web_search.py`, `app/services/ai_generate.py`, `app/services/ai_story_mode.py`, `tests/test_smoke.py`, `tests/test_story_routes.py`
+- Primary Sources: `README.md`, `app/main.py`, `app/services/entries.py`, `app/services/search.py`, `app/services/extraction.py`, `app/services/embeddings.py`, `app/services/group_web_search.py`, `app/services/ai_generate.py`, `app/services/ai_story_mode.py`, `app/services/story_deck.py`, `tests/test_smoke.py`, `tests/test_story_routes.py`, `tests/test_story_deck.py`
 
 ## Requirement Statements
 
@@ -16,8 +16,10 @@
 - NFR-004-07 The application shall fail development-server startup explicitly when the configured port is already in use.
 - NFR-004-08 The application shall clean up stale tracked development-server processes before starting a new Windows reload owner.
 - NFR-004-09 The application shall keep saved story snapshots stable after later entry edits by storing the generated narrative and citation mapping as point-in-time data.
+- NFR-004-10 The application shall keep the current narrative result usable when executive presentation generation or local deck compilation fails, surfacing a warning instead of discarding the narrative output.
 
 ## Acceptance Notes
 
 - Extraction failures are logged and return `None` rather than throwing raw parser or network exceptions through the request path.
 - Embedding reindex support is the explicit operational recovery path after model changes.
+- Missing Node.js or Marpit support is a controlled presentation-only failure path rather than a fatal Story Mode failure.

@@ -6,15 +6,21 @@ import unittest
 from pathlib import Path
 
 from app.db import connection_context, init_db
-from app.schemas import TimelineStoryCitationPayload, TimelineStorySavePayload
+from app.schemas import (
+    TimelineStoryArtifactSavePayload,
+    TimelineStoryCitationPayload,
+    TimelineStorySavePayload,
+)
 from app.services.embeddings import load_embedding_settings
 from app.services.entries import EntryPayload, create_timeline_group, save_entry
 from app.services.story_mode import (
+    get_story_artifact,
     get_story,
     list_story_citations,
     list_story_entries,
     prepare_story_input_entries,
     resolve_story_scope,
+    save_story_artifact,
     save_story,
 )
 
@@ -221,6 +227,59 @@ class TestStoryModeService(unittest.TestCase):
         )
         self.assertEqual(story.citations[0].quote_text, "Earlier quote")
         self.assertEqual(story.citations[1].note, "Second citation")
+
+    def test_save_and_reload_story_artifact_preserves_compiled_presentation(self) -> None:
+        with connection_context() as connection:
+            story_id = save_story(
+                connection,
+                TimelineStorySavePayload(
+                    scope_type="timeline",
+                    group_id=1,
+                    query_text=None,
+                    year=None,
+                    month=None,
+                    format="executive_summary",
+                    title="Deck-backed story",
+                    narrative_html="<p>Story body</p>",
+                    narrative_text="Story body",
+                    generated_utc="2026-03-20T12:00:00+00:00",
+                    updated_utc="2026-03-20T12:00:00+00:00",
+                    provider_name="copilot",
+                    source_entry_count=0,
+                    truncated_input=False,
+                    citations=[],
+                ),
+            )
+
+            artifact_id = save_story_artifact(
+                connection,
+                story_id,
+                TimelineStoryArtifactSavePayload(
+                    artifact_kind="executive_deck",
+                    source_format="marpit_markdown",
+                    source_text="---\nmarpit: true\n---\n# Deck",
+                    compiled_html='<div class="marpit"><section><h1>Deck</h1></section></div>',
+                    compiled_css="section { color: #123456; }",
+                    metadata_json='{"slide_count":1}',
+                    generated_utc="2026-03-20T12:00:00+00:00",
+                    compiled_utc="2026-03-20T12:00:02+00:00",
+                    compiler_name="marpit",
+                    compiler_version="4.1.2",
+                ),
+            )
+
+            artifact = get_story_artifact(connection, story_id, "executive_deck")
+
+        self.assertEqual(artifact_id, 1)
+        self.assertIsNotNone(artifact)
+        assert artifact is not None
+        self.assertEqual(artifact.story_id, story_id)
+        self.assertEqual(artifact.artifact_kind, "executive_deck")
+        self.assertEqual(artifact.source_format, "marpit_markdown")
+        self.assertIn("marpit: true", artifact.source_text)
+        self.assertIn('<div class="marpit">', artifact.compiled_html)
+        self.assertEqual(artifact.compiler_name, "marpit")
+        self.assertEqual(artifact.compiler_version, "4.1.2")
 
     def _create_entry(
         self,

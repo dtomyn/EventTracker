@@ -10,6 +10,27 @@ StoryFormat: TypeAlias = Literal[
     "detailed_chronology",
     "recent_changes",
 ]
+StoryArtifactKind: TypeAlias = Literal["executive_deck"]
+DeckSlidePurpose: TypeAlias = Literal[
+    "title",
+    "toc",
+    "summary",
+    "section_header",
+    "turning_point",
+    "highlight",
+    "trajectory",
+    "quote",
+    "close",
+    "thank_you",
+]
+DeckVisualKind: TypeAlias = Literal[
+    "kpi_strip",
+    "phase_timeline",
+    "pull_quote",
+    "bar_chart",
+    "stat_card",
+    "icon_grid",
+]
 
 
 @dataclass(slots=True)
@@ -118,6 +139,22 @@ class TimelineStoryCitation:
 
 
 @dataclass(slots=True)
+class TimelineStoryArtifact:
+    id: int
+    story_id: int
+    artifact_kind: StoryArtifactKind
+    source_format: str
+    source_text: str
+    compiled_html: str
+    compiled_css: str
+    metadata_json: str
+    generated_utc: str
+    compiled_utc: str | None = None
+    compiler_name: str | None = None
+    compiler_version: str | None = None
+
+
+@dataclass(slots=True)
 class TimelineStorySnapshot:
     id: int
     scope_type: StoryScopeType
@@ -136,6 +173,27 @@ class TimelineStorySnapshot:
     provider_name: str | None = None
     error_text: str | None = None
     citations: list[TimelineStoryCitation] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class GeneratedExecutiveDeckSlide:
+    slide_key: str
+    headline: str
+    purpose: DeckSlidePurpose
+    body_points: list[str] = field(default_factory=list)
+    callouts: list[str] = field(default_factory=list)
+    visuals: list[DeckVisualKind] = field(default_factory=list)
+    citations: list[int] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class GeneratedExecutiveDeck:
+    title: str
+    subtitle: str | None
+    slides: list[GeneratedExecutiveDeckSlide]
+    provider_name: str | None = None
+    source_entry_count: int = 0
+    truncated_input: bool = False
 
 
 @dataclass(slots=True)

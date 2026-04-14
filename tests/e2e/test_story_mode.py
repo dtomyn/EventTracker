@@ -118,6 +118,49 @@ def _seed_story(
     return story_id
 
 
+def _seed_story_artifact(
+    db_path: Path,
+    *,
+    story_id: int,
+    compiled_html: str,
+    compiled_css: str,
+) -> None:
+    """Insert a saved executive deck artifact for a Story Mode snapshot."""
+    ts = _utc_now_iso()
+    with sqlite3.connect(db_path) as con:
+        con.execute(
+            """
+            INSERT INTO timeline_story_artifacts (
+                story_id,
+                artifact_kind,
+                source_format,
+                source_text,
+                compiled_html,
+                compiled_css,
+                metadata_json,
+                generated_utc,
+                compiled_utc,
+                compiler_name,
+                compiler_version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                story_id,
+                "executive_deck",
+                "marpit_markdown",
+                "---\nmarpit: true\n---\n# Deck",
+                compiled_html,
+                compiled_css,
+                '{"slide_count":1}',
+                ts,
+                ts,
+                "marpit",
+                "4.1.2",
+            ),
+        )
+        con.commit()
+
+
 # ---------------------------------------------------------------------------
 # Story page load
 # ---------------------------------------------------------------------------
@@ -349,6 +392,180 @@ def test_save_story_and_view_saved_story_page(
     # Revisiting the same URL should show the same persisted story
     page.goto(f"/story/{story_id}")
     expect(page.get_by_role("heading", name=story_title)).to_be_visible()
+
+
+def test_saved_story_with_presentation_toggle_shows_iframe(
+    page: Page,
+    e2e_session,
+) -> None:
+    group_name = _group_name(e2e_session, "presentation-toggle")
+    group_id = _ensure_group(e2e_session.db_path, group_name)
+    entry_id = _seed_entry(
+        e2e_session.db_path,
+        group_id=group_id,
+        year=2026,
+        month=3,
+        day=5,
+        title="Presentation seed entry",
+        final_text="<p>Presentation seed body for citation.</p>",
+    )
+
+    story_title = f"{e2e_session.run_id} Saved Story With Presentation"
+    story_id = _seed_story(
+        e2e_session.db_path,
+        group_id=group_id,
+        title=story_title,
+        narrative_html="<p>This narrative also has a saved presentation.</p>",
+        entry_id=entry_id,
+    )
+    _seed_story_artifact(
+        e2e_session.db_path,
+        story_id=story_id,
+        compiled_html='<div class="marpit"><section><h1>Saved deck</h1></section></div>',
+        compiled_css="section { color: #123456; }",
+    )
+
+    page.goto(f"/story/{story_id}")
+
+    expect(page.get_by_role("link", name="Narrative", exact=True)).to_be_visible()
+    expect(page.get_by_role("link", name="Presentation", exact=True)).to_be_visible()
+
+    page.get_by_role("link", name="Presentation", exact=True).click()
+
+    presentation_frame = page.locator(".story-presentation-frame")
+    expect(presentation_frame).to_be_visible()
+    expect(presentation_frame).to_have_attribute(
+        "src", f"/story/{story_id}/presentation"
+    )
+
+
+def test_saved_story_presentation_navigation_buttons_change_slides(
+    page: Page,
+    e2e_session,
+) -> None:
+    group_name = _group_name(e2e_session, "presentation-navigation")
+    group_id = _ensure_group(e2e_session.db_path, group_name)
+    entry_id = _seed_entry(
+        e2e_session.db_path,
+        group_id=group_id,
+        year=2026,
+        month=3,
+        day=5,
+        title="Presentation navigation seed entry",
+        final_text="<p>Presentation navigation seed body for citation.</p>",
+    )
+
+    story_title = f"{e2e_session.run_id} Saved Story Presentation Navigation"
+    story_id = _seed_story(
+        e2e_session.db_path,
+        group_id=group_id,
+        title=story_title,
+        narrative_html="<p>This narrative also has a multi-slide presentation.</p>",
+        entry_id=entry_id,
+    )
+    _seed_story_artifact(
+        e2e_session.db_path,
+        story_id=story_id,
+        compiled_html=(
+            '<div class="marpit">'
+            '<section><h1>Deck slide one</h1><p>First slide body.</p></section>'
+            '<section><h1>Deck slide two</h1><p>Second slide body.</p></section>'
+            '</div>'
+        ),
+        compiled_css="section { color: #123456; }",
+    )
+
+    page.goto(f"/story/{story_id}/presentation")
+
+    counter = page.locator("[data-deck-counter]")
+    expect(counter).to_have_text("1 / 2")
+    expect(page.locator(".deck-slide-scaler section.is-active")).to_contain_text(
+        "Deck slide one"
+    )
+
+    page.get_by_role("button", name="Next slide").click()
+    expect(counter).to_have_text("2 / 2")
+    expect(page.locator(".deck-slide-scaler section.is-active")).to_contain_text(
+        "Deck slide two"
+    )
+
+    page.get_by_role("button", name="Previous slide").click()
+    expect(counter).to_have_text("1 / 2")
+    expect(page.locator(".deck-slide-scaler section.is-active")).to_contain_text(
+        "Deck slide one"
+    )
+
+
+def test_saved_story_presentation_download_keeps_navigation_controls(
+    page: Page,
+    e2e_session,
+) -> None:
+    group_name = _group_name(e2e_session, "presentation-download-navigation")
+    group_id = _ensure_group(e2e_session.db_path, group_name)
+    entry_id = _seed_entry(
+        e2e_session.db_path,
+        group_id=group_id,
+        year=2026,
+        month=3,
+        day=5,
+        title="Presentation download seed entry",
+        final_text="<p>Presentation download seed body for citation.</p>",
+    )
+
+    story_title = f"{e2e_session.run_id} Downloaded Story Presentation"
+    story_id = _seed_story(
+        e2e_session.db_path,
+        group_id=group_id,
+        title=story_title,
+        narrative_html="<p>This narrative also has a downloadable multi-slide presentation.</p>",
+        entry_id=entry_id,
+    )
+    _seed_story_artifact(
+        e2e_session.db_path,
+        story_id=story_id,
+        compiled_html=(
+            '<div class="marpit">'
+            '<section><h1>Download slide one</h1><p>First download slide.</p></section>'
+            '<section><h1>Download slide two</h1><p>Second download slide.</p></section>'
+            '</div>'
+        ),
+        compiled_css="section { color: #123456; }",
+    )
+
+    page.goto(f"/story/{story_id}?view=presentation")
+
+    with page.expect_download() as download_info:
+        page.get_by_role("button", name="Download HTML").click()
+    download = download_info.value
+    download_path = download.path()
+    assert download_path is not None
+
+    saved_download_path = Path(download_path).with_name(
+        download.suggested_filename or "presentation-download.html"
+    )
+    download.save_as(str(saved_download_path))
+    downloaded_html = saved_download_path.read_text(encoding="utf-8")
+    assert ".et-slide--thank_you .et-pull-quote" in downloaded_html
+
+    page.goto(saved_download_path.as_uri())
+
+    counter = page.locator("#ct")
+    expect(counter).to_have_text("1 / 2")
+    expect(page.locator(".dk-sl section.is-active")).to_contain_text(
+        "Download slide one"
+    )
+
+    page.get_by_role("button", name="Next").click()
+    expect(counter).to_have_text("2 / 2")
+    expect(page.locator(".dk-sl section.is-active")).to_contain_text(
+        "Download slide two"
+    )
+
+    page.get_by_role("button", name="Previous").click()
+    expect(counter).to_have_text("1 / 2")
+    expect(page.locator(".dk-sl section.is-active")).to_contain_text(
+        "Download slide one"
+    )
 
 
 # ---------------------------------------------------------------------------

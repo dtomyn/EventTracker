@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from app.models import StoryFormat, StoryScopeType
+from app.models import StoryArtifactKind, StoryFormat, StoryScopeType
 
 
 @dataclass(slots=True)
@@ -85,6 +85,20 @@ class TimelineStorySavePayload(TimelineStoryScopePayload):
     truncated_input: bool = False
     error_text: str | None = None
     citations: list[TimelineStoryCitationPayload] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class TimelineStoryArtifactSavePayload:
+    artifact_kind: StoryArtifactKind
+    source_format: str
+    source_text: str
+    compiled_html: str = ""
+    compiled_css: str = ""
+    metadata_json: str = "{}"
+    generated_utc: str = ""
+    compiled_utc: str | None = None
+    compiler_name: str | None = None
+    compiler_version: str | None = None
 
 
 @dataclass(slots=True)

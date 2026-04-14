@@ -13,13 +13,16 @@ from fastapi.testclient import TestClient
 
 from app.db import connection_context, init_db
 from app.main import app
+from app.models import GeneratedExecutiveDeck, GeneratedExecutiveDeckSlide
+from app.schemas import TimelineStoryArtifactSavePayload
 from app.services.ai_story_mode import (
     GeneratedStoryCitation,
     GeneratedStorySection,
     GeneratedTimelineStory,
+    StoryGenerationError,
 )
 from app.services.entries import EntryPayload, create_timeline_group, save_entry
-from app.services.story_mode import get_story
+from app.services.story_mode import get_story, get_story_artifact
 
 
 class TestStoryRoutes(unittest.TestCase):
@@ -64,6 +67,14 @@ class TestStoryRoutes(unittest.TestCase):
                 day=5,
                 title="Alpha milestone",
                 final_text="<p>First milestone shipped.</p>",
+            )
+            middle_id = self._create_entry(
+                connection,
+                year=2024,
+                month=10,
+                day=9,
+                title="Bridge milestone",
+                final_text="<p>Bridge milestone kept momentum moving.</p>",
             )
             latest_id = self._create_entry(
                 connection,
@@ -110,7 +121,7 @@ class TestStoryRoutes(unittest.TestCase):
                 ],
                 provider_name="copilot",
                 source_entry_count=2,
-                truncated_input=False,
+                truncated_input=True,
             )
         )
 
@@ -131,8 +142,20 @@ class TestStoryRoutes(unittest.TestCase):
         self.assertIn('action="/story/save"', response.text)
         self.assertIn(f'href="/entries/{earliest_id}/view"', response.text)
         self.assertIn(f'href="/entries/{latest_id}/view"', response.text)
-        self.assertIn("data-story-progress", response.text)
-        self.assertIn("Generating...", response.text)
+        self.assertIn(
+            "This story used detailed context for the most recent 2 entries out of 3 in scope",
+            response.text,
+        )
+        self.assertIn(
+            "1 older entry was summarized at a higher level to preserve earlier context.",
+            response.text,
+        )
+        self.assertIn(
+            "Narrow the scope if you need earlier events included with the same level of detail and citation support.",
+            response.text,
+        )
+        self.assertIn("data-story-trace", response.text)
+        self.assertIn("Agent trace", response.text)
         self.assertRegex(
             response.text,
             r'<a[^>]+href="#citation-1"[^>]*>\[1\]</a>',
@@ -152,7 +175,7 @@ class TestStoryRoutes(unittest.TestCase):
         self.assertEqual(scope.group_id, 1)
         self.assertEqual(scope.query_text, "milestone")
         self.assertEqual(story_format, "detailed_chronology")
-        self.assertEqual([entry.id for entry in entries], [earliest_id, latest_id])
+        self.assertEqual([entry.id for entry in entries], [earliest_id, middle_id, latest_id])
 
     def test_generate_story_keeps_empty_scope_non_fatal(self) -> None:
         mocked_generation = AsyncMock()
@@ -171,6 +194,147 @@ class TestStoryRoutes(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("No entries match this scope yet", response.text)
         self.assertEqual(mocked_generation.await_count, 0)
+
+    def test_generate_deck_after_narrative_embeds_artifact(
+        self,
+    ) -> None:
+        with connection_context() as connection:
+            entry_id = self._create_entry(
+                connection,
+                year=2026,
+                month=3,
+                day=19,
+                title="Deck citation entry",
+                final_text="<p>Deck citation body.</p>",
+            )
+
+        mocked_deck_generation = AsyncMock(
+            return_value=GeneratedExecutiveDeck(
+                title="Deck-backed narrative",
+                subtitle="Executive readout",
+                slides=[
+                    GeneratedExecutiveDeckSlide(
+                        slide_key="deck-title",
+                        headline="Deck-backed narrative",
+                        purpose="title",
+                        body_points=["Deck body point"],
+                        callouts=["Deck callout"],
+                        visuals=["pull_quote"],
+                        citations=[entry_id],
+                    )
+                ],
+                provider_name="copilot",
+                source_entry_count=1,
+                truncated_input=False,
+            )
+        )
+        mocked_artifact_builder = patch(
+            "app.main.build_executive_deck_artifact",
+            return_value=TimelineStoryArtifactSavePayload(
+                artifact_kind="executive_deck",
+                source_format="marpit_markdown",
+                source_text="---\nmarpit: true\n---\n# Deck",
+                compiled_html='<div class="marpit"><section><h1>Deck</h1></section></div>',
+                compiled_css="section { color: #123456; }",
+                metadata_json='{"slide_count":1}',
+                generated_utc="2026-03-19T12:00:00+00:00",
+                compiled_utc="2026-03-19T12:00:02+00:00",
+                compiler_name="marpit",
+                compiler_version="4.1.2",
+            ),
+        )
+
+        citations_json = json.dumps(
+            [
+                {
+                    "entry_id": entry_id,
+                    "citation_order": 1,
+                    "quote_text": "Deck citation body.",
+                    "note": "Narrative evidence",
+                }
+            ]
+        )
+
+        with (
+            patch("app.main.generate_executive_deck", mocked_deck_generation),
+            mocked_artifact_builder,
+        ):
+            with TestClient(app) as client:
+                response = client.post(
+                    "/story/generate-deck",
+                    data={
+                        "group_id": "1",
+                        "format": "executive_summary",
+                        "title": "Deck-backed narrative",
+                        "narrative_html": "<section><h2>Current state</h2><p>Narrative body.</p></section>",
+                        "narrative_text": "Current state\n\nNarrative body.",
+                        "generated_utc": "2026-03-19T12:00:00+00:00",
+                        "provider_name": "copilot",
+                        "source_entry_count": "1",
+                        "truncated_input": "false",
+                        "error_text": "",
+                        "citations_json": citations_json,
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Deck-backed narrative", response.text)
+        self.assertIn("Presentation Preview", response.text)
+        self.assertIn("Open fullscreen", response.text)
+        self.assertIn("Download HTML", response.text)
+        self.assertIn('name="presentation_artifact_json"', response.text)
+        self.assertEqual(mocked_deck_generation.await_count, 1)
+
+    def test_generate_deck_failure_keeps_narrative_usable(
+        self,
+    ) -> None:
+        with connection_context() as connection:
+            entry_id = self._create_entry(
+                connection,
+                year=2026,
+                month=3,
+                day=19,
+                title="Narrative survives deck failure",
+                final_text="<p>Deck failure citation body.</p>",
+            )
+
+        citations_json = json.dumps(
+            [
+                {
+                    "entry_id": entry_id,
+                    "citation_order": 1,
+                    "quote_text": "Deck failure citation body.",
+                    "note": None,
+                }
+            ]
+        )
+
+        with patch(
+            "app.main.generate_executive_deck",
+            AsyncMock(side_effect=StoryGenerationError("Deck provider unavailable.")),
+        ):
+            with TestClient(app) as client:
+                response = client.post(
+                    "/story/generate-deck",
+                    data={
+                        "group_id": "1",
+                        "format": "executive_summary",
+                        "title": "Narrative survives deck failure",
+                        "narrative_html": "<section><h2>Current state</h2><p>The narrative is still rendered.</p></section>",
+                        "narrative_text": "Current state\n\nThe narrative is still rendered.",
+                        "generated_utc": "2026-03-19T12:00:00+00:00",
+                        "provider_name": "copilot",
+                        "source_entry_count": "1",
+                        "truncated_input": "false",
+                        "error_text": "",
+                        "citations_json": citations_json,
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Narrative survives deck failure", response.text)
+        self.assertIn("Deck provider unavailable.", response.text)
+        self.assertNotIn('name="presentation_artifact_json"', response.text)
 
     def test_save_story_redirects_and_saved_story_page_renders_snapshot(self) -> None:
         with connection_context() as connection:
@@ -236,6 +400,89 @@ class TestStoryRoutes(unittest.TestCase):
         self.assertEqual(
             [citation.entry_id for citation in story.citations], [entry_id]
         )
+
+    def test_save_story_with_presentation_artifact_persists_toggle_and_route(self) -> None:
+        with connection_context() as connection:
+            entry_id = self._create_entry(
+                connection,
+                year=2026,
+                month=3,
+                day=19,
+                title="Presentation citation entry",
+                final_text="<p>Presentation citation body.</p>",
+            )
+
+        citations_json = json.dumps(
+            [
+                {
+                    "entry_id": entry_id,
+                    "citation_order": 1,
+                    "quote_text": "Presentation citation body.",
+                    "note": "Snapshot citation",
+                }
+            ]
+        )
+        presentation_artifact_json = json.dumps(
+            {
+                "artifact_kind": "executive_deck",
+                "source_format": "marpit_markdown",
+                "source_text": "---\nmarpit: true\n---\n# Deck",
+                "compiled_html": '<div class="marpit"><section><h1>Deck</h1></section></div>',
+                "compiled_css": "section { color: #123456; }",
+                "metadata_json": '{"slide_count":1}',
+                "generated_utc": "2026-03-19T12:00:00+00:00",
+                "compiled_utc": "2026-03-19T12:00:02+00:00",
+                "compiler_name": "marpit",
+                "compiler_version": "4.1.2",
+            }
+        )
+
+        with TestClient(app) as client:
+            save_response = client.post(
+                "/story/save",
+                data={
+                    "group_id": "1",
+                    "format": "executive_summary",
+                    "title": "Saved scope story",
+                    "narrative_html": "<section><h2>Current State</h2><p>Snapshot body.</p></section>",
+                    "narrative_text": "Current State\n\nSnapshot body.",
+                    "generated_utc": "2026-03-19T12:00:00+00:00",
+                    "provider_name": "copilot",
+                    "source_entry_count": "1",
+                    "truncated_input": "false",
+                    "error_text": "",
+                    "citations_json": citations_json,
+                    "presentation_artifact_json": presentation_artifact_json,
+                },
+                follow_redirects=False,
+            )
+
+            self.assertEqual(save_response.status_code, 303)
+            location = save_response.headers["location"]
+            story_id = int(location.rsplit("/", 1)[1])
+
+            saved_response = client.get(location)
+            presentation_view_response = client.get(f"{location}?view=presentation")
+            presentation_response = client.get(f"/story/{story_id}/presentation")
+
+        self.assertEqual(saved_response.status_code, 200)
+        self.assertIn("Deck ready", saved_response.text)
+        self.assertIn(f'href="/story/{story_id}?view=presentation"', saved_response.text)
+
+        self.assertEqual(presentation_view_response.status_code, 200)
+        self.assertIn(f'src="/story/{story_id}/presentation"', presentation_view_response.text)
+
+        self.assertEqual(presentation_response.status_code, 200)
+        self.assertIn('<div class="marpit">', presentation_response.text)
+        self.assertIn("section { color: #123456; }", presentation_response.text)
+        self.assertIn(".et-slide--thank_you .et-pull-quote", presentation_response.text)
+
+        with connection_context() as connection:
+            artifact = get_story_artifact(connection, story_id, "executive_deck")
+
+        self.assertIsNotNone(artifact)
+        assert artifact is not None
+        self.assertEqual(artifact.compiler_name, "marpit")
 
     def test_story_route_workflow_covers_launch_generate_save_and_reload(self) -> None:
         with connection_context() as connection:

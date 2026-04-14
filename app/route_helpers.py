@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import calendar
 from collections.abc import Mapping
+from dataclasses import asdict
 from html import escape
 import json
 import sqlite3
@@ -23,6 +24,7 @@ from app.models import (
     Entry,
     EntrySourceSnapshot,
     SearchResult,
+    StoryArtifactKind,
     StoryFormat,
     TimelineGroup,
     TimelineStoryCitation,
@@ -30,6 +32,7 @@ from app.models import (
 )
 from app.schemas import (
     EntryFormState,
+    TimelineStoryArtifactSavePayload,
     TimelineStoryCitationPayload,
     TimelineStoryFormState,
     TimelineStorySavePayload,
@@ -268,6 +271,10 @@ class StoryResultContext(TypedDict):
     is_saved: bool
     citations: list[StoryCitationContext]
     save_citations_json: str
+    presentation_ready: bool
+    presentation_url: str | None
+    presentation_artifact_json: str | None
+    presentation_warning: str | None
 
 
 class StoryPageContext(TypedDict, total=False):
@@ -285,6 +292,7 @@ class StoryPageContext(TypedDict, total=False):
     feedback_message: str | None
     feedback_class: str
     story_result: StoryResultContext | None
+    story_view_mode: str
 
 
 class TimelineGroupWebSearchPayload(TypedDict):
@@ -651,6 +659,7 @@ def _build_story_form_state(
     year: int | str | None,
     month: int | str | None,
     story_format: StoryFormat,
+    include_deck: bool = False,
     errors: dict[str, str] | None = None,
 ) -> TimelineStoryFormState:
     return TimelineStoryFormState(
@@ -660,6 +669,7 @@ def _build_story_form_state(
             "year": "" if year is None else str(year),
             "month": "" if month is None else str(month),
             "format": story_format,
+            "include_deck": "true" if include_deck else "",
         },
         errors=errors or {},
     )
@@ -699,6 +709,8 @@ def _build_story_page_context(
     feedback_message: str | None = None,
     feedback_class: str = "warning",
     story_result: StoryResultContext | None = None,
+    include_deck: bool = False,
+    story_view_mode: str = "narrative",
 ) -> StoryPageContext:
     selected_group_name = (
         group_scope["selected_group"].name
@@ -719,6 +731,7 @@ def _build_story_page_context(
             year=story_scope.year,
             month=story_scope.month,
             story_format=story_format,
+            include_deck=include_deck,
         ),
         "story_formats": _build_story_format_options(story_format),
         "story_scope": _build_story_scope_details(
@@ -729,6 +742,7 @@ def _build_story_page_context(
         "feedback_message": feedback_message,
         "feedback_class": feedback_class,
         "story_result": story_result,
+        "story_view_mode": story_view_mode,
     }
     return context
 
@@ -738,6 +752,9 @@ def _build_generated_story_result(
     *,
     entries: list[Entry],
     generated_utc: str,
+    presentation_ready: bool = False,
+    presentation_artifact_json: str | None = None,
+    presentation_warning: str | None = None,
 ) -> StoryResultContext:
     entry_lookup = {entry.id: entry for entry in entries}
     citations = _build_story_citation_contexts(
@@ -767,6 +784,10 @@ def _build_generated_story_result(
         "error_text": None,
         "is_saved": False,
         "citations": citations,
+        "presentation_ready": presentation_ready,
+        "presentation_url": None,
+        "presentation_artifact_json": presentation_artifact_json,
+        "presentation_warning": presentation_warning,
         "save_citations_json": json.dumps(
             [
                 {
@@ -793,6 +814,7 @@ def _build_posted_story_result(
     truncated_input: str,
     error_text: str,
     citations_json: str,
+    presentation_artifact_json: str,
     entries: list[Entry],
 ) -> StoryResultContext | None:
     if not title.strip() and not narrative_html.strip():
@@ -828,6 +850,10 @@ def _build_posted_story_result(
         "error_text": error_text.strip() or None,
         "is_saved": False,
         "citations": citations,
+        "presentation_ready": bool(presentation_artifact_json.strip()),
+        "presentation_url": None,
+        "presentation_artifact_json": presentation_artifact_json or None,
+        "presentation_warning": None,
         "save_citations_json": citations_json,
     }
 
@@ -1025,6 +1051,69 @@ def _parse_story_citation_payloads(
                 return []
             raise ValueError("Generated citations could not be parsed.") from exc
     return citations
+
+
+def _serialize_story_artifact_payload(
+    payload: TimelineStoryArtifactSavePayload,
+) -> str:
+    """Serialize a generated presentation artifact for Story Mode form reuse."""
+    return json.dumps(asdict(payload), separators=(",", ":"), sort_keys=True)
+
+
+def _parse_story_artifact_payload(
+    raw_value: str,
+) -> TimelineStoryArtifactSavePayload | None:
+    """Parse the hidden presentation artifact payload when saving a story."""
+    normalized = raw_value.strip()
+    if not normalized:
+        return None
+
+    try:
+        parsed = json.loads(normalized)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Generated presentation artifact could not be parsed.") from exc
+
+    if not isinstance(parsed, dict):
+        raise ValueError("Generated presentation artifact could not be parsed.")
+
+    try:
+        payload = TimelineStoryArtifactSavePayload(
+            artifact_kind=cast(StoryArtifactKind, str(parsed["artifact_kind"])),
+            source_format=str(parsed["source_format"]),
+            source_text=str(parsed["source_text"]),
+            compiled_html=str(parsed.get("compiled_html", "")),
+            compiled_css=str(parsed.get("compiled_css", "")),
+            metadata_json=str(parsed.get("metadata_json", "{}")),
+            generated_utc=str(parsed.get("generated_utc", "")),
+            compiled_utc=(
+                str(parsed["compiled_utc"])
+                if parsed.get("compiled_utc") is not None
+                else None
+            ),
+            compiler_name=(
+                str(parsed["compiler_name"])
+                if parsed.get("compiler_name") is not None
+                else None
+            ),
+            compiler_version=(
+                str(parsed["compiler_version"])
+                if parsed.get("compiler_version") is not None
+                else None
+            ),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("Generated presentation artifact could not be parsed.") from exc
+
+    if payload.artifact_kind != "executive_deck":
+        raise ValueError("Generated presentation artifact could not be parsed.")
+    return payload
+
+
+def _parse_story_view_mode(raw_value: str, *, has_presentation: bool) -> str:
+    """Resolve the saved story view mode with a narrative fallback."""
+    if has_presentation and raw_value.strip().lower() == "presentation":
+        return "presentation"
+    return "narrative"
 
 
 def _encode_sse_event(event_name: str, payload: Mapping[str, object]) -> str:

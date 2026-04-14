@@ -15,5 +15,8 @@
     "@playwright/test": "^1.58.0",
     "@types/node": "^24.6.0",
     "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@marp-team/marpit": "^3.2.1"
   }
 }

@@ -227,6 +227,25 @@ TIMELINE_STORY_SCHEMA_STATEMENTS = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_timeline_story_entries_story_order ON timeline_story_entries(story_id, citation_order)",
     "CREATE INDEX IF NOT EXISTS idx_timeline_story_entries_entry_id ON timeline_story_entries(entry_id)",
+    """
+    CREATE TABLE IF NOT EXISTS timeline_story_artifacts (
+        id INTEGER PRIMARY KEY,
+        story_id INTEGER NOT NULL,
+        artifact_kind TEXT NOT NULL,
+        source_format TEXT NOT NULL,
+        source_text TEXT NOT NULL,
+        compiled_html TEXT NOT NULL DEFAULT '',
+        compiled_css TEXT NOT NULL DEFAULT '',
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        generated_utc TEXT NOT NULL,
+        compiled_utc TEXT NULL,
+        compiler_name TEXT NULL,
+        compiler_version TEXT NULL,
+        FOREIGN KEY (story_id) REFERENCES timeline_stories(id) ON DELETE CASCADE
+    )
+    """,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_timeline_story_artifacts_story_kind_unique ON timeline_story_artifacts(story_id, artifact_kind)",
+    "CREATE INDEX IF NOT EXISTS idx_timeline_story_artifacts_story_id ON timeline_story_artifacts(story_id)",
 ]
 
 FTS_TABLE_SQL = """

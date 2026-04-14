@@ -12,15 +12,17 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from app.env import load_app_env
-from app.models import Entry, TimelineStoryScope
+from app.models import Entry, GeneratedExecutiveDeck, TimelineStoryScope
 from app.services.ai_story_mode import (
     CopilotChatStoryGenerator,
     GeneratedTimelineStory,
     OpenAIChatStoryGenerator,
     StoryGenerationConfigurationError,
     StoryGenerationError,
+    _parse_deck_generation_response,
     _parse_generation_response,
     get_story_generator,
+    get_story_generation_timeout_seconds,
     load_story_ai_provider,
 )
 from app.services.ai_generate import CopilotSettings, OpenAISettings
@@ -235,12 +237,126 @@ class TestOpenAIChatStoryGenerator(unittest.TestCase):
         self.assertIsNotNone(await_args)
         assert await_args is not None
         prompt = await_args.kwargs["messages"][1]["content"]
-        self.assertIn("Input was truncated to the most recent scoped entries", prompt)
+        self.assertIn(
+            "Detailed context is limited to the most recent scoped entries.",
+            prompt,
+        )
+        self.assertIn("Older history summary (1 earlier scoped entry", prompt)
+        self.assertIn("Earliest milestone", prompt)
+        self.assertIn(
+            "Detailed recent entries for citation and specifics (2 most recent scoped entries)",
+            prompt,
+        )
         self.assertIn("entry_id=2", prompt)
         self.assertIn("entry_id=3", prompt)
         self.assertNotIn("entry_id=1", prompt)
         self.assertNotIn("extra extra extra extra extra", prompt)
         self.assertNotIn("temperature", await_args.kwargs)
+
+    def test_generate_executive_deck_uses_bounded_chronological_entry_context(
+        self,
+    ) -> None:
+        create = AsyncMock(
+            return_value=SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content=json.dumps(
+                                {
+                                    "title": "Launch deck",
+                                    "subtitle": "Recent movement",
+                                    "slides": [
+                                        {
+                                            "slide_key": "launch-title",
+                                            "headline": "Launch at a glance",
+                                            "purpose": "title",
+                                            "body_points": [
+                                                "Launch readiness moved into delivery.",
+                                                "The latest milestone confirmed momentum.",
+                                            ],
+                                            "callouts": [
+                                                "Validated the second milestone.",
+                                            ],
+                                            "visuals": [{"kind": "pull_quote"}],
+                                            "citations": [2, 3],
+                                        }
+                                    ],
+                                }
+                            )
+                        )
+                    )
+                ]
+            )
+        )
+        client = SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+        )
+        scope = TimelineStoryScope(scope_type="timeline", group_id=1)
+        entries = [
+            _entry(
+                3,
+                2026,
+                3,
+                18,
+                "Latest milestone",
+                "<p>Shipped the latest milestone after the review was complete.</p>",
+            ),
+            _entry(
+                1,
+                2024,
+                11,
+                2,
+                "Earliest milestone",
+                "<p>Earliest milestone with a very long body.</p>" + (" extra" * 200),
+            ),
+            _entry(
+                2,
+                2025,
+                5,
+                10,
+                "Second milestone",
+                "<p>Validated the second milestone and prepared the release.</p>",
+            ),
+        ]
+
+        with patch("app.services.ai_story_mode.AsyncOpenAI", return_value=client):
+            generator = OpenAIChatStoryGenerator(
+                OpenAISettings(api_key="test-key", model_id="gpt-5")
+            )
+            deck = _run_async(
+                generator.generate_executive_deck(
+                    scope,
+                    entries,
+                    max_entries=2,
+                )
+            )
+
+        self.assertIsInstance(deck, GeneratedExecutiveDeck)
+        self.assertEqual(deck.provider_name, "openai")
+        self.assertEqual(deck.title, "Launch deck")
+        self.assertEqual(deck.source_entry_count, 2)
+        self.assertTrue(deck.truncated_input)
+        self.assertEqual(deck.slides[0].visuals, ["pull_quote"])
+        self.assertEqual(deck.slides[0].citations, [2, 3])
+
+        await_args = create.await_args
+        self.assertIsNotNone(await_args)
+        assert await_args is not None
+        prompt = await_args.kwargs["messages"][1]["content"]
+        self.assertIn("Allowed slide purposes", prompt)
+        self.assertIn(
+            "Detailed context is limited to the most recent scoped entries.",
+            prompt,
+        )
+        self.assertIn("Older history summary (1 earlier scoped entry", prompt)
+        self.assertIn("Earliest milestone", prompt)
+        self.assertIn(
+            "Detailed recent entries for citation and specifics (2 most recent scoped entries)",
+            prompt,
+        )
+        self.assertIn("entry_id=2", prompt)
+        self.assertIn("entry_id=3", prompt)
+        self.assertNotIn("entry_id=1", prompt)
 
 
 class TestStoryGenerationParsing(unittest.TestCase):
@@ -313,6 +429,81 @@ class TestStoryGenerationParsing(unittest.TestCase):
         self.assertEqual(story.citations[0].entry_id, 2)
         self.assertEqual(story.citations[0].quote_text, "A useful quote")
         self.assertEqual(story.citations[0].note, "Still relevant later")
+
+    def test_parse_deck_generation_response_drops_unknown_citation_entry(
+        self,
+    ) -> None:
+        deck = _parse_deck_generation_response(
+            json.dumps(
+                {
+                    "title": "Filtered deck",
+                    "subtitle": None,
+                    "slides": [
+                        {
+                            "slide_key": "filtered-slide",
+                            "headline": "Filtered slide",
+                            "purpose": "summary",
+                            "body_points": ["Body"],
+                            "callouts": ["Callout"],
+                            "visuals": [{"kind": "kpi_strip"}],
+                            "citations": [99],
+                        }
+                    ],
+                }
+            ),
+            allowed_entry_ids={1, 2},
+        )
+        self.assertEqual(len(deck.slides), 1)
+        self.assertEqual(deck.slides[0].citations, [])
+
+    def test_parse_deck_generation_response_normalizes_order_and_visuals(self) -> None:
+        deck = _parse_deck_generation_response(
+            "```json\n"
+            + json.dumps(
+                {
+                    "title": "  Launch   deck  ",
+                    "subtitle": "  Executive  readout ",
+                    "slides": [
+                        {
+                            "slide_key": "summary slide",
+                            "headline": "Summary",
+                            "purpose": "summary",
+                            "body_points": ["Momentum increased."],
+                            "callouts": ["Validation completed."],
+                            "visuals": ["kpi_strip", {"kind": "pull_quote"}],
+                            "citations": [2, "3", 2],
+                        },
+                        {
+                            "slide_key": " title slide ",
+                            "headline": "Launch at a glance",
+                            "purpose": "title",
+                            "body_points": ["Delivery is now underway."],
+                            "callouts": ["Latest signals are positive."],
+                            "visuals": [],
+                            "citations": [3],
+                        },
+                        {
+                            "slide_key": "wrap-up",
+                            "headline": "Close",
+                            "purpose": "close",
+                            "body_points": ["Watch follow-through on execution."],
+                            "callouts": ["Execution risk is lower than last quarter."],
+                            "visuals": [{"kind": "phase_timeline"}],
+                            "citations": [2],
+                        },
+                    ],
+                }
+            )
+            + "\n```",
+            allowed_entry_ids={2, 3},
+        )
+
+        self.assertEqual(deck.title, "Launch deck")
+        self.assertEqual(deck.subtitle, "Executive readout")
+        self.assertEqual([slide.purpose for slide in deck.slides], ["title", "summary", "close"])
+        self.assertEqual(deck.slides[0].slide_key, "title-slide")
+        self.assertEqual(deck.slides[1].visuals, ["kpi_strip", "pull_quote"])
+        self.assertEqual(deck.slides[1].citations, [2, 3])
 
 
 class TestCopilotChatStoryGenerator(unittest.TestCase):
@@ -400,7 +591,76 @@ class TestCopilotChatStoryGenerator(unittest.TestCase):
         self.assertTrue(fake_client.session.closed)
         prompt = cast(str, fake_client.session.send_calls[0]["prompt"])
         self.assertIn("Requested format: executive_summary", prompt)
-        self.assertEqual(fake_client.session.timeouts[0], 60.0)
+        self.assertEqual(fake_client.session.timeouts[0], get_story_generation_timeout_seconds())
+
+    def test_generate_executive_deck_parses_copilot_response(self) -> None:
+        fake_client = _FakeCopilotClient(
+            response=SimpleNamespace(
+                content=json.dumps(
+                    {
+                        "title": "Executive deck",
+                        "subtitle": None,
+                        "slides": [
+                            {
+                                "slide_key": "deck-title",
+                                "headline": "Launch at a glance",
+                                "purpose": "title",
+                                "body_points": [
+                                    "The launch period moved from planning into delivery.",
+                                ],
+                                "callouts": [
+                                    "Release prep completed.",
+                                ],
+                                "visuals": [{"kind": "pull_quote"}],
+                                "citations": [7],
+                            }
+                        ],
+                    }
+                )
+            )
+        )
+        scope = TimelineStoryScope(
+            scope_type="search", query_text="launch", group_id=None
+        )
+        entries = [
+            _entry(
+                7,
+                2026,
+                3,
+                12,
+                "Release prep",
+                "<p>Release prep completed and the team aligned on launch communications.</p>",
+            )
+        ]
+
+        with (
+            patch(
+                "app.services.copilot_runtime.instantiate_copilot_client",
+                return_value=fake_client,
+            ),
+            patch(
+                "app.services.copilot_runtime.get_permission_handler",
+                return_value="approve-all",
+            ),
+        ):
+            deck = _run_async(
+                CopilotChatStoryGenerator(
+                    CopilotSettings(model_id="gpt-5")
+                ).generate_executive_deck(
+                    scope,
+                    entries,
+                )
+            )
+
+        self.assertEqual(deck.provider_name, "copilot")
+        self.assertEqual(deck.title, "Executive deck")
+        self.assertEqual(deck.slides[0].visuals, ["pull_quote"])
+        self.assertEqual(deck.slides[0].citations, [7])
+        self.assertEqual(fake_client.config["model"], "gpt-5")
+        self.assertEqual(fake_client.config["on_permission_request"], "approve-all")
+        system_content = fake_client.config["system_message"]["content"]
+        self.assertIn("You write grounded executive presentation decks", system_content)
+        self.assertIn('"slides"', system_content)
 
 
 def _entry(

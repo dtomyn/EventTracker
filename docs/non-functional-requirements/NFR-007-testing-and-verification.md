@@ -7,7 +7,7 @@
 
 ## Requirement Statements
 
-- NFR-007-01 The repository shall maintain automated test coverage for database behavior, entry workflows, search, AI services, group web search, Story Mode, import utilities, and smoke-level application startup.
+- NFR-007-01 The repository shall maintain automated test coverage for database behavior, entry workflows, search, AI services, group web search, Story Mode narrative and presentation workflows, import utilities, and smoke-level application startup.
 - NFR-007-02 The repository shall maintain Python browser end-to-end coverage under `tests/e2e` against an isolated temporary database rather than the live database file.
 - NFR-007-02a The repository shall maintain TypeScript Playwright end-to-end coverage under `tstests/e2e` using the same isolation model (temporary database copy, free port, automatic teardown).
 - NFR-007-02b TypeScript E2E specs shall import `test` and `expect` from the project harness (`tstests/e2e/helpers/harness.ts`) rather than from `@playwright/test` directly, and shall use Page Object Models under `tstests/e2e/poms/` for reusable page interactions.
@@ -20,4 +20,4 @@
 ## Acceptance Notes
 
 - Current repository guidance notes that Playwright collection on Windows under uv-selected Python 3.14 is unreliable; Python 3.12 is the documented path for that suite.
-- Smoke and E2E tests assert user-visible behaviors such as validation states, story workflows, export shape, and timeline drill-down.
+- Smoke and E2E tests assert user-visible behaviors such as validation states, story and presentation workflows, export shape, and timeline drill-down.

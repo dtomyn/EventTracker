@@ -2,7 +2,7 @@
 
 - Category: Functional
 - Status: Baseline
-- Scope: Index of the functional requirement documents derived from the implemented EventTracker repository as of 2026-04-06.
+- Scope: Index of the functional requirement documents derived from the implemented EventTracker repository as of 2026-04-14.
 - Primary Sources: `README.md`, `app/main.py`, `app/services/*`, `scripts/*`, `tests/*`
 
 ## Requirement Statements
@@ -18,7 +18,7 @@
 - `FR-003-search-and-filtering.md`: timeline filtering and ranked search behavior.
 - `FR-004-group-administration.md`: timeline group management rules.
 - `FR-005-ai-draft-generation.md`: AI-assisted entry draft generation and HTML preview behavior.
-- `FR-006-story-mode.md`: scoped narrative generation and snapshot behavior.
+- `FR-006-story-mode.md`: scoped narrative and executive presentation generation, snapshot behavior, and saved-story view switching.
 - `FR-007-group-web-search.md`: Copilot-backed group web search behavior.
 - `FR-008-data-portability-and-tools.md`: export, import, initialization, and developer utility behavior.
 - `FR-009-application-shell-and-theme.md`: shared navigation and theme behavior.

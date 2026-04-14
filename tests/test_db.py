@@ -109,6 +109,12 @@ class TestDatabaseInitialization(unittest.TestCase):
                         "PRAGMA table_info(timeline_story_entries)"
                     ).fetchall()
                 )
+                artifact_columns = tuple(
+                    row[1]
+                    for row in connection.execute(
+                        "PRAGMA table_info(timeline_story_artifacts)"
+                    ).fetchall()
+                )
                 story_indexes = {
                     row[1]
                     for row in connection.execute(
@@ -119,6 +125,12 @@ class TestDatabaseInitialization(unittest.TestCase):
                     row[1]
                     for row in connection.execute(
                         "PRAGMA index_list(timeline_story_entries)"
+                    ).fetchall()
+                }
+                artifact_indexes = {
+                    row[1]
+                    for row in connection.execute(
+                        "PRAGMA index_list(timeline_story_artifacts)"
                     ).fetchall()
                 }
             finally:
@@ -149,6 +161,23 @@ class TestDatabaseInitialization(unittest.TestCase):
             citation_columns,
             ("story_id", "entry_id", "citation_order", "quote_text", "note"),
         )
+        self.assertEqual(
+            artifact_columns,
+            (
+                "id",
+                "story_id",
+                "artifact_kind",
+                "source_format",
+                "source_text",
+                "compiled_html",
+                "compiled_css",
+                "metadata_json",
+                "generated_utc",
+                "compiled_utc",
+                "compiler_name",
+                "compiler_version",
+            ),
+        )
         self.assertIn(
             "idx_timeline_stories_scope_generated_utc",
             story_indexes,
@@ -160,6 +189,14 @@ class TestDatabaseInitialization(unittest.TestCase):
         self.assertIn(
             "idx_timeline_story_entries_entry_id",
             citation_indexes,
+        )
+        self.assertIn(
+            "idx_timeline_story_artifacts_story_kind_unique",
+            artifact_indexes,
+        )
+        self.assertIn(
+            "idx_timeline_story_artifacts_story_id",
+            artifact_indexes,
         )
 
     def test_init_db_creates_entry_source_snapshot_table(self) -> None:
