@@ -73,6 +73,18 @@ class _FakeCopilotSession:
         self.closed = True
 
 
+class _FakeModernCopilotSession:
+    def __init__(self, response: object) -> None:
+        self.response = response
+        self.prompts: list[str] = []
+        self.timeouts: list[float] = []
+
+    async def send_and_wait(self, prompt: str, *, timeout: float = 60.0) -> object:
+        self.prompts.append(prompt)
+        self.timeouts.append(timeout)
+        return self.response
+
+
 class _FakeDisconnectOnlySession:
     def __init__(self) -> None:
         self.disconnected = False
@@ -387,6 +399,21 @@ class TestCopilotSdkWrapper(unittest.TestCase):
         _run_async(exercise())
 
         self.assertTrue(session.disconnected)
+
+    def test_send_copilot_prompt_supports_string_prompt_signature(self) -> None:
+        session = _FakeModernCopilotSession(response="ok")
+
+        response = _run_async(
+            copilot_runtime.send_copilot_prompt(
+                cast(Any, session),
+                "Reply with ok.",
+                timeout=12.5,
+            )
+        )
+
+        self.assertEqual(response, "ok")
+        self.assertEqual(session.prompts, ["Reply with ok."])
+        self.assertEqual(session.timeouts, [12.5])
 
 
 class TestCopilotChatDraftGenerator(unittest.TestCase):

@@ -67,6 +67,7 @@ FULL_FRAME_NAMES = [
     "18-dark-mode.png",
     "19-story-mode-screen.png",
     "20-story-generated.png",
+    "21-story-presentation-option.png",
 ]
 NO_SEARCH_FRAME_NAMES = [
     "01-home.png",
@@ -86,6 +87,7 @@ NO_SEARCH_FRAME_NAMES = [
     "18-dark-mode.png",
     "19-story-mode-screen.png",
     "20-story-generated.png",
+    "21-story-presentation-option.png",
 ]
 
 
@@ -142,11 +144,17 @@ def wait_for_recent_results(page: Page, timeout_seconds: int = 120) -> None:
     deadline = time.monotonic() + timeout_seconds
     results = page.locator("[data-group-web-search-results] a")
     loading = page.locator("[data-group-web-search-loading]")
+    error = page.locator("[data-group-web-search-error]")
+    empty = page.locator("[data-group-web-search-empty]")
     while time.monotonic() < deadline:
-        if results.count() > 0 and not loading.is_visible():
+        if not loading.is_visible() and (
+            results.count() > 0
+            or error.is_visible()
+            or empty.is_visible()
+        ):
             return
         page.wait_for_timeout(1_000)
-    raise TimeoutError("Timed out waiting for Recent Developments results.")
+    raise TimeoutError("Timed out waiting for Recent Developments to settle.")
 
 
 def wait_for_generated_summary(page: Page, timeout_seconds: int = 120) -> None:
@@ -366,6 +374,12 @@ def capture_assets(page: Page, base_url: str, output_dir: Path) -> list[Path]:
     # 20 - Story generated
     page.locator("[data-story-generate-button]").click(no_wait_after=True)
     wait_for_story_result(page)
+    page.wait_for_timeout(500)
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # 21 - Generate presentation option
+    story_deck_cta = page.locator("[data-story-deck-cta]")
+    story_deck_cta.scroll_into_view_if_needed()
     page.wait_for_timeout(500)
     save_screenshot(page, output_paths[idx]); idx += 1
 

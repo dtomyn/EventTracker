@@ -195,7 +195,21 @@ async def prepare_copilot_resource(
 async def send_copilot_prompt(
     session: CopilotSession, prompt: str, *, timeout: float
 ) -> object:
-    return await session.send_and_wait({"prompt": prompt}, timeout=timeout)
+    send_and_wait = cast(Any, session).send_and_wait
+    try:
+        parameters = tuple(signature(send_and_wait).parameters.values())
+    except (TypeError, ValueError):
+        parameters = ()
+
+    if parameters:
+        if parameters[0].name == "prompt":
+            return await send_and_wait(prompt, timeout=timeout)
+        return await send_and_wait({"prompt": prompt}, timeout)
+
+    try:
+        return await send_and_wait(prompt, timeout=timeout)
+    except TypeError:
+        return await send_and_wait({"prompt": prompt}, timeout)
 
 
 def extract_copilot_message_content(response: object) -> str:
