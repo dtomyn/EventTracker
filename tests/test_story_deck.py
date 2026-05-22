@@ -3,7 +3,12 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from app.models import Entry, GeneratedExecutiveDeck, GeneratedExecutiveDeckSlide, TimelineStoryScope
+from app.models import (
+    Entry,
+    GeneratedExecutiveDeck,
+    GeneratedExecutiveDeckSlide,
+    TimelineStoryScope,
+)
 from app.services.story_deck import (
     StoryDeckRuntimeUnavailableError,
     build_executive_deck_artifact,
@@ -57,7 +62,9 @@ class TestStoryDeckMarkdown(unittest.TestCase):
         self.assertNotIn("size: 16:9", document.markdown)
         self.assertNotIn('<section class="et-slide', document.markdown)
         self.assertEqual(document.citation_orders_by_slide["launch-summary"], [1, 2])
-        self.assertEqual(document.visual_kinds, ["pull_quote", "kpi_strip", "phase_timeline"])
+        self.assertEqual(
+            document.visual_kinds, ["pull_quote", "kpi_strip", "phase_timeline"]
+        )
 
     def test_build_executive_deck_artifact_sanitizes_renderer_output(self) -> None:
         deck = GeneratedExecutiveDeck(
@@ -104,7 +111,9 @@ class TestStoryDeckMarkdown(unittest.TestCase):
         self.assertNotIn("https://example.com", artifact.compiled_html)
         self.assertIn('"theme_name":"eventtracker-executive"', artifact.metadata_json)
 
-    def test_build_executive_deck_markdown_deduplicates_text_reused_by_visuals(self) -> None:
+    def test_build_executive_deck_markdown_deduplicates_text_reused_by_visuals(
+        self,
+    ) -> None:
         deck = GeneratedExecutiveDeck(
             title="Trajectory deck",
             subtitle="Executive readout",
@@ -147,7 +156,9 @@ class TestStoryDeckMarkdown(unittest.TestCase):
             1,
         )
 
-    def test_build_executive_deck_markdown_drops_exact_duplicate_model_items(self) -> None:
+    def test_build_executive_deck_markdown_drops_exact_duplicate_model_items(
+        self,
+    ) -> None:
         deck = GeneratedExecutiveDeck(
             title="Duplicate cleanup deck",
             subtitle=None,
@@ -176,7 +187,9 @@ class TestStoryDeckMarkdown(unittest.TestCase):
         self.assertEqual(document.markdown.count("Observability formalizes"), 1)
         self.assertEqual(document.markdown.count("Security coalitions form"), 1)
 
-    def test_build_executive_deck_markdown_title_slide_keeps_single_primary_visual(self) -> None:
+    def test_build_executive_deck_markdown_title_slide_keeps_single_primary_visual(
+        self,
+    ) -> None:
         deck = GeneratedExecutiveDeck(
             title="Agentic era deck",
             subtitle="From prototype to production",
@@ -202,7 +215,9 @@ class TestStoryDeckMarkdown(unittest.TestCase):
         self.assertEqual(document.markdown.count("March-April 2026"), 1)
         self.assertEqual(document.markdown.count("40 signals tracked"), 1)
 
-    def test_build_executive_deck_markdown_treats_punctuation_only_variants_as_duplicates(self) -> None:
+    def test_build_executive_deck_markdown_treats_punctuation_only_variants_as_duplicates(
+        self,
+    ) -> None:
         deck = GeneratedExecutiveDeck(
             title="Duplicate punctuation deck",
             subtitle=None,
@@ -228,6 +243,31 @@ class TestStoryDeckRenderer(unittest.TestCase):
     def test_render_story_deck_markdown_requires_node(self) -> None:
         with patch("app.services.story_deck.shutil.which", return_value=None):
             with self.assertRaises(StoryDeckRuntimeUnavailableError):
+                render_story_deck_markdown("---\nmarpit: true\n---\n# Deck")
+
+    def test_render_story_deck_markdown_missing_marpit_shows_install_guidance(
+        self,
+    ) -> None:
+        missing_package_error = (
+            "Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@marp-team/marpit' "
+            "imported from E:/Git/EventTracker/scripts/render_story_deck.mjs"
+        )
+
+        with (
+            patch("app.services.story_deck.shutil.which", return_value="node"),
+            patch(
+                "app.services.story_deck.subprocess.run",
+                return_value=type(
+                    "CompletedProcessStub",
+                    (),
+                    {"returncode": 1, "stdout": "", "stderr": missing_package_error},
+                )(),
+            ),
+        ):
+            with self.assertRaisesRegex(
+                StoryDeckRuntimeUnavailableError,
+                "Run npm install",
+            ):
                 render_story_deck_markdown("---\nmarpit: true\n---\n# Deck")
 
     def test_sanitize_compiled_deck_html_strips_disallowed_tags_and_attrs(self) -> None:

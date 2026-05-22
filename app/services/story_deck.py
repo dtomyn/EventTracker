@@ -13,7 +13,13 @@ from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup, Tag
 
-from app.models import DeckVisualKind, Entry, GeneratedExecutiveDeck, GeneratedExecutiveDeckSlide, TimelineStoryScope
+from app.models import (
+    DeckVisualKind,
+    Entry,
+    GeneratedExecutiveDeck,
+    GeneratedExecutiveDeckSlide,
+    TimelineStoryScope,
+)
 from app.schemas import TimelineStoryArtifactSavePayload
 from app.services.entries import utc_now_iso
 
@@ -245,7 +251,10 @@ def render_story_deck_markdown(markdown: str) -> RenderedDeckDocument:
 
     payload = _parse_renderer_payload(result.stdout, result.stderr)
     if result.returncode != 0 or not payload.get("ok"):
-        error_message = str(payload.get("error") or "Executive presentation generation failed.")
+        raw_error_message = str(
+            payload.get("error") or "Executive presentation generation failed."
+        )
+        error_message = _normalize_renderer_error_message(raw_error_message)
         if _looks_like_missing_runtime(error_message):
             raise StoryDeckRuntimeUnavailableError(error_message)
         raise StoryDeckRenderError(error_message)
@@ -293,7 +302,9 @@ def sanitize_compiled_deck_html(value: str) -> str:
                 if _is_safe_deck_style(style_value):
                     sanitized_attributes[attribute_name] = style_value
                 continue
-            sanitized_attributes[attribute_name] = cast(str | list[str], attribute_value)
+            sanitized_attributes[attribute_name] = cast(
+                str | list[str], attribute_value
+            )
         tag.attrs = cast(Any, sanitized_attributes)
 
     return str(soup)
@@ -352,8 +363,12 @@ def _build_slide_markup(
         if subtitle and subtitle != deck.title:
             lines.append(f'<p class="et-slide-subtitle">{escape(subtitle)}</p>')
     elif slide.purpose == "thank_you":
-        lines.append('<h1>Thank You!</h1>')
-        subtitle = slide.headline if slide.headline.lower() not in ("thank you", "thank you!") else ""
+        lines.append("<h1>Thank You!</h1>")
+        subtitle = (
+            slide.headline
+            if slide.headline.lower() not in ("thank you", "thank you!")
+            else ""
+        )
         if subtitle:
             lines.append(f'<p class="et-slide-subtitle">{escape(subtitle)}</p>')
     else:
@@ -413,7 +428,9 @@ def _build_visual_markup(
     return lines
 
 
-def _effective_visuals_for_slide(slide: GeneratedExecutiveDeckSlide) -> list[DeckVisualKind]:
+def _effective_visuals_for_slide(
+    slide: GeneratedExecutiveDeckSlide,
+) -> list[DeckVisualKind]:
     """Constrain visual combinations on slides that should stay especially concise."""
     if slide.purpose != "title" or len(slide.visuals) <= 1:
         return slide.visuals
@@ -504,12 +521,14 @@ def _build_bar_chart_markup(render_queue: SlideRenderQueue) -> list[str]:
     bar_widths = [95, 72, 58, 45, 38]
     for index, item in enumerate(items):
         width = bar_widths[index] if index < len(bar_widths) else 35
-        lines.extend([
-            '<div class="et-bar-row">',
-            f'<span class="et-bar-label">{escape(item)}</span>',
-            f'<div class="et-bar-track"><div class="et-bar-fill" style="width:{width}%"></div></div>',
-            '</div>',
-        ])
+        lines.extend(
+            [
+                '<div class="et-bar-row">',
+                f'<span class="et-bar-label">{escape(item)}</span>',
+                f'<div class="et-bar-track"><div class="et-bar-fill" style="width:{width}%"></div></div>',
+                "</div>",
+            ]
+        )
     lines.append("</div>")
     return lines
 
@@ -524,11 +543,13 @@ def _build_stat_card_markup(render_queue: SlideRenderQueue) -> list[str]:
 
     lines = ['<div class="et-stat-grid">']
     for stat in stats:
-        lines.extend([
-            '<div class="et-stat-card">',
-            f'<span class="et-stat-value">{escape(stat)}</span>',
-            '</div>',
-        ])
+        lines.extend(
+            [
+                '<div class="et-stat-card">',
+                f'<span class="et-stat-value">{escape(stat)}</span>',
+                "</div>",
+            ]
+        )
     lines.append("</div>")
     return lines
 
@@ -545,12 +566,14 @@ def _build_icon_grid_markup(render_queue: SlideRenderQueue) -> list[str]:
     lines = ['<div class="et-icon-grid">']
     for index, item in enumerate(items):
         icon = _ICONS[index % len(_ICONS)]
-        lines.extend([
-            '<div class="et-icon-item">',
-            f'<span class="et-icon-symbol">{icon}</span>',
-            f'<span class="et-icon-label">{escape(item)}</span>',
-            '</div>',
-        ])
+        lines.extend(
+            [
+                '<div class="et-icon-item">',
+                f'<span class="et-icon-symbol">{icon}</span>',
+                f'<span class="et-icon-label">{escape(item)}</span>',
+                "</div>",
+            ]
+        )
     lines.append("</div>")
     return lines
 
@@ -608,7 +631,7 @@ def _build_slide_sources(
             '<a class="et-source-link" '
             f'href="/entries/{entry.id}/view" '
             f'title="{escape(link_title)}">'
-            f'[{citation_order}] {escape(entry.title)}</a>'
+            f"[{citation_order}] {escape(entry.title)}</a>"
         )
     if not source_links:
         return '<footer class="et-slide-sources">No sources linked.</footer>'
@@ -655,7 +678,27 @@ def _parse_renderer_payload(stdout: str, stderr: str) -> dict[str, object]:
 def _looks_like_missing_runtime(error_message: str) -> bool:
     """Detect missing Node or Marpit dependencies from renderer failures."""
     lowered = error_message.lower()
-    return "node.js" in lowered or "cannot find package '@marp-team/marpit'" in lowered or "marpit package is not installed" in lowered
+    return (
+        "node.js" in lowered
+        or "cannot find package '@marp-team/marpit'" in lowered
+        or "marpit package is not installed" in lowered
+        or "marpit renderer dependency is missing" in lowered
+        or ("err_module_not_found" in lowered and "@marp-team/marpit" in lowered)
+    )
+
+
+def _normalize_renderer_error_message(error_message: str) -> str:
+    """Translate noisy renderer failures into clear setup guidance."""
+    lowered = error_message.lower()
+    if "cannot find package '@marp-team/marpit'" in lowered or (
+        "err_module_not_found" in lowered and "@marp-team/marpit" in lowered
+    ):
+        return (
+            "Executive presentation generation is unavailable because the Marpit "
+            "renderer dependency is missing. Run npm install in the repository root "
+            "and try again."
+        )
+    return error_message
 
 
 def _is_safe_story_href(value: str) -> bool:

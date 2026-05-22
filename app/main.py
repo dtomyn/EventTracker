@@ -1217,9 +1217,7 @@ async def chat_query(
                 normalized_question,
                 group_id=selected_group_id,
             ):
-                payload = {
-                    key: value for key, value in event.items() if key != "kind"
-                }
+                payload = {key: value for key, value in event.items() if key != "kind"}
                 yield _encode_sse_event(str(event["kind"]), payload)
 
     return StreamingResponse(stream(), media_type="text/event-stream")
@@ -1546,9 +1544,18 @@ async def generate_story_stream(
 
     async def run_generation() -> None:
         try:
-            on_event({"kind": "status", "phase": "scope", "message": f"Gathering {len(entries)} entries from the current scope."})
+            on_event(
+                {
+                    "kind": "status",
+                    "phase": "scope",
+                    "message": f"Gathering {len(entries)} entries from the current scope.",
+                }
+            )
             generated_story = await generate_timeline_story(
-                story_scope, story_format, entries, event_sink=on_event,
+                story_scope,
+                story_format,
+                entries,
+                event_sink=on_event,
             )
             generated_utc = utc_now_iso()
             story_result = _build_generated_story_result(
@@ -1578,10 +1585,12 @@ async def generate_story_stream(
             on_event({"kind": "story_error", "message": str(exc)})
         except Exception:
             logging.getLogger(__name__).exception("Story generation stream failed")
-            on_event({
-                "kind": "story_error",
-                "message": "Story generation failed. You can adjust the scope and try again.",
-            })
+            on_event(
+                {
+                    "kind": "story_error",
+                    "message": "Story generation failed. You can adjust the scope and try again.",
+                }
+            )
         finally:
             on_event({"kind": "complete", "ok": True})
 
@@ -1667,16 +1676,31 @@ async def generate_story_deck_stream(
         presentation_artifact_json: str | None = None
         presentation_compiled_html: str | None = None
         presentation_compiled_css: str | None = None
+        presentation_warning: str | None = None
         presentation_ready = False
         feedback_message = "Executive presentation generated."
         feedback_class = "success"
 
         try:
-            on_event({"kind": "status", "phase": "scope", "message": f"Analyzing narrative and {len(entries)} scoped entries."})
-            generated_deck = await generate_executive_deck(
-                story_scope, entries, event_sink=on_event,
+            on_event(
+                {
+                    "kind": "status",
+                    "phase": "scope",
+                    "message": f"Analyzing narrative and {len(entries)} scoped entries.",
+                }
             )
-            on_event({"kind": "status", "phase": "compile", "message": "Compiling presentation deck."})
+            generated_deck = await generate_executive_deck(
+                story_scope,
+                entries,
+                event_sink=on_event,
+            )
+            on_event(
+                {
+                    "kind": "status",
+                    "phase": "compile",
+                    "message": "Compiling presentation deck.",
+                }
+            )
             presentation_artifact = build_executive_deck_artifact(
                 generated_deck,
                 story_scope,
@@ -1695,16 +1719,23 @@ async def generate_story_deck_stream(
             StoryDeckError,
         ) as exc:
             on_event({"kind": "story_error", "message": str(exc)})
-            feedback_message = "Presentation generation encountered an issue."
+            presentation_warning = str(exc)
+            feedback_message = presentation_warning
             feedback_class = "warning"
         except Exception:
             logging.getLogger(__name__).exception(
                 "Executive presentation generation stream failed"
             )
-            on_event({
-                "kind": "story_error",
-                "message": "Executive presentation generation failed. The narrative remains available.",
-            })
+            on_event(
+                {
+                    "kind": "story_error",
+                    "message": "Executive presentation generation failed. The narrative remains available.",
+                }
+            )
+            presentation_warning = (
+                "Executive presentation generation failed. The narrative remains "
+                "available and can still be saved."
+            )
             feedback_message = "Presentation generation failed."
             feedback_class = "danger"
 
@@ -1712,7 +1743,7 @@ async def generate_story_deck_stream(
             story_result_base["presentation_ready"] = presentation_ready
             story_result_base["presentation_artifact_json"] = presentation_artifact_json
             story_result_base["presentation_warning"] = (
-                None if presentation_ready else feedback_message
+                None if presentation_ready else presentation_warning
             )
             story_result_base["presentation_compiled_html"] = presentation_compiled_html
             story_result_base["presentation_compiled_css"] = presentation_compiled_css
@@ -1812,9 +1843,7 @@ def save_story_page(
                 source_entry_count
             )
             citations = _parse_story_citation_payloads(citations_json)
-            artifact_payload = _parse_story_artifact_payload(
-                presentation_artifact_json
-            )
+            artifact_payload = _parse_story_artifact_payload(presentation_artifact_json)
             payload = TimelineStorySavePayload(
                 scope_type=story_scope.scope_type,
                 group_id=story_scope.group_id,
@@ -1963,8 +1992,12 @@ def saved_story_page(
             "presentation_url": presentation_url,
             "presentation_artifact_json": None,
             "presentation_warning": None,
-            "presentation_compiled_html": story_artifact.compiled_html if story_artifact is not None else None,
-            "presentation_compiled_css": story_artifact.compiled_css if story_artifact is not None else None,
+            "presentation_compiled_html": story_artifact.compiled_html
+            if story_artifact is not None
+            else None,
+            "presentation_compiled_css": story_artifact.compiled_css
+            if story_artifact is not None
+            else None,
             "save_citations_json": json.dumps(
                 [
                     {
@@ -2018,7 +2051,10 @@ def preview_story_presentation_page(
     compiled_css: str = Form(""),
 ) -> HTMLResponse:
     """Render a preview of a compiled presentation that has not been saved yet."""
-    from app.services.story_deck import sanitize_compiled_deck_html, sanitize_compiled_deck_css
+    from app.services.story_deck import (
+        sanitize_compiled_deck_html,
+        sanitize_compiled_deck_css,
+    )
 
     safe_html = sanitize_compiled_deck_html(compiled_html)
     safe_css = sanitize_compiled_deck_css(compiled_css)
@@ -2055,6 +2091,7 @@ def api_group_topics(group_id: int) -> JSONResponse:
 
         graph = get_topic_clusters_from_cache(connection, group_id)
         return JSONResponse(asdict(graph))
+
 
 @app.get("/api/heatmap")
 def api_heatmap(year: int | None = None, group_id: int | None = None) -> JSONResponse:
@@ -2152,6 +2189,7 @@ def timeline_heatmap_entries(
         ).fetchall()
 
         from app.services.entries import entry_from_row
+
         entries = [entry_from_row(row) for row in rows]
 
     date_label = f"{_month_name(month)} {day}, {year}"
@@ -2179,9 +2217,7 @@ async def group_topics_graph(request: Request, group_id: int) -> HTMLResponse:
         "query": "",
     }
     return templates.TemplateResponse(
-        request,
-        "topic_graph.html",
-        cast(dict[str, object], context)
+        request, "topic_graph.html", cast(dict[str, object], context)
     )
 
 
@@ -2227,7 +2263,9 @@ def api_group_connections(request: Request, group_id: int) -> JSONResponse:
         group = get_timeline_group(connection, group_id)
         if group is None:
             raise HTTPException(status_code=404, detail="Timeline group not found")
-        graph = build_connection_graph(connection, group_id, include_tag_edges=include_tags)
+        graph = build_connection_graph(
+            connection, group_id, include_tag_edges=include_tags
+        )
     return JSONResponse(graph)
 
 
@@ -2238,7 +2276,9 @@ def api_accept_suggestion(suggestion_id: int) -> JSONResponse:
     if result is None:
         raise HTTPException(status_code=404, detail="Suggestion not found")
     entry_id, suggested_entry_id = result
-    return JSONResponse({"ok": True, "entry_id": entry_id, "suggested_entry_id": suggested_entry_id})
+    return JSONResponse(
+        {"ok": True, "entry_id": entry_id, "suggested_entry_id": suggested_entry_id}
+    )
 
 
 @app.post("/api/suggestions/{suggestion_id}/dismiss")
@@ -2410,9 +2450,7 @@ async def create_entry(
         )
     if payload.tags:
         background_tasks.add_task(_refresh_topic_clusters_bg, payload.group_id)
-    background_tasks.add_task(
-        compute_suggestions_for_entry, entry_id, payload.title
-    )
+    background_tasks.add_task(compute_suggestions_for_entry, entry_id, payload.title)
     return RedirectResponse(url=f"/entries/{entry_id}/view", status_code=303)
 
 
@@ -2497,9 +2535,7 @@ async def update_entry_route(
         )
     if payload.tags:
         background_tasks.add_task(_refresh_topic_clusters_bg, payload.group_id)
-    background_tasks.add_task(
-        compute_suggestions_for_entry, entry_id, payload.title
-    )
+    background_tasks.add_task(compute_suggestions_for_entry, entry_id, payload.title)
     return RedirectResponse(url=f"/entries/{entry_id}/view", status_code=303)
 
 
@@ -2608,7 +2644,9 @@ async def rename_group_route(
                 status_code=400,
             )
         except LookupError as exc:
-            raise HTTPException(status_code=404, detail="The requested group was not found.") from exc
+            raise HTTPException(
+                status_code=404, detail="The requested group was not found."
+            ) from exc
 
     updated_query = _normalize_group_form_value(raw_web_search_query)
     previous_query = existing_group.web_search_query if existing_group else None
@@ -2640,7 +2678,9 @@ async def delete_group_route(
                 status_code=400,
             )
         except LookupError as exc:
-            raise HTTPException(status_code=404, detail="The requested group was not found.") from exc
+            raise HTTPException(
+                status_code=404, detail="The requested group was not found."
+            ) from exc
 
     return RedirectResponse(url="/admin/groups?notice=deleted", status_code=303)
 
@@ -2700,7 +2740,9 @@ async def generate_entry_preview(
         if selected_group_id is not None:
             with connection_context() as connection:
                 if get_timeline_group(connection, selected_group_id) is not None:
-                    preferred_tags = list_group_tag_vocabulary(connection, selected_group_id)
+                    preferred_tags = list_group_tag_vocabulary(
+                        connection, selected_group_id
+                    )
         suggestion = await generate_entry_suggestion(
             prompt_title,
             extraction,
@@ -2810,9 +2852,7 @@ async def generate_entry_preview(
                 conn, search_text, exclude_entry_id=exclude_id
             )
         if similar:
-            pairs = [
-                (suggestion.title, str(s["title"])) for s in similar
-            ]
+            pairs = [(suggestion.title, str(s["title"])) for s in similar]
             notes = generate_relationship_notes(pairs)
             for s, note in zip(similar, notes):
                 s["suggested_note"] = note
@@ -2899,8 +2939,6 @@ async def dev_tracer_stream() -> StreamingResponse:
             "X-Accel-Buffering": "no",
         },
     )
-
-
 
 
 def _build_timeline_scope_key(group_id: int | None, query: str) -> str:
@@ -3166,7 +3204,6 @@ def _build_posted_story_result(
         "save_citations_json": citations_json,
     }
 
-
     return contexts
 
 
@@ -3324,7 +3361,9 @@ def _parse_story_artifact_payload(
     try:
         parsed = json.loads(normalized)
     except json.JSONDecodeError as exc:
-        raise ValueError("Generated presentation artifact could not be parsed.") from exc
+        raise ValueError(
+            "Generated presentation artifact could not be parsed."
+        ) from exc
 
     if not isinstance(parsed, dict):
         raise ValueError("Generated presentation artifact could not be parsed.")
@@ -3355,7 +3394,9 @@ def _parse_story_artifact_payload(
             ),
         )
     except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError("Generated presentation artifact could not be parsed.") from exc
+        raise ValueError(
+            "Generated presentation artifact could not be parsed."
+        ) from exc
 
     if payload.artifact_kind != "executive_deck":
         raise ValueError("Generated presentation artifact could not be parsed.")
@@ -3429,11 +3470,6 @@ def _list_timeline_details_for_scope(
         page_size=page_size,
         cursor=cursor,
     )
-
-
-
-
-
 
 
 def _build_timeline_group_web_search_payload(

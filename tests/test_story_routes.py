@@ -175,7 +175,9 @@ class TestStoryRoutes(unittest.TestCase):
         self.assertEqual(scope.group_id, 1)
         self.assertEqual(scope.query_text, "milestone")
         self.assertEqual(story_format, "detailed_chronology")
-        self.assertEqual([entry.id for entry in entries], [earliest_id, middle_id, latest_id])
+        self.assertEqual(
+            [entry.id for entry in entries], [earliest_id, middle_id, latest_id]
+        )
 
     def test_generate_story_keeps_empty_scope_non_fatal(self) -> None:
         mocked_generation = AsyncMock()
@@ -336,6 +338,58 @@ class TestStoryRoutes(unittest.TestCase):
         self.assertIn("Deck provider unavailable.", response.text)
         self.assertNotIn('name="presentation_artifact_json"', response.text)
 
+    def test_generate_deck_stream_failure_keeps_actionable_warning(
+        self,
+    ) -> None:
+        with connection_context() as connection:
+            entry_id = self._create_entry(
+                connection,
+                year=2026,
+                month=1,
+                day=11,
+                title="Streamed deck failure",
+                final_text="<p>Streamed deck failure citation body.</p>",
+            )
+
+        citations_json = json.dumps(
+            [
+                {
+                    "entry_id": entry_id,
+                    "citation_order": 1,
+                    "quote_text": "Streamed deck failure citation body.",
+                    "note": None,
+                }
+            ]
+        )
+
+        with patch(
+            "app.main.generate_executive_deck",
+            AsyncMock(side_effect=StoryGenerationError("Deck provider unavailable.")),
+        ):
+            with TestClient(app) as client:
+                response = client.post(
+                    "/story/generate-deck/stream",
+                    data={
+                        "group_id": "1",
+                        "year": "2026",
+                        "month": "1",
+                        "format": "executive_summary",
+                        "title": "Streamed deck failure",
+                        "narrative_html": "<section><h2>Current state</h2><p>The narrative is still rendered.</p></section>",
+                        "narrative_text": "Current state\n\nThe narrative is still rendered.",
+                        "generated_utc": "2026-03-19T12:00:00+00:00",
+                        "provider_name": "copilot",
+                        "source_entry_count": "1",
+                        "truncated_input": "false",
+                        "error_text": "",
+                        "citations_json": citations_json,
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Deck provider unavailable.", response.text)
+        self.assertNotIn("Presentation generation encountered an issue.", response.text)
+
     def test_save_story_redirects_and_saved_story_page_renders_snapshot(self) -> None:
         with connection_context() as connection:
             entry_id = self._create_entry(
@@ -401,7 +455,9 @@ class TestStoryRoutes(unittest.TestCase):
             [citation.entry_id for citation in story.citations], [entry_id]
         )
 
-    def test_save_story_with_presentation_artifact_persists_toggle_and_route(self) -> None:
+    def test_save_story_with_presentation_artifact_persists_toggle_and_route(
+        self,
+    ) -> None:
         with connection_context() as connection:
             entry_id = self._create_entry(
                 connection,
@@ -467,10 +523,14 @@ class TestStoryRoutes(unittest.TestCase):
 
         self.assertEqual(saved_response.status_code, 200)
         self.assertIn("Deck ready", saved_response.text)
-        self.assertIn(f'href="/story/{story_id}?view=presentation"', saved_response.text)
+        self.assertIn(
+            f'href="/story/{story_id}?view=presentation"', saved_response.text
+        )
 
         self.assertEqual(presentation_view_response.status_code, 200)
-        self.assertIn(f'src="/story/{story_id}/presentation"', presentation_view_response.text)
+        self.assertIn(
+            f'src="/story/{story_id}/presentation"', presentation_view_response.text
+        )
 
         self.assertEqual(presentation_response.status_code, 200)
         self.assertIn('<div class="marpit">', presentation_response.text)
