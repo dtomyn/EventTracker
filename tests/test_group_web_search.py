@@ -307,6 +307,51 @@ class TestGroupWebSearchParsing(unittest.TestCase):
         self.assertEqual(response.items[0].article_date, "2026-03-17")
         self.assertIsNone(response.items[1].article_date)
 
+    def test_parse_response_accepts_quoted_json_wrapped_in_code_fence(self) -> None:
+        response = _parse_group_web_search_response(
+            """```json
+"{\"query\":\"AI developer tools launches and benchmarks\",\"items\":[{\"title\":\"Single result\",\"url\":\"https://example.com/one\",\"snippet\":\"Only one item.\",\"source\":\"Example One\"}]}"
+```""",
+            "AI developer tools launches and benchmarks",
+        )
+
+        self.assertEqual(response.query, "AI developer tools launches and benchmarks")
+        self.assertEqual(len(response.items), 1)
+        self.assertEqual(response.items[0].title, "Single result")
+        self.assertEqual(response.items[0].url, "https://example.com/one")
+
+    def test_parse_response_accepts_python_dict_style_payload(self) -> None:
+        response = _parse_group_web_search_response(
+            """```python
+{'query': 'AI developer tools launches and benchmarks', 'items': [{'title': 'Single result', 'url': 'https://example.com/one', 'snippet': 'Only one item.', 'source': 'Example One'}]}
+```""",
+            "AI developer tools launches and benchmarks",
+        )
+
+        self.assertEqual(response.query, "AI developer tools launches and benchmarks")
+        self.assertEqual(len(response.items), 1)
+        self.assertEqual(response.items[0].title, "Single result")
+        self.assertEqual(response.items[0].url, "https://example.com/one")
+
+    def test_parse_response_extracts_items_from_markdown_links_when_json_missing(
+        self,
+    ) -> None:
+        response = _parse_group_web_search_response(
+            """
+- [OpenAI introduces Codex on mobile](https://techcrunch.com/2026/05/14/openai-says-codex-is-coming-to-your-phone/)
+- [Anthropic expands coding agent capabilities](https://www.theverge.com/2026/05/20/anthropic-coding-agent-update)
+""",
+            "latest agentic coding model announcements",
+        )
+
+        self.assertEqual(response.query, "latest agentic coding model announcements")
+        self.assertEqual(len(response.items), 2)
+        self.assertEqual(response.items[0].title, "OpenAI introduces Codex on mobile")
+        self.assertEqual(
+            response.items[0].url,
+            "https://techcrunch.com/2026/05/14/openai-says-codex-is-coming-to-your-phone/",
+        )
+
     def test_diversity_selection_prefers_named_company_coverage(self) -> None:
         items = [
             GroupWebSearchItem(
@@ -830,6 +875,103 @@ class TestGroupWebSearchService(unittest.TestCase):
             ),
         )
         self.assertEqual(fake_client.session.timeouts[1], 45.0)
+
+    def test_search_group_web_uses_initial_results_when_broadened_parse_fails(
+        self,
+    ) -> None:
+        fake_client = _FakeCopilotClient(
+            response=[
+                SimpleNamespace(
+                    content=json.dumps(
+                        {
+                            "query": "AI developer tools launches and benchmarks",
+                            "items": [
+                                {
+                                    "title": "Single result",
+                                    "url": "https://example.com/one",
+                                    "snippet": "Only one item.",
+                                    "source": "Example One",
+                                }
+                            ],
+                        }
+                    )
+                ),
+                SimpleNamespace(
+                    content="not valid json from broadened pass",
+                ),
+            ]
+        )
+
+        with (
+            patch(
+                "app.services.group_web_search.load_ai_provider", return_value="copilot"
+            ),
+            patch(
+                "app.services.group_web_search.load_copilot_settings",
+                return_value=CopilotSettings(model_id="gpt-5"),
+            ),
+            patch(
+                "app.services.copilot_runtime.instantiate_copilot_client",
+                return_value=fake_client,
+            ),
+            patch(
+                "app.services.copilot_runtime.get_permission_handler",
+                return_value="approve-all",
+            ),
+            patch.dict(
+                os.environ,
+                {"EVENTTRACKER_GROUP_WEB_SEARCH_CACHE_TTL_SECONDS": "0"},
+                clear=False,
+            ),
+        ):
+            response = _run_async(
+                search_group_web("AI developer tools launches and benchmarks")
+            )
+
+        self.assertEqual(len(response.items), 1)
+        self.assertEqual(response.items[0].title, "Single result")
+        self.assertEqual(response.items[0].url, "https://example.com/one")
+        self.assertEqual(len(fake_client.session.send_calls), 2)
+
+    def test_search_group_web_returns_empty_results_when_all_passes_are_unparseable(
+        self,
+    ) -> None:
+        fake_client = _FakeCopilotClient(
+            response=[
+                SimpleNamespace(content="No structured output available."),
+                SimpleNamespace(content="Still no structured output."),
+            ]
+        )
+
+        with (
+            patch(
+                "app.services.group_web_search.load_ai_provider", return_value="copilot"
+            ),
+            patch(
+                "app.services.group_web_search.load_copilot_settings",
+                return_value=CopilotSettings(model_id="gpt-5"),
+            ),
+            patch(
+                "app.services.copilot_runtime.instantiate_copilot_client",
+                return_value=fake_client,
+            ),
+            patch(
+                "app.services.copilot_runtime.get_permission_handler",
+                return_value="approve-all",
+            ),
+            patch.dict(
+                os.environ,
+                {"EVENTTRACKER_GROUP_WEB_SEARCH_CACHE_TTL_SECONDS": "0"},
+                clear=False,
+            ),
+        ):
+            response = _run_async(
+                search_group_web("AI developer tools launches and benchmarks")
+            )
+
+        self.assertEqual(response.query, "AI developer tools launches and benchmarks")
+        self.assertEqual(response.items, [])
+        self.assertEqual(len(fake_client.session.send_calls), 2)
 
     def test_search_group_web_filters_saved_urls_and_requests_alternatives(
         self,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import ast
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from collections.abc import Mapping
@@ -307,7 +308,14 @@ async def search_group_web(
         raise GroupWebSearchError(
             "The AI provider returned an empty web search response."
         )
-    parsed_response = _parse_group_web_search_response(content, normalized_query)
+    try:
+        parsed_response = _parse_group_web_search_response(content, normalized_query)
+    except GroupWebSearchError:
+        logger.warning(
+            "Initial group web search returned unparseable content; proceeding with empty results.",
+            exc_info=True,
+        )
+        parsed_response = GroupWebSearchResponse(query=normalized_query, items=[])
     parsed_response, rejected_saved_urls = _exclude_saved_urls(
         parsed_response,
         saved_urls=normalized_existing_urls,
@@ -449,7 +457,15 @@ async def _broaden_group_web_search(
     if not content:
         return initial_response
 
-    broadened_response = _parse_group_web_search_response(content, query)
+    try:
+        broadened_response = _parse_group_web_search_response(content, query)
+    except GroupWebSearchError:
+        logger.debug(
+            "Broadened group web search returned invalid JSON; using initial results.",
+            exc_info=True,
+        )
+        return initial_response
+
     broadened_response, _ = _exclude_saved_urls(
         broadened_response,
         saved_urls=saved_urls,
@@ -700,21 +716,16 @@ def _build_broadened_search_prompt(
 def _parse_group_web_search_response(
     value: str, requested_query: str
 ) -> GroupWebSearchResponse:
-    try:
-        parsed = json.loads(value)
-    except json.JSONDecodeError:
-        start = value.find("{")
-        end = value.rfind("}")
-        if start == -1 or end == -1 or end <= start:
-            raise GroupWebSearchError(
-                "The AI provider returned invalid web search JSON."
+    parsed = _decode_group_web_search_payload(value)
+    if parsed is None:
+        text_items = _extract_group_web_search_items_from_text(value)
+        if text_items:
+            diverse_items = _select_diverse_group_web_search_items(
+                text_items,
+                query=requested_query,
             )
-        try:
-            parsed = json.loads(value[start : end + 1])
-        except json.JSONDecodeError as exc:
-            raise GroupWebSearchError(
-                "The AI provider returned invalid web search JSON."
-            ) from exc
+            return GroupWebSearchResponse(query=requested_query, items=diverse_items)
+        raise GroupWebSearchError("The AI provider returned invalid web search JSON.")
 
     if not isinstance(parsed, dict):
         raise GroupWebSearchError(
@@ -777,6 +788,126 @@ def _parse_group_web_search_item(raw_item: object) -> GroupWebSearchItem | None:
         source=source,
         article_date=article_date,
     )
+
+
+def _decode_group_web_search_payload(value: str) -> object | None:
+    stripped_value = value.strip()
+    if not stripped_value:
+        return None
+
+    candidates: list[str] = [stripped_value]
+    candidates.extend(_extract_code_fence_candidates(stripped_value))
+    json_object_candidate = _extract_outer_json_object(stripped_value)
+    if json_object_candidate is not None:
+        candidates.append(json_object_candidate)
+
+    seen_candidates: set[str] = set()
+    for candidate in candidates:
+        normalized_candidate = candidate.strip()
+        if not normalized_candidate or normalized_candidate in seen_candidates:
+            continue
+        seen_candidates.add(normalized_candidate)
+
+        decoded = _decode_json_candidate(normalized_candidate)
+        if decoded is not None:
+            return decoded
+
+        decoded = _decode_python_literal_candidate(normalized_candidate)
+        if decoded is not None:
+            return decoded
+
+    return None
+
+
+def _extract_code_fence_candidates(value: str) -> list[str]:
+    return [
+        match.strip() for match in re.findall(r"```(?:\w+)?\s*([\s\S]*?)```", value)
+    ]
+
+
+def _extract_outer_json_object(value: str) -> str | None:
+    start = value.find("{")
+    end = value.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return None
+    return value[start : end + 1]
+
+
+def _decode_json_candidate(candidate: str) -> object | None:
+    current = candidate
+    for _ in range(3):
+        try:
+            decoded = json.loads(current)
+        except json.JSONDecodeError:
+            return None
+        if isinstance(decoded, str):
+            current = decoded.strip()
+            if not current:
+                return None
+            continue
+        return decoded
+    return None
+
+
+def _decode_python_literal_candidate(candidate: str) -> object | None:
+    try:
+        decoded = ast.literal_eval(candidate)
+    except (ValueError, SyntaxError):
+        return None
+
+    if isinstance(decoded, str):
+        return _decode_json_candidate(decoded.strip())
+    return decoded
+
+
+def _extract_group_web_search_items_from_text(value: str) -> list[GroupWebSearchItem]:
+    items: list[GroupWebSearchItem] = []
+    seen_urls: set[str] = set()
+
+    for title, url, snippet in _iter_markdown_link_items(value):
+        normalized_url = _normalize_http_url(url)
+        if normalized_url is None:
+            continue
+        dedup_key = _canonicalize_url_for_matching(normalized_url) or normalized_url
+        if dedup_key in seen_urls:
+            continue
+        seen_urls.add(dedup_key)
+        source = _infer_source_from_url(normalized_url)
+        items.append(
+            GroupWebSearchItem(
+                title=title,
+                url=normalized_url,
+                snippet=snippet,
+                source=source,
+                article_date=None,
+            )
+        )
+        if len(items) >= MAX_GROUP_WEB_RESULTS:
+            return items
+
+    return items
+
+
+def _iter_markdown_link_items(value: str) -> list[tuple[str, str, str]]:
+    matches: list[tuple[str, str, str]] = []
+    for line in value.splitlines():
+        compact_line = " ".join(line.strip().split())
+        if not compact_line:
+            continue
+        for match in re.finditer(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", compact_line):
+            title = " ".join(match.group(1).split())
+            url = match.group(2).strip()
+            snippet = compact_line
+            if title and url:
+                matches.append((title, url, snippet))
+    return matches
+
+
+def _infer_source_from_url(url: str) -> str | None:
+    netloc = urlparse(url).netloc.lower()
+    if netloc.startswith("www."):
+        netloc = netloc[4:]
+    return netloc or None
 
 
 def _normalize_article_date(value: object) -> str | None:
