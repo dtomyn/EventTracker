@@ -4,7 +4,16 @@
       "Bash(bash:*)",
       "Bash(git add:*)",
       "Bash(git commit -m ':*)",
-      "Bash(uv run:*)"
+      "Bash(uv run:*)",
+      "Read(//c/DevSource/cognitive-iq/cognitive_iq-main/extensions/claude/ciq/commands//**)",
+      "Read(//c/DevSource/cognitive-iq/cognitive_iq-main/extensions/claude/ciq-dev//**)",
+      "Bash(xargs -I {} sh -c 'echo \"=== {} ===\" && head -30 \"{}\"')",
+      "Bash(Get-ChildItem \"C:\\\\DevSource\\\\EventTracker\\\\app\\\\templates\\\\partials\" -Filter \"*.html\")",
+      "Bash(Select-Object Name)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "codebase-search"
+  ],
+  "enableAllProjectMcpServers": true
 }

@@ -1,4 +1,16 @@
 {
+   "extraKnownMarketplaces": {
+    "cognitive-iq": {
+      "source": {
+        "source": "directory",
+        "path": "C:/DevSource/cognitive-iq/cognitive_iq-main/extensions/claude"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "ciq@cognitive-iq": true,
+    "ciq-dev@cognitive-iq": true
+  },
   "permissions": {
     "allow": [
       "Read(//c/Users/darek.tomyn/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/skills/subagent-driven-development/**)",

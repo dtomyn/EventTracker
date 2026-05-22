@@ -1,0 +1,427 @@
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+import sys
+import time
+
+try:
+    from PIL import Image
+except ImportError as exc:  # pragma: no cover - runtime guidance
+    raise SystemExit(
+        "Pillow is required. Run this script with: uv run --with pillow python .\\scripts\\generate_demo_assets.py"
+    ) from exc
+
+from playwright.sync_api import Page
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import sync_playwright
+
+
+# Use a taller desktop framing so screenshots read more like a typical browser window.
+VIEWPORT_WIDTH = 1200
+VIEWPORT_HEIGHT = 1100
+DEFAULT_BASE_URL = "http://127.0.0.1:35231"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_OUTPUT_DIR = Path("docs") / "demo-assets" / "screenshots"
+DEFAULT_GIF_NAME = Path("docs") / "demo-assets" / "EventTracker-demo-web-generate.gif"
+DEFAULT_NO_SEARCH_GIF_NAME = (
+    Path("docs")
+    / "demo-assets"
+    / "EventTracker-demo-web-generate-no-search-actions.gif"
+)
+SCREEN_HOLD_MS = 1500
+TRANSITION_STEPS = 2
+TRANSITION_STEP_MS = 100
+CANVAS_SIZE = (900, 825)
+CANVAS_BACKGROUND = (249, 250, 251)
+SUMMARY_SOURCE_URL = "https://code.visualstudio.com/updates/v1_112"
+SEARCH_QUERY = "Copilot"
+ENTRY_DETAIL_ID = 5
+
+FULL_FRAME_NAMES = [
+    # Phase 1: Timeline views
+    "01-home.png",
+    "02-recent-loading.png",
+    "03-recent-results.png",
+    "04-summaries-clicked.png",
+    "05-heatmap-clicked.png",
+    "06-months-clicked.png",
+    "07-years-clicked.png",
+    # Phase 2: Topic graph
+    "08-tag-clusters.png",
+    # Phase 3: Search
+    "09-query-entered.png",
+    "10-filter-results.png",
+    "11-search-results.png",
+    # Phase 4: Event Chat
+    "12-chat-page.png",
+    # Phase 5: Entry creation
+    "13-url-entered.png",
+    "14-generating.png",
+    "15-summary-generated.png",
+    # Phase 6: Entry viewing
+    "16-entry-detail.png",
+    # Phase 7: Admin
+    "17-admin-groups.png",
+    # Phase 8: Dark mode and story
+    "18-dark-mode.png",
+    "19-story-mode-screen.png",
+    "20-story-generated.png",
+    "21-story-presentation-option.png",
+]
+NO_SEARCH_FRAME_NAMES = [
+    "01-home.png",
+    "02-recent-loading.png",
+    "03-recent-results.png",
+    "04-summaries-clicked.png",
+    "05-heatmap-clicked.png",
+    "06-months-clicked.png",
+    "07-years-clicked.png",
+    "08-tag-clusters.png",
+    "12-chat-page.png",
+    "13-url-entered.png",
+    "14-generating.png",
+    "15-summary-generated.png",
+    "16-entry-detail.png",
+    "17-admin-groups.png",
+    "18-dark-mode.png",
+    "19-story-mode-screen.png",
+    "20-story-generated.png",
+    "21-story-presentation-option.png",
+]
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Capture refreshed EventTracker demo screenshots and rebuild the main GIF. "
+            "The app must already be running."
+        )
+    )
+    parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
+    parser.add_argument(
+        "--output-dir",
+        default=str(DEFAULT_OUTPUT_DIR),
+        help="Folder where PNG screenshots will be stored.",
+    )
+    parser.add_argument(
+        "--gif-name",
+        default=str(DEFAULT_GIF_NAME),
+        help="Path for the rebuilt GIF artifact.",
+    )
+    parser.add_argument(
+        "--also-no-search-actions",
+        action="store_true",
+        help="Also build a GIF variant that omits the filter and search action frames.",
+    )
+    parser.add_argument(
+        "--no-search-gif-name",
+        default=str(DEFAULT_NO_SEARCH_GIF_NAME),
+        help="Path for the no-search-actions GIF artifact.",
+    )
+    parser.add_argument(
+        "--headed",
+        action="store_true",
+        help="Show the browser while capturing assets.",
+    )
+    return parser.parse_args()
+
+
+def save_screenshot(page: Page, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        page.screenshot(path=str(destination), timeout=30_000)
+        return
+    except PlaywrightTimeoutError:
+        pass
+
+    main_region = page.locator("main")
+    main_region.wait_for(state="visible", timeout=30_000)
+    main_region.screenshot(path=str(destination), timeout=30_000)
+
+
+def wait_for_recent_results(page: Page, timeout_seconds: int = 120) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    results = page.locator("[data-group-web-search-results] a")
+    loading = page.locator("[data-group-web-search-loading]")
+    error = page.locator("[data-group-web-search-error]")
+    empty = page.locator("[data-group-web-search-empty]")
+    while time.monotonic() < deadline:
+        if not loading.is_visible() and (
+            results.count() > 0
+            or error.is_visible()
+            or empty.is_visible()
+        ):
+            return
+        page.wait_for_timeout(1_000)
+    raise TimeoutError("Timed out waiting for Recent Developments to settle.")
+
+
+def wait_for_generated_summary(page: Page, timeout_seconds: int = 120) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    summary = page.get_by_label("Event Summary")
+    feedback = page.locator("#generate-feedback")
+    while time.monotonic() < deadline:
+        summary_value = summary.input_value().strip()
+        feedback_text = feedback.inner_text().strip()
+        if summary_value and "Generating summary" not in feedback_text:
+            return
+        page.wait_for_timeout(1_000)
+    raise TimeoutError("Timed out waiting for generated summary output.")
+
+
+def wait_for_story_result(page: Page, timeout_seconds: int = 180) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    title = page.locator("#story-result-title")
+    while time.monotonic() < deadline:
+        if title.count() > 0:
+            return
+        page.wait_for_timeout(1_000)
+    raise TimeoutError("Timed out waiting for Story Mode output.")
+
+
+def normalize_frame(path: Path) -> Image.Image:
+    with Image.open(path) as image:
+        working = image.convert("RGB")
+        scale = max(
+            CANVAS_SIZE[0] / working.width,
+            CANVAS_SIZE[1] / working.height,
+        )
+        resized = working.resize(
+            (
+                max(1, round(working.width * scale)),
+                max(1, round(working.height * scale)),
+            ),
+            Image.Resampling.LANCZOS,
+        )
+        left = max(0, (resized.width - CANVAS_SIZE[0]) // 2)
+        top = max(0, (resized.height - CANVAS_SIZE[1]) // 2)
+        right = left + CANVAS_SIZE[0]
+        bottom = top + CANVAS_SIZE[1]
+        return resized.crop((left, top, right, bottom))
+
+
+def build_gif(frame_paths: list[Path], destination: Path) -> None:
+    base_frames = [normalize_frame(path) for path in frame_paths]
+    assembled_frames: list[Image.Image] = []
+    durations: list[int] = []
+
+    for index, frame in enumerate(base_frames):
+        assembled_frames.append(frame)
+        durations.append(SCREEN_HOLD_MS)
+        if index == len(base_frames) - 1:
+            continue
+
+        next_frame = base_frames[index + 1]
+        for step in range(1, TRANSITION_STEPS + 1):
+            alpha = step / (TRANSITION_STEPS + 1)
+            assembled_frames.append(Image.blend(frame, next_frame, alpha))
+            durations.append(TRANSITION_STEP_MS)
+
+    palette_frames = [
+        frame.quantize(colors=64, method=Image.Quantize.MEDIANCUT)
+        for frame in assembled_frames
+    ]
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    palette_frames[0].save(
+        destination,
+        save_all=True,
+        append_images=palette_frames[1:],
+        duration=durations,
+        loop=0,
+        optimize=True,
+        disposal=2,
+    )
+
+
+def resolve_frame_paths(output_dir: Path, frame_names: list[str]) -> list[Path]:
+    return [output_dir / frame_name for frame_name in frame_names]
+
+
+def resolve_repo_path(path_value: str) -> Path:
+    candidate = Path(path_value)
+    if candidate.is_absolute():
+        return candidate
+    return REPO_ROOT / candidate
+
+
+def capture_assets(page: Page, base_url: str, output_dir: Path) -> list[Path]:
+    page.set_viewport_size({"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT})
+
+    output_paths = resolve_frame_paths(output_dir, FULL_FRAME_NAMES)
+    idx = 0
+
+    # ── Phase 1: Timeline views ──────────────────────────────────────────
+
+    # 01 - Home (details view)
+    page.goto(f"{base_url}/")
+    page.wait_for_load_state("networkidle")
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # 02 - Recent Developments loading
+    page.locator("[data-group-web-search-toggle]").click()
+    page.wait_for_timeout(300)
+    refresh_button = page.locator("[data-group-web-search-refresh]").first
+    if refresh_button.is_enabled():
+        refresh_button.click()
+        page.wait_for_timeout(250)
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # 03 - Recent Developments results
+    wait_for_recent_results(page)
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # 04 - Summaries view
+    page.locator("[data-zoom-target='events']").click()
+    page.wait_for_timeout(300)
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # 05 - Heatmap view
+    page.locator("[data-zoom-target='heatmap']").click()
+    page.wait_for_timeout(500)
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # 06 - Months view
+    page.locator("[data-zoom-target='months']").click()
+    page.wait_for_timeout(300)
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # 07 - Years view
+    page.locator("[data-zoom-target='years']").click()
+    page.wait_for_timeout(300)
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # ── Phase 2: Topic graph ─────────────────────────────────────────────
+
+    # 08 - Tag clusters / topic graph
+    page.get_by_role("link", name="Tag Clusters").click()
+    page.wait_for_load_state("networkidle")
+    page.wait_for_timeout(1_000)
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # ── Phase 3: Search ──────────────────────────────────────────────────
+
+    # 09 - Search query entered (searchbox is in global navbar)
+    searchbox = page.get_by_role("searchbox", name="Filter timeline in plain English")
+    searchbox.fill(SEARCH_QUERY)
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # 10 - Timeline filter results
+    page.locator('button:has-text("Filter"):not([formaction])').click()
+    page.wait_for_load_state("networkidle")
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # 11 - Ranked search results
+    searchbox = page.get_by_role("searchbox", name="Filter timeline in plain English")
+    searchbox.fill(SEARCH_QUERY)
+    page.locator('button[formaction="/search"]').click()
+    page.wait_for_load_state("networkidle")
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # ── Phase 4: Event Chat ─────────────────────────────────────────────
+
+    # 12 - Event Chat page
+    page.goto(f"{base_url}/chat")
+    page.wait_for_load_state("networkidle")
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # ── Phase 5: Entry creation ──────────────────────────────────────────
+
+    # 13 - New entry with URL entered
+    page.get_by_role("link", name="New Entry").click()
+    page.wait_for_load_state("networkidle")
+    page.get_by_label("Source URL").fill(SUMMARY_SOURCE_URL)
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # 14 - Generation in progress
+    page.locator("#generate-button").click()
+    page.wait_for_timeout(600)
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # 15 - Summary generated
+    wait_for_generated_summary(page)
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # ── Phase 6: Entry viewing ───────────────────────────────────────────
+
+    # 16 - Entry detail page (with source snapshot)
+    page.goto(f"{base_url}/entries/{ENTRY_DETAIL_ID}/view")
+    page.wait_for_load_state("networkidle")
+    page.wait_for_timeout(300)
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # ── Phase 7: Admin ───────────────────────────────────────────────────
+
+    # 17 - Admin groups page
+    page.goto(f"{base_url}/admin/groups")
+    page.wait_for_load_state("networkidle")
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # ── Phase 8: Dark mode and Story Mode ────────────────────────────────
+
+    # 18 - Dark mode on timeline
+    page.goto(f"{base_url}/")
+    page.wait_for_load_state("networkidle")
+    page.locator("#theme-toggle").click()
+    page.wait_for_timeout(600)
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # 19 - Story Mode screen
+    page.get_by_role("link", name="Story Mode").click()
+    page.wait_for_load_state("networkidle")
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # 20 - Story generated
+    page.locator("[data-story-generate-button]").click(no_wait_after=True)
+    wait_for_story_result(page)
+    page.wait_for_timeout(500)
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    # 21 - Generate presentation option
+    story_deck_cta = page.locator("[data-story-deck-cta]")
+    story_deck_cta.scroll_into_view_if_needed()
+    page.wait_for_timeout(500)
+    save_screenshot(page, output_paths[idx]); idx += 1
+
+    return output_paths
+
+
+def remove_existing_pngs(output_dir: Path) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for existing_file in output_dir.glob("*.png"):
+        existing_file.unlink()
+
+
+def main() -> int:
+    args = parse_args()
+    output_dir = resolve_repo_path(args.output_dir)
+    gif_path = resolve_repo_path(args.gif_name)
+    no_search_gif_path = resolve_repo_path(args.no_search_gif_name)
+
+    remove_existing_pngs(output_dir)
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=not args.headed)
+        context = browser.new_context()
+        page = context.new_page()
+        try:
+            frame_paths = capture_assets(page, args.base_url.rstrip("/"), output_dir)
+        finally:
+            context.close()
+            browser.close()
+
+    build_gif(frame_paths, gif_path)
+    if args.also_no_search_actions:
+        build_gif(
+            resolve_frame_paths(output_dir, NO_SEARCH_FRAME_NAMES), no_search_gif_path
+        )
+
+    print(f"Wrote {gif_path}")
+    if args.also_no_search_actions:
+        print(f"Wrote {no_search_gif_path}")
+    print(f"Saved {len(frame_paths)} screenshots to {output_dir}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

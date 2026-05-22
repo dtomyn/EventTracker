@@ -6,8 +6,7 @@ import unicodedata
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import cast
-from typing import Protocol
+from typing import Protocol, cast
 
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam
@@ -23,7 +22,7 @@ from app.services.extraction import ExtractionResult
 
 
 DEFAULT_AI_PROVIDER = "openai"
-DEFAULT_COPILOT_MODEL_ID = "gpt-5"
+DEFAULT_COPILOT_MODEL_ID = "gpt-5.4"
 SUPPORTED_AI_PROVIDERS = {DEFAULT_AI_PROVIDER, "copilot"}
 _STRAY_GENERATED_HTML_CHARACTERS = "\ufeff\u200b\u200c\u200d\u2060\ufffd"
 _MAX_SOURCE_MARKDOWN_PROMPT_CHARS = 8000
@@ -210,9 +209,7 @@ def get_draft_generator() -> DraftGenerator:
 
 def load_ai_provider() -> str:
     load_app_env()
-    provider = (
-        os.getenv("EVENTTRACKER_AI_PROVIDER", DEFAULT_AI_PROVIDER).strip().lower()
-    )
+    provider = os.getenv("EVENTTRACKER_AI_PROVIDER", DEFAULT_AI_PROVIDER).strip().lower()
     if provider not in SUPPORTED_AI_PROVIDERS:
         allowed = ", ".join(sorted(SUPPORTED_AI_PROVIDERS))
         raise DraftGenerationConfigurationError(
@@ -392,12 +389,9 @@ def _normalize_suggested_tags(value: object) -> list[str]:
     """Normalize model-returned tags to a short deduplicated list for the form."""
     if value in (None, ""):
         return []
-    if isinstance(value, str):
-        raw_value = value
-    elif isinstance(value, list):
-        raw_value = ", ".join(str(item) for item in value)
-    else:
+    if not isinstance(value, (str, list)):
         return []
+    raw_value = value if isinstance(value, str) else ", ".join(str(item) for item in value)
     return normalize_tags(raw_value)[:5]
 
 

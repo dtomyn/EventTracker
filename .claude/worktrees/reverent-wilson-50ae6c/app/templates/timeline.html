@@ -1,0 +1,1789 @@
+{% extends "base.html" %}
+{% from "partials/story_links.html" import story_href %}
+
+{% block content %}
+    <div class="timeline-hero mb-4">
+        <div class="timeline-hero-header">
+            <div class="timeline-hero-copy">
+                {% if is_filtered %}
+                    <h1 class="h3 mb-1">Filtered Timeline</h1>
+                    <p class="text-body-secondary mb-0">Showing {{ match_count }} matching entr{% if match_count == 1 %}y{% else %}ies{% endif %} for "{{ query }}" in {{ selected_group_name }}.</p>
+                {% else %}
+                    <h1 class="h3 mb-1">{{ selected_group_name }} Timeline</h1>
+                {% endif %}
+            </div>
+
+            {% if timeline_filters %}
+                <details class="group-flyout">
+                    <summary class="group-flyout-trigger">
+                        <span class="group-flyout-label">Group</span>
+                        <span class="group-flyout-value">{{ selected_group_name }}</span>
+                        <span class="group-flyout-icon" aria-hidden="true"></span>
+                    </summary>
+                    <div class="group-flyout-menu" aria-label="Timeline groups">
+                        <a class="group-flyout-option {% if selected_group_name == 'All groups' %}is-active{% endif %}" href="/?group_id=all{% if query %}&q={{ query | urlencode }}{% endif %}">All groups</a>
+                        {% for timeline_filter in timeline_filters %}
+                            <a class="group-flyout-option {% if selected_group_id == timeline_filter.id %}is-active{% endif %}" href="/?group_id={{ timeline_filter.id }}{% if query %}&q={{ query | urlencode }}{% endif %}">{{ timeline_filter.name }}</a>
+                        {% endfor %}
+                    </div>
+                </details>
+            {% endif %}
+        </div>
+
+        <div class="timeline-hero-actions mt-3">
+            <a class="btn btn-primary" href="{{ story_href(selected_group_query_value, query) }}">Story Mode</a>
+            {% if selected_group_id and embeddings_enabled %}
+                <a class="btn btn-outline-primary ms-2" href="/groups/{{ selected_group_id }}/topics/graph">Tag Clusters</a>
+            {% endif %}
+            {% if selected_group_id %}
+                <a class="btn btn-outline-primary ms-2" href="/groups/{{ selected_group_id }}/connections/graph">Connection Graph</a>
+            {% endif %}
+            {% if is_filtered %}
+                <a class="btn btn-link px-0" href="/{% if selected_group_query_value %}?group_id={{ selected_group_query_value }}{% endif %}">Clear filter</a>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if timeline_web_search.show_panel %}
+        <section class="timeline-web-card timeline-web-section mb-4" data-group-web-search-panel>
+            <button class="timeline-web-toggle" type="button" data-group-web-search-toggle aria-expanded="false" title="Expanding this section will initiate a web search for recent developments.">
+                <span class="timeline-web-toggle-spacer" aria-hidden="true"></span>
+                <span class="timeline-web-toggle-title">Recent Developments</span>
+                <span class="timeline-web-toggle-icon" aria-hidden="true"></span>
+            </button>
+
+            <div class="timeline-web-body" data-group-web-search-body hidden>
+                {% if timeline_web_search.provider_is_copilot %}
+                    <div class="timeline-web-card-header">
+                        <div class="timeline-web-card-actions ms-auto">
+                            <button class="btn btn-sm btn-outline-secondary" type="button" data-group-web-search-refresh>
+                                Refresh
+                            </button>
+                        </div>
+                </div>
+
+                    <div class="timeline-web-state" data-group-web-search-loading hidden>Searching the web...</div>
+                    <div class="timeline-web-state timeline-web-state-error" data-group-web-search-error hidden>
+                        <span>Could not load web results.</span>
+                        <button class="btn btn-sm btn-outline-secondary" type="button" data-group-web-search-refresh>Refresh</button>
+                    </div>
+                    <div class="timeline-web-state timeline-web-state-empty" data-group-web-search-empty hidden>
+                        <span>No related results found right now.</span>
+                        <button class="btn btn-sm btn-outline-secondary" type="button" data-group-web-search-refresh>Refresh</button>
+                    </div>
+                    <div class="timeline-web-progress" data-group-web-search-progress hidden>
+                        <details class="timeline-web-progress-shell" data-group-web-search-progress-shell open>
+                            <summary class="timeline-web-progress-summary">
+                                <div>
+                                    <div class="timeline-web-progress-label">Copilot trace</div>
+                                    <div class="timeline-web-progress-meta" data-group-web-search-progress-meta>Live updates</div>
+                                </div>
+                                <span class="timeline-web-progress-summary-icon" aria-hidden="true"></span>
+                            </summary>
+                            <div class="timeline-web-progress-controls" role="group" aria-label="Trace detail level">
+                                <button class="timeline-web-progress-mode" type="button" data-group-web-search-progress-mode="compact" aria-pressed="true">
+                                    Less detail
+                                </button>
+                                <button class="timeline-web-progress-mode" type="button" data-group-web-search-progress-mode="detailed" aria-pressed="false">
+                                    Detailed
+                                </button>
+                            </div>
+                            <div class="timeline-web-progress-log" data-group-web-search-progress-log></div>
+                        </details>
+                    </div>
+                    <div class="timeline-web-results" data-group-web-search-results hidden></div>
+                {% else %}
+                    <div class="timeline-web-state">Available when GitHub Copilot is the active AI provider.</div>
+                {% endif %}
+            </div>
+        </section>
+    {% endif %}
+
+    {% if timeline_groups %}
+        <div class="visualization-toolbar" aria-label="Timeline view controls">
+            <div class="visualization-segmented-controls" role="group" aria-label="Timeline views">
+                <button class="visualization-view-button" type="button" data-zoom-target="details" aria-pressed="true">Details</button>
+                <button class="visualization-view-button" type="button" data-zoom-target="events" aria-pressed="false">Summaries</button>
+                <button class="visualization-view-button" type="button" data-zoom-target="months" aria-pressed="false">Months</button>
+                <button class="visualization-view-button" type="button" data-zoom-target="years" aria-pressed="false">Years</button>
+                <button class="visualization-view-button" type="button" data-zoom-target="heatmap" aria-pressed="false">Heatmap</button>
+            </div>
+            <div class="timeline-playback-panel" data-playback-panel data-playback-state="idle" hidden>
+                <div class="timeline-playback-controls" role="group" aria-label="Timeline playback controls">
+                    <button class="timeline-playback-button" type="button" data-playback-action="play" aria-label="Play summaries replay" title="Play summaries replay">
+                        <span class="timeline-playback-icon timeline-playback-icon-play" aria-hidden="true"></span>
+                    </button>
+                    <button class="timeline-playback-button" type="button" data-playback-action="pause" aria-label="Pause summaries replay" title="Pause summaries replay" disabled>
+                        <span class="timeline-playback-icon timeline-playback-icon-pause" aria-hidden="true"></span>
+                    </button>
+                    <button class="timeline-playback-button" type="button" data-playback-action="restart" aria-label="Restart summaries replay" title="Restart summaries replay">
+                        <span class="timeline-playback-icon timeline-playback-icon-restart" aria-hidden="true"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <section class="visualization-surface" aria-label="Timeline views">
+            <div class="visualization-statusbar">
+                <span class="visualization-status-label">Current view</span>
+                <strong data-current-view-label>Details</strong>
+                <span class="visualization-status-context" data-current-view-context>{% if details_has_more %}Showing first batch{% else %}All loaded{% endif %}</span>
+                <span class="visualization-status-context timeline-playback-status" data-playback-status hidden></span>
+            </div>
+            <nav class="visualization-history" aria-label="Drill path" data-view-history hidden></nav>
+            <div class="visualization-shell">
+                <div id="timeline-details-view" data-view-panel="details">
+                    <div data-detail-groups>
+                        {% include "partials/timeline_detail_groups.html" %}
+                    </div>
+                    <div class="timeline-fetch-state" data-detail-loading hidden>Loading more entries…</div>
+                    <div class="timeline-fetch-state timeline-fetch-state-error" data-detail-error hidden>
+                        <span>Could not load more entries.</span>
+                        <button class="btn btn-sm btn-outline-secondary" type="button" data-detail-retry>Retry</button>
+                    </div>
+                    <div class="timeline-fetch-state" data-detail-end {% if details_has_more %}hidden{% endif %}>You’ve reached the end of the timeline.</div>
+                    <div class="timeline-scroll-sentinel" data-detail-sentinel aria-hidden="true"></div>
+                </div>
+                <div id="visualization-content" data-view-panel="summary" data-current-view="events" hidden>
+                    <div class="timeline-summary-loading" data-summary-loading>Loading view…</div>
+                    <div class="timeline-fetch-state timeline-fetch-state-error" data-summary-error hidden>
+                        <span>Could not load this view.</span>
+                        <button class="btn btn-sm btn-outline-secondary" type="button" data-summary-retry>Retry</button>
+                    </div>
+                    <div data-summary-content hidden></div>
+                </div>
+                <div id="heatmap-view" data-view-panel="heatmap" hidden>
+                    <div id="heatmap-container" class="heatmap-container"></div>
+                    <div id="heatmap-entries" class="mt-4"></div>
+                </div>
+            </div>
+        </section>
+
+        <script id="timeline-state" type="application/json">{{ timeline_scope | tojson }}</script>
+        <script>
+            (() => {
+                const stateNode = document.getElementById("timeline-state");
+                const panel = document.querySelector("[data-group-web-search-panel]");
+                const toggleButton = panel?.querySelector("[data-group-web-search-toggle]");
+                const bodyNode = panel?.querySelector("[data-group-web-search-body]");
+                const loadingNode = panel?.querySelector("[data-group-web-search-loading]");
+                const errorNode = panel?.querySelector("[data-group-web-search-error]");
+                const emptyNode = panel?.querySelector("[data-group-web-search-empty]");
+                const progressNode = panel?.querySelector("[data-group-web-search-progress]");
+                const progressShellNode = panel?.querySelector("[data-group-web-search-progress-shell]");
+                const progressMetaNode = panel?.querySelector("[data-group-web-search-progress-meta]");
+                const progressLogNode = panel?.querySelector("[data-group-web-search-progress-log]");
+                const progressModeButtons = Array.from(panel?.querySelectorAll("[data-group-web-search-progress-mode]") || []);
+                const resultsNode = panel?.querySelector("[data-group-web-search-results]");
+                const refreshButtons = Array.from(panel?.querySelectorAll("[data-group-web-search-refresh]") || []);
+
+                if (!stateNode || !panel || !toggleButton || !bodyNode) {
+                    return;
+                }
+
+                const timelineState = JSON.parse(stateNode.textContent || "{}");
+                const webSearchState = timelineState.groupWebSearch || {};
+                const requestTimeoutMs = Number(webSearchState.requestTimeoutMs) || 65000;
+                const streamEndpoint = webSearchState.streamEndpoint;
+                const supportsLiveWebSearch = Boolean(
+                    webSearchState.providerIsCopilot
+                    && webSearchState.groupId
+                    && webSearchState.hasQuery
+                    && streamEndpoint
+                );
+                let activeStream = null;
+                let activeRequestId = 0;
+                let inactivityTimeoutId = 0;
+                let progressEntries = [];
+                let progressMode = "compact";
+                let progressState = "idle";
+                let hasSettledSearch = false;
+
+                const escapeHtml = (value) => String(value)
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/\"/g, "&quot;")
+                    .replace(/'/g, "&#39;");
+
+                const setErrorMessage = (message) => {
+                    const errorMessageNode = errorNode.querySelector("span");
+                    if (errorMessageNode) {
+                        errorMessageNode.textContent = message;
+                    }
+                };
+
+                const setLoading = (isLoading) => {
+                    loadingNode.hidden = !isLoading;
+                    refreshButtons.forEach((button) => {
+                        button.disabled = isLoading;
+                    });
+                    if (isLoading) {
+                        progressState = "streaming";
+                        progressShellNode.open = true;
+                        errorNode.hidden = true;
+                        emptyNode.hidden = true;
+                        setErrorMessage("Could not load web results.");
+                    }
+                    renderProgress();
+                };
+
+                const setExpanded = (isExpanded) => {
+                    toggleButton.setAttribute("aria-expanded", isExpanded ? "true" : "false");
+                    bodyNode.hidden = !isExpanded;
+                    panel.classList.toggle("is-expanded", isExpanded);
+                };
+
+                const closeActiveStream = () => {
+                    if (activeStream) {
+                        activeStream.close();
+                        activeStream = null;
+                    }
+                    window.clearTimeout(inactivityTimeoutId);
+                    inactivityTimeoutId = 0;
+                };
+
+                const resetInactivityTimeout = (requestId) => {
+                    window.clearTimeout(inactivityTimeoutId);
+                    inactivityTimeoutId = window.setTimeout(() => {
+                        if (requestId !== activeRequestId) {
+                            return;
+                        }
+                        progressState = "error";
+                        closeActiveStream();
+                        resultsNode.hidden = true;
+                        emptyNode.hidden = true;
+                        setErrorMessage("Web search timed out. Try again.");
+                        errorNode.hidden = false;
+                        setLoading(false);
+                    }, requestTimeoutMs);
+                };
+
+                const humanizeEventType = (value) => {
+                    const normalized = String(value || "copilot.event")
+                        .replace(/[._]+/g, " ")
+                        .trim();
+                    if (!normalized) {
+                        return "Copilot event";
+                    }
+                    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+                };
+
+                const isAssistantStreamingDeltaEvent = (payload) => {
+                    if (!payload || payload.kind !== "copilot_event") {
+                        return false;
+                    }
+                    const eventType = String(payload.eventType || "");
+                    return /assistant[._]streaming[._]?delta$/i.test(eventType);
+                };
+
+                const isAssistantTextDeltaEvent = (payload) => {
+                    if (!payload || payload.kind !== "copilot_event") {
+                        return false;
+                    }
+                    if (!payload.message || isAssistantStreamingDeltaEvent(payload)) {
+                        return false;
+                    }
+                    const eventType = String(payload.eventType || "");
+                    return /assistant[._][a-z_]+[._]?delta$/i.test(eventType);
+                };
+
+                const canMergeProgressEntry = (previousPayload, nextPayload) => {
+                    if (!isAssistantTextDeltaEvent(previousPayload) || !isAssistantTextDeltaEvent(nextPayload)) {
+                        return false;
+                    }
+                    return String(previousPayload.phase || "") === String(nextPayload.phase || "")
+                        && String(previousPayload.eventType || "") === String(nextPayload.eventType || "");
+                };
+
+                const mergeProgressMessages = (previousMessage, nextMessage) => {
+                    const priorText = typeof previousMessage === "string" ? previousMessage : "";
+                    const nextText = typeof nextMessage === "string" ? nextMessage : "";
+                    return `${priorText}${nextText}`;
+                };
+
+                const shouldIncludeCompactTraceEntry = (payload) => {
+                    if (!payload || typeof payload !== "object") {
+                        return false;
+                    }
+                    if (payload.kind === "status" || payload.kind === "search_error") {
+                        return true;
+                    }
+                    if (payload.kind !== "copilot_event") {
+                        return Boolean(payload.message);
+                    }
+                    if (isAssistantStreamingDeltaEvent(payload)) {
+                        return false;
+                    }
+                    const eventType = String(payload.eventType || "");
+                    if (/error|fail/i.test(eventType)) {
+                        return true;
+                    }
+                    if (/tool/i.test(eventType)) {
+                        return true;
+                    }
+                    if (/start|complete|finish|done/i.test(eventType)) {
+                        return true;
+                    }
+                    if (/message|summary|progress/i.test(eventType) && payload.message) {
+                        return true;
+                    }
+                    return false;
+                };
+
+                const getVisibleProgressEntries = () => {
+                    if (progressMode === "detailed") {
+                        return progressEntries.slice();
+                    }
+                    const compactEntries = progressEntries.filter((payload) => shouldIncludeCompactTraceEntry(payload));
+                    if (compactEntries.length > 0) {
+                        return compactEntries;
+                    }
+                    return progressEntries.slice(-1);
+                };
+
+                const formatTraceLine = (payload) => {
+                    const prefix = payload.phase ? `[${payload.phase}] ` : "";
+                    if (payload.kind === "status") {
+                        return `${prefix}${payload.message || "Status update"}`;
+                    }
+                    if (payload.kind === "copilot_event") {
+                        if (isAssistantTextDeltaEvent(payload) && payload.message) {
+                            return `${prefix}${payload.eventType || "assistant.message.delta"}: ${payload.message}`;
+                        }
+                        const raw = payload.raw ? JSON.stringify(payload.raw) : "";
+                        const message = payload.message ? ` ${payload.message}` : "";
+                        return `${prefix}${payload.eventType || "copilot.event"}${message}${raw ? ` ${raw}` : ""}`;
+                    }
+                    if (payload.message) {
+                        return `${prefix}${payload.message}`;
+                    }
+                    return JSON.stringify(payload);
+                };
+
+                const formatCompactTraceLine = (payload) => {
+                    const prefix = payload.phase ? `[${payload.phase}] ` : "";
+                    if (payload.kind === "status" || payload.kind === "search_error") {
+                        return `${prefix}${payload.message || "Status update"}`;
+                    }
+                    if (payload.kind === "copilot_event") {
+                        if (isAssistantTextDeltaEvent(payload) && payload.message) {
+                            return `${prefix}${payload.message}`;
+                        }
+                        const label = humanizeEventType(payload.eventType);
+                        if (payload.message) {
+                            return `${prefix}${label}: ${payload.message}`;
+                        }
+                        return `${prefix}${label}`;
+                    }
+                    if (payload.message) {
+                        return `${prefix}${payload.message}`;
+                    }
+                    return `${prefix}Update`;
+                };
+
+                const updateProgressModeButtons = () => {
+                    progressModeButtons.forEach((button) => {
+                        const isActive = button.dataset.groupWebSearchProgressMode === progressMode;
+                        button.setAttribute("aria-pressed", isActive ? "true" : "false");
+                    });
+                };
+
+                const updateProgressMeta = (visibleEntries) => {
+                    if (progressEntries.length === 0) {
+                        progressMetaNode.textContent = progressState === "streaming" ? "Live updates" : "Waiting for updates";
+                        return;
+                    }
+                    const updateCount = visibleEntries.length;
+                    const updateLabel = updateCount === 1 ? "update" : "updates";
+                    const stateLabel = {
+                        streaming: "Streaming",
+                        complete: "Finished",
+                        error: "Stopped on error",
+                        idle: "Updates",
+                    }[progressState] || "Updates";
+                    if (progressMode === "compact" && visibleEntries.length < progressEntries.length) {
+                        const keyUpdateLabel = updateCount === 1 ? "key update" : "key updates";
+                        progressMetaNode.textContent = `${stateLabel} • ${updateCount} ${keyUpdateLabel} shown`;
+                        return;
+                    }
+                    progressMetaNode.textContent = `${stateLabel} • ${updateCount} ${updateLabel} shown`;
+                };
+
+                const renderProgress = () => {
+                    const visibleEntries = getVisibleProgressEntries();
+                    progressLogNode.innerHTML = "";
+                    visibleEntries.forEach((payload) => {
+                        const line = document.createElement("div");
+                        const kind = payload.kind === "search_error"
+                            ? "error"
+                            : payload.kind === "status"
+                                ? "status"
+                                : "trace";
+                        line.className = `timeline-web-progress-line is-${kind}`;
+                        line.textContent = progressMode === "detailed"
+                            ? formatTraceLine(payload)
+                            : formatCompactTraceLine(payload);
+                        progressLogNode.appendChild(line);
+                    });
+                    progressNode.hidden = progressEntries.length === 0;
+                    updateProgressModeButtons();
+                    updateProgressMeta(visibleEntries);
+                    if (!progressNode.hidden) {
+                        progressLogNode.scrollTop = progressLogNode.scrollHeight;
+                    }
+                };
+
+                const clearProgress = () => {
+                    progressEntries = [];
+                    progressState = "idle";
+                    progressShellNode.open = true;
+                    renderProgress();
+                };
+
+                const appendProgressLine = (payload, kind = "trace") => {
+                    if (!payload) {
+                        return;
+                    }
+                    const normalizedPayload = typeof payload === "string"
+                        ? { kind, message: payload }
+                        : { ...payload, kind: payload.kind || kind };
+                    if (isAssistantStreamingDeltaEvent(normalizedPayload)) {
+                        return;
+                    }
+                    const lastEntry = progressEntries.at(-1);
+                    if (canMergeProgressEntry(lastEntry, normalizedPayload)) {
+                        lastEntry.message = mergeProgressMessages(lastEntry.message, normalizedPayload.message);
+                        lastEntry.raw = normalizedPayload.raw ?? lastEntry.raw;
+                        renderProgress();
+                        return;
+                    }
+                    progressEntries.push(normalizedPayload);
+                    renderProgress();
+                };
+
+                const renderMetadata = (item) => {
+                    const parts = [item.source, item.article_date].filter(Boolean).map((value) => escapeHtml(value));
+                    if (parts.length === 0) {
+                        return "";
+                    }
+                    return `<div class="timeline-web-result-source">${parts.join(" <span aria-hidden=\"true\">&middot;</span> ")}</div>`;
+                };
+
+                const renderResults = (items) => {
+                    resultsNode.innerHTML = items.map((item) => `
+                        <article class="timeline-web-result">
+                            <a class="timeline-web-result-title" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer noopener">${escapeHtml(item.title)}</a>
+                            ${renderMetadata(item)}
+                            ${item.snippet ? `<p class="timeline-web-result-snippet mb-0">${escapeHtml(item.snippet)}</p>` : ""}
+                        </article>
+                    `).join("");
+                    resultsNode.hidden = items.length === 0;
+                    emptyNode.hidden = items.length !== 0;
+                };
+
+                const openResultStream = ({ forceRefresh = false } = {}) => {
+                    hasSettledSearch = false;
+                    activeRequestId += 1;
+                    const requestId = activeRequestId;
+                    closeActiveStream();
+                    clearProgress();
+                    setLoading(true);
+                    resultsNode.hidden = true;
+
+                    const params = new URLSearchParams({
+                        group_id: String(webSearchState.groupId),
+                        force_refresh: forceRefresh ? "1" : "0",
+                        _: String(Date.now()),
+                    });
+                    const source = new EventSource(`${streamEndpoint}?${params.toString()}`);
+                    activeStream = source;
+                    resetInactivityTimeout(requestId);
+
+                    source.addEventListener("status", (event) => {
+                        if (source !== activeStream || requestId !== activeRequestId) {
+                            return;
+                        }
+                        resetInactivityTimeout(requestId);
+                        const payload = JSON.parse(event.data || "{}");
+                        appendProgressLine(payload, "status");
+                    });
+
+                    source.addEventListener("copilot_event", (event) => {
+                        if (source !== activeStream || requestId !== activeRequestId) {
+                            return;
+                        }
+                        resetInactivityTimeout(requestId);
+                        const payload = JSON.parse(event.data || "{}");
+                        appendProgressLine(payload, "trace");
+                    });
+
+                    source.addEventListener("result", (event) => {
+                        if (source !== activeStream || requestId !== activeRequestId) {
+                            return;
+                        }
+                        resetInactivityTimeout(requestId);
+                        const payload = JSON.parse(event.data || "{}");
+                        errorNode.hidden = true;
+                        renderResults(Array.isArray(payload.items) ? payload.items : []);
+                    });
+
+                    source.addEventListener("search_error", (event) => {
+                        if (source !== activeStream || requestId !== activeRequestId) {
+                            return;
+                        }
+                        const payload = JSON.parse(event.data || "{}");
+                        hasSettledSearch = true;
+                        progressState = "error";
+                        closeActiveStream();
+                        resultsNode.hidden = true;
+                        emptyNode.hidden = true;
+                        setErrorMessage(payload.message || "Could not load web results.");
+                        errorNode.hidden = false;
+                        appendProgressLine(payload, "error");
+                        setLoading(false);
+                    });
+
+                    source.addEventListener("complete", () => {
+                        if (source !== activeStream || requestId !== activeRequestId) {
+                            return;
+                        }
+                        hasSettledSearch = true;
+                        progressState = "complete";
+                        closeActiveStream();
+                        setLoading(false);
+                        if (progressEntries.length > 0) {
+                            progressShellNode.open = false;
+                            renderProgress();
+                        }
+                    });
+
+                    source.onerror = () => {
+                        if (source !== activeStream || requestId !== activeRequestId) {
+                            return;
+                        }
+                        hasSettledSearch = true;
+                        progressState = "error";
+                        closeActiveStream();
+                        resultsNode.hidden = true;
+                        emptyNode.hidden = true;
+                        setErrorMessage("Lost the live web search stream. Try again.");
+                        errorNode.hidden = false;
+                        setLoading(false);
+                    };
+                };
+
+                toggleButton.addEventListener("click", () => {
+                    const shouldExpand = toggleButton.getAttribute("aria-expanded") !== "true";
+                    setExpanded(shouldExpand);
+                    if (!shouldExpand) {
+                        if (activeStream) {
+                            closeActiveStream();
+                            setLoading(false);
+                        }
+                        return;
+                    }
+                    if (supportsLiveWebSearch && !hasSettledSearch && !activeStream) {
+                        openResultStream();
+                    }
+                });
+
+                if (!supportsLiveWebSearch) {
+                    setExpanded(false);
+                    return;
+                }
+
+                if (!loadingNode || !errorNode || !emptyNode || !progressNode || !progressShellNode || !progressMetaNode || !progressLogNode || !resultsNode) {
+                    return;
+                }
+
+                progressModeButtons.forEach((button) => {
+                    button.addEventListener("click", () => {
+                        const nextMode = button.dataset.groupWebSearchProgressMode;
+                        if (!nextMode || nextMode === progressMode) {
+                            return;
+                        }
+                        progressMode = nextMode;
+                        renderProgress();
+                    });
+                });
+
+                refreshButtons.forEach((button) => {
+                    button.addEventListener("click", () => {
+                        setExpanded(true);
+                        openResultStream({ forceRefresh: true });
+                    });
+                });
+
+                setExpanded(false);
+                renderProgress();
+            })();
+        </script>
+        <script>
+            (() => {
+                const viewLabels = {
+                    details: "Details",
+                    events: "Summaries",
+                    months: "Months",
+                    years: "Years",
+                    heatmap: "Heatmap",
+                };
+
+                const detailPanel = document.getElementById("timeline-details-view");
+                const summaryPanel = document.getElementById("visualization-content");
+                const heatmapPanel = document.getElementById("heatmap-view");
+                const statusLabel = document.querySelector("[data-current-view-label]");
+                const statusContext = document.querySelector("[data-current-view-context]");
+                const playbackPanel = document.querySelector("[data-playback-panel]");
+                const playbackStatusNode = document.querySelector("[data-playback-status]");
+                const playbackActionButtons = Array.from(document.querySelectorAll("[data-playback-action]"));
+                const controls = Array.from(document.querySelectorAll("[data-zoom-target]"));
+                const stateNode = document.getElementById("timeline-state");
+                const detailGroupsNode = detailPanel?.querySelector("[data-detail-groups]");
+                const detailLoadingNode = detailPanel?.querySelector("[data-detail-loading]");
+                const detailErrorNode = detailPanel?.querySelector("[data-detail-error]");
+                const detailEndNode = detailPanel?.querySelector("[data-detail-end]");
+                const detailRetryButton = detailPanel?.querySelector("[data-detail-retry]");
+                const detailSentinel = detailPanel?.querySelector("[data-detail-sentinel]");
+                const summaryLoadingNode = summaryPanel?.querySelector("[data-summary-loading]");
+                const summaryErrorNode = summaryPanel?.querySelector("[data-summary-error]");
+                const summaryRetryButton = summaryPanel?.querySelector("[data-summary-retry]");
+                const summaryContentNode = summaryPanel?.querySelector("[data-summary-content]");
+
+                if (!detailPanel || !summaryPanel || !statusLabel || !statusContext || !stateNode || controls.length === 0 || !detailGroupsNode || !detailSentinel || !summaryLoadingNode || !summaryErrorNode || !summaryContentNode) {
+                    return;
+                }
+
+                const timelineState = JSON.parse(stateNode.textContent || "{}");
+                let state = {
+                    view: "details",
+                    year: null,
+                    month: null,
+                };
+                let history = [];
+                let activeSummaryRequestId = 0;
+                const summaryCache = new Map();
+                const details = {
+                    nextCursor: timelineState.nextCursor || null,
+                    hasMore: Boolean(timelineState.hasMore),
+                    loading: false,
+                };
+                const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+                const playback = {
+                    status: "idle",
+                    timeoutId: 0,
+                    steps: [],
+                    index: -1,
+                    runId: 0,
+                    currentLabel: "",
+                    currentBurstLevel: "steady",
+                };
+
+                const escapeHtml = (value) => String(value)
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/\"/g, "&quot;")
+                    .replace(/'/g, "&#39;");
+
+                const monthLabel = (month, year) => new Date(year, month - 1, 1)
+                    .toLocaleString("en-US", { month: "long", year: "numeric" });
+
+                const monthFocusKey = (month, year) => `month-${year}-${String(month).padStart(2, "0")}`;
+
+                const statesEqual = (left, right) => (
+                    left.view === right.view
+                    && left.year === right.year
+                    && left.month === right.month
+                );
+
+                const historyNode = document.querySelector("[data-view-history]");
+
+                const describeState = (nextState) => {
+                    if (nextState.view === "details") {
+                        const loadedCount = detailGroupsNode.querySelectorAll("[data-entry-card]").length;
+                        if (details.hasMore) {
+                            return `${loadedCount} loaded, more available`;
+                        }
+                        return loadedCount === 1 ? "1 loaded entry" : `${loadedCount} loaded entries`;
+                    }
+                    if (nextState.view === "years") {
+                        return "All years";
+                    }
+                    if (nextState.view === "months" && nextState.year !== null) {
+                        return `Months in ${nextState.year}`;
+                    }
+                    if (nextState.view === "months") {
+                        return "All months";
+                    }
+                    if (nextState.view === "events" && nextState.month !== null && nextState.year !== null) {
+                        return `Summaries in ${monthLabel(nextState.month, nextState.year)}`;
+                    }
+                    if (nextState.view === "events" && nextState.year !== null) {
+                        return `Summaries in ${nextState.year}`;
+                    }
+                    return "All summaries";
+                };
+
+                const normalizeState = (nextState) => {
+                    if (nextState.view === "details") {
+                        return {
+                            view: "details",
+                            year: null,
+                            month: null,
+                        };
+                    }
+                    if (nextState.view === "years") {
+                        return {
+                            view: "years",
+                            year: null,
+                            month: null,
+                        };
+                    }
+                    if (nextState.view === "months") {
+                        return {
+                            view: "months",
+                            year: nextState.year ?? null,
+                            month: null,
+                        };
+                    }
+                    return {
+                        view: "events",
+                        year: nextState.year ?? null,
+                        month: nextState.month ?? null,
+                    };
+                };
+
+                const currentLocationLabel = () => {
+                    if (state.view === "events" && state.month !== null && state.year !== null) {
+                        return monthLabel(state.month, state.year);
+                    }
+                    if (state.view === "months" && state.year !== null) {
+                        return String(state.year);
+                    }
+                    return viewLabels[state.view];
+                };
+
+                const snapshotState = () => ({
+                    view: state.view,
+                    year: state.year,
+                    month: state.month,
+                });
+
+                const renderHistory = () => {
+                    if (!historyNode) {
+                        return;
+                    }
+
+                    if (history.length === 0) {
+                        historyNode.hidden = true;
+                        historyNode.innerHTML = "";
+                        return;
+                    }
+
+                    const lastIndex = history.length - 1;
+                    historyNode.hidden = false;
+                    historyNode.innerHTML = `
+                        <button class="visualization-history-back" type="button" data-history-index="${lastIndex}">Back</button>
+                        <ol class="visualization-history-list mb-0" role="list">
+                            ${history.map((item, index) => `
+                                <li class="visualization-history-item">
+                                    <button class="visualization-history-link" type="button" data-history-index="${index}">${escapeHtml(item.label)}</button>
+                                </li>
+                            `).join("")}
+                            <li class="visualization-history-item visualization-history-current" aria-current="page">${escapeHtml(currentLocationLabel())}</li>
+                        </ol>
+                    `;
+                };
+
+                const clearActiveFocus = () => {
+                    for (const element of document.querySelectorAll("[data-focus-key].is-active")) {
+                        element.classList.remove("is-active");
+                    }
+                };
+
+                const focusElement = (element) => {
+                    if (!(element instanceof HTMLElement)) {
+                        return;
+                    }
+
+                    element.classList.add("is-active");
+                    window.requestAnimationFrame(() => {
+                        if (typeof element.focus === "function") {
+                            element.focus({ preventScroll: true });
+                        }
+                        element.scrollIntoView({ behavior: "smooth", block: "center" });
+                    });
+                };
+
+                const syncFocusedElement = (focusKey = null) => {
+                    clearActiveFocus();
+
+                    if (!focusKey) {
+                        return;
+                    }
+
+                    const scope = state.view === "details" ? detailPanel : summaryPanel;
+                    const target = scope.querySelector(`[data-focus-key="${focusKey}"]`);
+                    focusElement(target);
+                };
+
+                const syncControls = () => {
+                    summaryPanel.dataset.currentView = state.view;
+                    detailPanel.hidden = state.view !== "details";
+                    summaryPanel.hidden = state.view === "details" || state.view === "heatmap";
+                    if (heatmapPanel) heatmapPanel.hidden = state.view !== "heatmap";
+                    statusLabel.textContent = viewLabels[state.view];
+                    statusContext.textContent = describeState(state);
+                    if (playbackPanel) {
+                        playbackPanel.hidden = state.view !== "events";
+                    }
+                    syncPlaybackStatusVisibility();
+                    for (const control of controls) {
+                        const pressed = control.dataset.zoomTarget === state.view;
+                        control.setAttribute("aria-pressed", String(pressed));
+                    }
+                };
+
+                const clearPlaybackTimer = () => {
+                    if (playback.timeoutId) {
+                        window.clearTimeout(playback.timeoutId);
+                        playback.timeoutId = 0;
+                    }
+                };
+
+                const clearPlaybackHighlights = () => {
+                    for (const node of summaryContentNode.querySelectorAll(".is-playback-current, .is-playback-burst, .is-playback-current-entry, .is-playback-revealed")) {
+                        node.classList.remove(
+                            "is-playback-current",
+                            "is-playback-burst",
+                            "is-playback-current-entry",
+                            "is-playback-revealed",
+                        );
+                    }
+                };
+
+                const restorePlaybackScene = () => {
+                    clearPlaybackHighlights();
+                    for (const groupNode of summaryContentNode.querySelectorAll("[data-playback-group]")) {
+                        groupNode.classList.remove("is-playback-hidden");
+                    }
+                    for (const entryNode of summaryContentNode.querySelectorAll("[data-playback-entry]")) {
+                        entryNode.classList.remove("is-playback-hidden");
+                    }
+                };
+
+                const setPlaybackStatus = (message, burstLevel = "steady") => {
+                    playback.currentBurstLevel = burstLevel;
+                    if (playbackStatusNode) {
+                        playbackStatusNode.textContent = message;
+                    }
+                    if (playbackPanel) {
+                        playbackPanel.dataset.playbackState = playback.status;
+                        playbackPanel.dataset.playbackBurstLevel = burstLevel;
+                    }
+                };
+
+                const syncPlaybackStatusVisibility = () => {
+                    if (!playbackStatusNode) {
+                        return;
+                    }
+                    playbackStatusNode.hidden = state.view !== "events"
+                        || playback.status === "idle"
+                        || !playbackStatusNode.textContent.trim();
+                };
+
+                const syncPlaybackButtons = () => {
+                    const isPlaying = playback.status === "playing";
+                    const isPaused = playback.status === "paused";
+                    const isBusy = playback.status === "loading";
+
+                    playbackActionButtons.forEach((button) => {
+                        const action = button.dataset.playbackAction;
+                        if (action === "play") {
+                            const playLabel = isPaused
+                                ? "Resume summaries replay"
+                                : "Play summaries replay";
+                            button.setAttribute("aria-label", playLabel);
+                            button.setAttribute("title", playLabel);
+                            button.disabled = isPlaying || isBusy;
+                            return;
+                        }
+                        if (action === "pause") {
+                            button.disabled = !isPlaying;
+                            return;
+                        }
+                        button.disabled = isBusy;
+                    });
+                };
+
+                const syncPlaybackUi = () => {
+                    syncPlaybackButtons();
+                    if (playback.status === "idle") {
+                        setPlaybackStatus("");
+                    }
+                    syncPlaybackStatusVisibility();
+                };
+
+                const buildRequestUrl = (endpoint, extraParams = {}) => {
+                    const params = new URLSearchParams();
+                    if (timelineState.groupId) {
+                        params.set("group_id", String(timelineState.groupId));
+                    }
+                    if (timelineState.query) {
+                        params.set("q", timelineState.query);
+                    }
+                    for (const [key, value] of Object.entries(extraParams)) {
+                        if (value === null || value === undefined || value === "") {
+                            continue;
+                        }
+                        params.set(key, String(value));
+                    }
+                    const queryString = params.toString();
+                    return queryString ? `${endpoint}?${queryString}` : endpoint;
+                };
+
+                const mergeDetailFragment = (html) => {
+                    if (!html.trim()) {
+                        return;
+                    }
+
+                    const template = document.createElement("template");
+                    template.innerHTML = html;
+                    const newGroups = Array.from(template.content.querySelectorAll("[data-group-key]"));
+                    const lastExistingGroup = detailGroupsNode.lastElementChild;
+                    const firstNewGroup = newGroups[0];
+
+                    if (
+                        lastExistingGroup instanceof HTMLElement
+                        && firstNewGroup instanceof HTMLElement
+                        && lastExistingGroup.dataset.groupKey
+                        && lastExistingGroup.dataset.groupKey === firstNewGroup.dataset.groupKey
+                    ) {
+                        const existingEntries = lastExistingGroup.querySelector("[data-group-entries]");
+                        const newEntries = firstNewGroup.querySelector("[data-group-entries]");
+                        if (existingEntries && newEntries) {
+                            for (const child of Array.from(newEntries.children)) {
+                                existingEntries.appendChild(child);
+                            }
+                            firstNewGroup.remove();
+                        }
+                    }
+
+                    detailGroupsNode.appendChild(template.content);
+                };
+
+                const syncDetailStates = () => {
+                    detailLoadingNode.hidden = !details.loading;
+                    detailErrorNode.hidden = true;
+                    detailEndNode.hidden = details.hasMore;
+                    statusContext.textContent = describeState(state);
+                };
+
+                const loadMoreDetails = async () => {
+                    if (state.view !== "details" || details.loading || !details.hasMore) {
+                        return true;
+                    }
+
+                    details.loading = true;
+                    syncDetailStates();
+
+                    try {
+                        const response = await fetch(buildRequestUrl(timelineState.detailsEndpoint, {
+                            cursor: details.nextCursor,
+                            page_size: timelineState.pageSize,
+                        }), {
+                            headers: { "X-Requested-With": "fetch" },
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`Detail request failed with ${response.status}`);
+                        }
+
+                        const payload = await response.json();
+                        if (payload.scope_key !== timelineState.scopeKey) {
+                            throw new Error("Timeline scope changed during detail load.");
+                        }
+
+                        mergeDetailFragment(payload.items_html || "");
+                        details.nextCursor = payload.next_cursor || null;
+                        details.hasMore = Boolean(payload.has_more);
+                        details.loading = false;
+                        syncDetailStates();
+                        return true;
+                    } catch (_error) {
+                        details.loading = false;
+                        detailLoadingNode.hidden = true;
+                        detailErrorNode.hidden = false;
+                        return false;
+                    }
+                };
+
+                const collectPlaybackGroups = () => Array.from(summaryContentNode.querySelectorAll("[data-playback-group]"))
+                    .filter((node) => node instanceof HTMLElement)
+                    .map((groupNode) => {
+                        const element = groupNode;
+                        const entryNodes = Array.from(element.querySelectorAll("[data-playback-entry]"))
+                            .filter((node) => node instanceof HTMLElement)
+                            .reverse();
+                        return {
+                            node: element,
+                            label: element.dataset.playbackLabel || "Timeline period",
+                            count: Number(element.dataset.playbackCount || entryNodes.length || "0"),
+                            burstLevel: element.dataset.playbackBurstLevel || "steady",
+                            introDelayMs: Number(element.dataset.playbackIntroMs || "240"),
+                            entryDelayMs: Number(element.dataset.playbackEntryMs || "180"),
+                            outroDelayMs: Number(element.dataset.playbackOutroMs || "240"),
+                            entryNodes,
+                        };
+                    })
+                    .reverse();
+
+                const buildMonthPlaybackSteps = (groups) => groups.flatMap((group) => {
+                    const steps = [{
+                        kind: "group",
+                        group,
+                        delayAfter: group.introDelayMs,
+                    }];
+                    group.entryNodes.forEach((entryNode, index) => {
+                        steps.push({
+                            kind: "entry",
+                            group,
+                            entryNode,
+                            entryLabel: entryNode.dataset.entryLabel || entryNode.dataset.entryDate || `Entry ${index + 1}`,
+                            delayAfter: index === group.entryNodes.length - 1
+                                ? group.outroDelayMs
+                                : group.entryDelayMs,
+                        });
+                    });
+                    return steps;
+                });
+
+                const preparePlaybackScene = (groups) => {
+                    restorePlaybackScene();
+                    groups.forEach((group) => {
+                        group.node.classList.add("is-playback-hidden");
+                        group.entryNodes.forEach((entryNode) => {
+                            entryNode.classList.add("is-playback-hidden");
+                        });
+                    });
+                };
+
+                const scrollPlaybackTargetIntoView = (element) => {
+                    if (!(element instanceof HTMLElement) || motionQuery.matches) {
+                        return;
+                    }
+                    window.requestAnimationFrame(() => {
+                        element.scrollIntoView({ behavior: "smooth", block: "center" });
+                    });
+                };
+
+                const setActivePlaybackGroup = (group) => {
+                    for (const groupNode of summaryContentNode.querySelectorAll("[data-playback-group]")) {
+                        groupNode.classList.remove("is-playback-current", "is-playback-burst");
+                    }
+                    group.node.classList.add("is-playback-current", "is-playback-revealed");
+                    if (group.burstLevel !== "steady") {
+                        group.node.classList.add("is-playback-burst");
+                    }
+                    group.node.classList.remove("is-playback-hidden");
+                    scrollPlaybackTargetIntoView(group.node);
+                };
+
+                const setActivePlaybackEntry = (entryNode) => {
+                    for (const node of summaryContentNode.querySelectorAll("[data-playback-entry].is-playback-current-entry")) {
+                        node.classList.remove("is-playback-current-entry");
+                    }
+                    entryNode.classList.remove("is-playback-hidden");
+                    entryNode.classList.add("is-playback-current-entry", "is-playback-revealed");
+                };
+
+                const finishPlayback = () => {
+                    clearPlaybackTimer();
+                    playback.status = "complete";
+                    restorePlaybackScene();
+                    setPlaybackStatus("Summaries replay complete.", "steady");
+                    syncPlaybackButtons();
+                };
+
+                const stopPlayback = ({ resetMessage = true } = {}) => {
+                    playback.runId += 1;
+                    clearPlaybackTimer();
+                    playback.status = "idle";
+                    playback.steps = [];
+                    playback.index = -1;
+                    playback.currentLabel = "";
+                    restorePlaybackScene();
+                    syncPlaybackButtons();
+                    if (resetMessage && state.view === "events") {
+                        setPlaybackStatus("");
+                    }
+                    syncPlaybackStatusVisibility();
+                };
+
+                const pausePlayback = () => {
+                    if (playback.status !== "playing") {
+                        return;
+                    }
+                    clearPlaybackTimer();
+                    playback.status = "paused";
+                    const pausedLabel = playback.currentLabel || "timeline replay";
+                    setPlaybackStatus(`Paused during ${pausedLabel}.`, playback.currentBurstLevel);
+                    syncPlaybackButtons();
+                };
+
+                const runPlaybackStep = (step) => {
+                    if (step.kind === "group") {
+                        playback.currentLabel = step.group.label;
+                        setActivePlaybackGroup(step.group);
+                        setPlaybackStatus(
+                            step.group.burstLevel === "steady"
+                                ? `Playing ${step.group.label} oldest first.`
+                                : `Playing ${step.group.label} with a ${step.group.burstLevel === "surge" ? "surge" : "burst"} cadence.`,
+                            step.group.burstLevel,
+                        );
+                        return;
+                    }
+
+                    playback.currentLabel = `${step.group.label} · ${step.entryLabel}`;
+                    setActivePlaybackGroup(step.group);
+                    setActivePlaybackEntry(step.entryNode);
+                    setPlaybackStatus(
+                        step.group.burstLevel === "steady"
+                            ? `${step.group.label}: ${step.entryLabel}`
+                            : `${step.group.label}: ${step.entryLabel} during a ${step.group.burstLevel === "surge" ? "surge" : "burst"}.`,
+                        step.group.burstLevel,
+                    );
+                };
+
+                const scheduleNextPlaybackStep = (delay = 120, runId = playback.runId) => {
+                    clearPlaybackTimer();
+                    playback.timeoutId = window.setTimeout(() => {
+                        if (runId !== playback.runId || playback.status !== "playing") {
+                            return;
+                        }
+                        playback.index += 1;
+                        const step = playback.steps[playback.index];
+                        if (!step) {
+                            finishPlayback();
+                            return;
+                        }
+                        runPlaybackStep(step);
+                        scheduleNextPlaybackStep(step.delayAfter, runId);
+                    }, motionQuery.matches ? 0 : delay);
+                };
+
+                const resumePlayback = () => {
+                    if (playback.status !== "paused") {
+                        return;
+                    }
+                    playback.status = "playing";
+                    setPlaybackStatus(`Resuming ${playback.currentLabel || "summaries replay"}.`, playback.currentBurstLevel);
+                    syncPlaybackButtons();
+                    scheduleNextPlaybackStep(150, playback.runId);
+                };
+
+                const startPlayback = async ({ restart = false } = {}) => {
+                    if (playback.status === "paused" && !restart) {
+                        resumePlayback();
+                        return;
+                    }
+
+                    stopPlayback({ resetMessage: false });
+                    playback.status = "loading";
+                    syncPlaybackButtons();
+                    setPlaybackStatus("Preparing summaries replay…", "steady");
+                    const runId = playback.runId;
+
+                    if (state.view !== "events") {
+                        playback.status = "idle";
+                        syncPlaybackButtons();
+                        return;
+                    }
+
+                    if (!summaryContentNode.innerHTML.trim()) {
+                        await loadSummaryView(state);
+                    }
+
+                    if (runId !== playback.runId) {
+                        playback.status = "idle";
+                        syncPlaybackButtons();
+                        return;
+                    }
+
+                    const groups = collectPlaybackGroups();
+                    if (groups.length === 0) {
+                        playback.status = "idle";
+                        setPlaybackStatus("No entries available to replay.", "steady");
+                        syncPlaybackButtons();
+                        return;
+                    }
+
+                    preparePlaybackScene(groups);
+                    playback.steps = buildMonthPlaybackSteps(groups);
+                    playback.index = -1;
+                    playback.status = "playing";
+                    setPlaybackStatus("Starting a month-by-month replay from the oldest month.", "steady");
+                    syncPlaybackButtons();
+                    scheduleNextPlaybackStep(180, runId);
+                };
+
+                const summaryCacheKey = (nextState) => JSON.stringify({
+                    view: nextState.view,
+                    year: nextState.year,
+                    month: nextState.month,
+                });
+
+                const loadSummaryView = async (nextState, focusKey = null) => {
+                    const cacheKey = summaryCacheKey(nextState);
+                    if (summaryCache.has(cacheKey)) {
+                        summaryContentNode.innerHTML = summaryCache.get(cacheKey);
+                        summaryLoadingNode.hidden = true;
+                        summaryErrorNode.hidden = true;
+                        summaryContentNode.hidden = false;
+                        syncPlaybackUi();
+                        syncFocusedElement(focusKey);
+                        return;
+                    }
+
+                    const requestId = ++activeSummaryRequestId;
+                    summaryLoadingNode.hidden = false;
+                    summaryErrorNode.hidden = true;
+                    summaryContentNode.innerHTML = "";
+                    summaryContentNode.hidden = true;
+
+                    const endpoint = nextState.view === "years"
+                        ? timelineState.yearsEndpoint
+                        : (nextState.view === "months" ? timelineState.monthsEndpoint : timelineState.summariesEndpoint);
+
+                    try {
+                        const response = await fetch(buildRequestUrl(endpoint, {
+                            year: nextState.year,
+                            month: nextState.month,
+                        }), {
+                            headers: { "X-Requested-With": "fetch" },
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`Summary request failed with ${response.status}`);
+                        }
+
+                        const payload = await response.json();
+                        if (requestId !== activeSummaryRequestId || payload.scope_key !== timelineState.scopeKey) {
+                            return;
+                        }
+
+                        summaryCache.set(cacheKey, payload.items_html || "");
+                        summaryContentNode.innerHTML = payload.items_html || "";
+                        summaryLoadingNode.hidden = true;
+                        summaryErrorNode.hidden = true;
+                        summaryContentNode.hidden = false;
+                        syncPlaybackUi();
+                        syncFocusedElement(focusKey);
+                    } catch (_error) {
+                        if (requestId !== activeSummaryRequestId) {
+                            return;
+                        }
+                        summaryLoadingNode.hidden = true;
+                        summaryContentNode.hidden = true;
+                        summaryErrorNode.hidden = false;
+                    }
+                };
+
+                const openMonthView = (target) => {
+                    if (!(target instanceof HTMLElement)) {
+                        return;
+                    }
+
+                    const targetYear = target.dataset.targetYear ? Number(target.dataset.targetYear) : null;
+                    const targetMonth = target.dataset.targetMonth ? Number(target.dataset.targetMonth) : null;
+
+                    if (Number.isNaN(targetYear) || Number.isNaN(targetMonth) || targetYear === null || targetMonth === null) {
+                        return;
+                    }
+
+                    void setState({
+                        view: "months",
+                        year: targetYear,
+                        month: null,
+                    }, {
+                        clearHistory: true,
+                        focusKey: monthFocusKey(targetMonth, targetYear),
+                    });
+                };
+
+                const setState = async (nextState, options = {}) => {
+                    const normalizedState = normalizeState(nextState);
+                    const {
+                        clearHistory = false,
+                        pushSnapshot = null,
+                        replaceHistory = null,
+                        focusKey = null,
+                        suppressPlaybackReset = false,
+                    } = options;
+
+                    const hasStateChanged = !statesEqual(normalizedState, state);
+                    if (!suppressPlaybackReset && hasStateChanged && playback.status !== "idle") {
+                        stopPlayback();
+                    }
+
+                    if (clearHistory) {
+                        history = [];
+                    } else if (Array.isArray(replaceHistory)) {
+                        history = replaceHistory;
+                    } else if (pushSnapshot) {
+                        history = [...history, pushSnapshot];
+                    }
+
+                    state = normalizedState;
+
+                    syncControls();
+                    renderHistory();
+
+                    if (state.view === "details") {
+                        syncFocusedElement(focusKey);
+                    } else if (hasStateChanged || !summaryContentNode.innerHTML.trim()) {
+                        await loadSummaryView(state, focusKey);
+                    } else {
+                        syncFocusedElement(focusKey);
+                    }
+
+                    return true;
+                };
+
+                syncControls();
+                renderHistory();
+                syncDetailStates();
+                syncPlaybackUi();
+
+                for (const control of controls) {
+                    control.addEventListener("click", async () => {
+                        const target = control.dataset.zoomTarget || "details";
+                        if (target === "heatmap") {
+                            state.view = "heatmap";
+                            syncControls();
+                            loadHeatmap();
+                            return;
+                        }
+                        await setState({
+                            view: target,
+                            year: null,
+                            month: null,
+                        }, { clearHistory: true });
+                    });
+                }
+
+                detailPanel.addEventListener("click", (event) => {
+                    const target = event.target.closest("[data-open-month-view]");
+                    if (!(target instanceof HTMLElement)) {
+                        return;
+                    }
+
+                    openMonthView(target);
+                });
+
+                summaryPanel.addEventListener("click", async (event) => {
+                    const monthTarget = event.target.closest("[data-open-month-view]");
+                    if (monthTarget instanceof HTMLElement) {
+                        openMonthView(monthTarget);
+                        return;
+                    }
+
+                    const target = event.target.closest("[data-drill-view]");
+                    if (!(target instanceof HTMLElement)) {
+                        return;
+                    }
+
+                    const drillView = target.dataset.drillView;
+                    if (!drillView) {
+                        return;
+                    }
+
+                    const drillYear = target.dataset.drillYear ? Number(target.dataset.drillYear) : null;
+                    const drillMonth = target.dataset.drillMonth ? Number(target.dataset.drillMonth) : null;
+                    const drillLabel = target.dataset.drillLabel || viewLabels[drillView] || "Selection";
+                    const focusKey = target.dataset.focusKey || null;
+
+                    await setState({
+                        view: drillView,
+                        year: Number.isNaN(drillYear) ? null : drillYear,
+                        month: Number.isNaN(drillMonth) ? null : drillMonth,
+                    }, {
+                        pushSnapshot: {
+                            label: drillLabel,
+                            focusKey,
+                            state: snapshotState(),
+                        },
+                    });
+                });
+
+                historyNode?.addEventListener("click", async (event) => {
+                    const target = event.target.closest("[data-history-index]");
+                    if (!(target instanceof HTMLElement)) {
+                        return;
+                    }
+
+                    const historyIndex = Number(target.dataset.historyIndex);
+                    if (Number.isNaN(historyIndex) || historyIndex < 0 || historyIndex >= history.length) {
+                        return;
+                    }
+
+                    const snapshot = history[historyIndex];
+                    await setState(snapshot.state, {
+                        replaceHistory: history.slice(0, historyIndex),
+                        focusKey: snapshot.focusKey,
+                    });
+                });
+
+                detailRetryButton?.addEventListener("click", () => {
+                    detailErrorNode.hidden = true;
+                    void loadMoreDetails();
+                });
+
+                summaryRetryButton?.addEventListener("click", () => {
+                    summaryErrorNode.hidden = true;
+                    void loadSummaryView(state);
+                });
+
+                playbackActionButtons.forEach((button) => {
+                    button.addEventListener("click", () => {
+                        const action = button.dataset.playbackAction;
+                        if (action === "pause") {
+                            pausePlayback();
+                            return;
+                        }
+                        if (action === "restart") {
+                            void startPlayback({ restart: true });
+                            return;
+                        }
+                        void startPlayback();
+                    });
+                });
+
+                motionQuery.addEventListener?.("change", () => {
+                    if (playback.status !== "idle") {
+                        stopPlayback();
+                    }
+                    syncPlaybackUi();
+                });
+
+                const observer = new IntersectionObserver((entries) => {
+                    for (const entry of entries) {
+                        if (entry.isIntersecting) {
+                            void loadMoreDetails();
+                        }
+                    }
+                }, {
+                    rootMargin: "300px 0px",
+                });
+
+                observer.observe(detailSentinel);
+
+                // --- Heatmap rendering ---
+                let heatmapLoaded = false;
+                let heatmapYear = null;
+                let heatmapSelectedDate = null;
+
+                function getHeatmapColors() {
+                    const style = getComputedStyle(document.documentElement);
+                    const theme = document.documentElement.getAttribute("data-bs-theme");
+                    if (theme === "dark") {
+                        return ["#1e293b", "#164e63", "#0e7490", "#0891b2", "#06b6d4"];
+                    }
+                    return [
+                        style.getPropertyValue("--et-surface-bg").trim() || "#f8fafc",
+                        "rgba(8, 145, 178, 0.15)",
+                        "rgba(8, 145, 178, 0.35)",
+                        "rgba(8, 145, 178, 0.6)",
+                        style.getPropertyValue("--et-primary").trim() || "#0891b2",
+                    ];
+                }
+
+                function loadHeatmap(year) {
+                    const container = document.getElementById("heatmap-container");
+                    if (!container) return;
+
+                    // Load D3 if not loaded
+                    if (!window.d3) {
+                        const script = document.createElement("script");
+                        script.src = "https://cdn.jsdelivr.net/npm/d3@7";
+                        script.onload = () => loadHeatmap(year);
+                        document.head.appendChild(script);
+                        return;
+                    }
+
+                    const groupId = timelineState.groupId || "";
+                    const params = new URLSearchParams();
+                    if (groupId) params.set("group_id", String(groupId));
+                    if (year) params.set("year", year);
+
+                    container.innerHTML = '<div class="text-body-secondary py-4 text-center">Loading heatmap\u2026</div>';
+
+                    fetch(`/api/heatmap?${params}`)
+                        .then(r => { if (!r.ok) throw new Error("Failed to load"); return r.json(); })
+                        .then(data => {
+                            heatmapYear = data.year;
+                            renderHeatmapGrid(container, data);
+                        })
+                        .catch(err => {
+                            container.innerHTML = `<div class="text-danger py-4 text-center">Could not load heatmap: ${err.message}</div>`;
+                        });
+                }
+
+                function renderHeatmapGrid(container, data) {
+                    container.innerHTML = "";
+                    const { counts, total, year, years_available } = data;
+
+                    const cellSize = 12;
+                    const cellGap = 2;
+                    const cellStep = cellSize + cellGap;
+                    const labelWidth = 36;
+                    const topMargin = 28;
+                    const navHeight = 32;
+                    const width = labelWidth + 53 * cellStep + 10;
+                    const height = navHeight + topMargin + 7 * cellStep + 40;
+
+                    const svg = d3.select(container)
+                        .append("svg")
+                        .attr("viewBox", `0 0 ${width} ${height}`)
+                        .attr("class", "heatmap-svg")
+                        .style("width", "100%")
+                        .style("max-width", `${width}px`);
+
+                    // Year navigation
+                    const nav = svg.append("g").attr("transform", `translate(${width / 2}, 18)`);
+
+                    const prevYear = years_available[years_available.indexOf(year) - 1];
+                    const nextYear = years_available[years_available.indexOf(year) + 1];
+
+                    if (prevYear !== undefined) {
+                        nav.append("text")
+                            .attr("x", -60)
+                            .attr("text-anchor", "middle")
+                            .attr("fill", "var(--et-text-secondary)")
+                            .attr("font-size", "14px")
+                            .attr("class", "heatmap-nav-arrow")
+                            .style("cursor", "pointer")
+                            .text("\u25C0")
+                            .on("click", () => loadHeatmap(prevYear));
+                    }
+
+                    nav.append("text")
+                        .attr("x", 0)
+                        .attr("text-anchor", "middle")
+                        .attr("fill", "var(--et-text)")
+                        .attr("font-size", "14px")
+                        .attr("font-weight", "600")
+                        .attr("font-family", "'JetBrains Mono', monospace")
+                        .text(year);
+
+                    if (nextYear !== undefined) {
+                        nav.append("text")
+                            .attr("x", 60)
+                            .attr("text-anchor", "middle")
+                            .attr("fill", "var(--et-text-secondary)")
+                            .attr("font-size", "14px")
+                            .attr("class", "heatmap-nav-arrow")
+                            .style("cursor", "pointer")
+                            .text("\u25B6")
+                            .on("click", () => loadHeatmap(nextYear));
+                    }
+
+                    const gridG = svg.append("g")
+                        .attr("transform", `translate(${labelWidth}, ${navHeight + topMargin})`);
+
+                    // Build date-to-cell mapping
+                    const jan1 = new Date(year, 0, 1);
+                    const dec31 = new Date(year, 11, 31);
+                    const startDay = (jan1.getDay() + 6) % 7; // Monday = 0
+                    const cells = [];
+
+                    for (let d = new Date(jan1); d <= dec31; d.setDate(d.getDate() + 1)) {
+                        const dayOfWeek = (d.getDay() + 6) % 7;
+                        const dayOfYear = Math.floor((d - jan1) / 86400000);
+                        const week = Math.floor((dayOfYear + startDay) / 7);
+                        const month = d.getMonth();
+                        const dayNum = d.getDate();
+                        const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`;
+                        cells.push({ key, week, dayOfWeek, month, dayNum, count: counts[key] || 0 });
+                    }
+
+                    // Color scale
+                    const maxCount = d3.max(cells, c => c.count) || 1;
+                    const colors = getHeatmapColors();
+                    const colorScale = (count) => {
+                        if (count === 0) return colors[0];
+                        const thresholds = [1, Math.ceil(maxCount * 0.25), Math.ceil(maxCount * 0.5), Math.ceil(maxCount * 0.75)];
+                        if (count >= thresholds[3]) return colors[4];
+                        if (count >= thresholds[2]) return colors[3];
+                        if (count >= thresholds[1]) return colors[2];
+                        return colors[1];
+                    };
+
+                    // Month labels
+                    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+                    let lastMonth = -1;
+                    for (const cell of cells) {
+                        if (cell.month !== lastMonth && cell.dayNum <= 7) {
+                            gridG.append("text")
+                                .attr("x", cell.week * cellStep)
+                                .attr("y", -6)
+                                .attr("fill", "var(--et-text-muted)")
+                                .attr("font-size", "9px")
+                                .text(months[cell.month]);
+                            lastMonth = cell.month;
+                        }
+                    }
+
+                    // Day-of-week labels
+                    const dayLabels = ["Mon", "", "Wed", "", "Fri", "", ""];
+                    dayLabels.forEach((label, i) => {
+                        if (label) {
+                            gridG.append("text")
+                                .attr("x", -6)
+                                .attr("y", i * cellStep + cellSize - 1)
+                                .attr("text-anchor", "end")
+                                .attr("fill", "var(--et-text-muted)")
+                                .attr("font-size", "8px")
+                                .text(label);
+                        }
+                    });
+
+                    // Tooltip
+                    const tooltip = d3.select(container)
+                        .append("div")
+                        .attr("class", "heatmap-tooltip")
+                        .style("display", "none");
+
+                    // Cells
+                    gridG.selectAll("rect.heatmap-cell")
+                        .data(cells)
+                        .enter()
+                        .append("rect")
+                        .attr("class", "heatmap-cell")
+                        .attr("x", d => d.week * cellStep)
+                        .attr("y", d => d.dayOfWeek * cellStep)
+                        .attr("width", cellSize)
+                        .attr("height", cellSize)
+                        .attr("rx", 2)
+                        .attr("fill", d => colorScale(d.count))
+                        .attr("data-date", d => d.key)
+                        .attr("data-count", d => d.count)
+                        .style("cursor", d => d.count > 0 ? "pointer" : "default")
+                        .on("mouseenter", function(event, d) {
+                            const rect = this.getBoundingClientRect();
+                            const containerRect = container.getBoundingClientRect();
+                            const dateObj = new Date(year, d.month, d.dayNum);
+                            const formatted = dateObj.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+                            const label = d.count === 0
+                                ? `No entries on ${formatted}`
+                                : `${d.count} ${d.count === 1 ? "entry" : "entries"} on ${formatted}`;
+                            tooltip
+                                .style("display", "block")
+                                .html(label)
+                                .style("left", `${rect.left - containerRect.left + cellSize / 2}px`)
+                                .style("top", `${rect.top - containerRect.top - 32}px`);
+                        })
+                        .on("mouseleave", () => tooltip.style("display", "none"))
+                        .on("click", function(event, d) {
+                            if (d.count === 0) return;
+                            const dateKey = d.key;
+                            if (heatmapSelectedDate === dateKey) {
+                                clearHeatmapFilter();
+                                return;
+                            }
+                            selectHeatmapDate(dateKey, d);
+                        });
+
+                    // Legend
+                    const legendG = svg.append("g")
+                        .attr("transform", `translate(${width - 160}, ${height - 14})`);
+                    legendG.append("text").attr("x", 0).attr("y", 9).attr("fill", "var(--et-text-muted)").attr("font-size", "9px").text("Less");
+                    colors.forEach((color, i) => {
+                        legendG.append("rect")
+                            .attr("x", 28 + i * (cellSize + 2))
+                            .attr("y", 0)
+                            .attr("width", cellSize)
+                            .attr("height", cellSize)
+                            .attr("rx", 2)
+                            .attr("fill", color);
+                    });
+                    legendG.append("text").attr("x", 28 + 5 * (cellSize + 2) + 2).attr("y", 9).attr("fill", "var(--et-text-muted)").attr("font-size", "9px").text("More");
+
+                    // Summary stat
+                    svg.append("text")
+                        .attr("x", labelWidth)
+                        .attr("y", height - 6)
+                        .attr("fill", "var(--et-text-secondary)")
+                        .attr("font-size", "11px")
+                        .text(`${total} events in ${year}`);
+
+                    // Empty state overlay
+                    if (total === 0) {
+                        svg.append("text")
+                            .attr("x", width / 2)
+                            .attr("y", navHeight + topMargin + 3.5 * cellStep)
+                            .attr("text-anchor", "middle")
+                            .attr("fill", "var(--et-text-muted)")
+                            .attr("font-size", "13px")
+                            .text(`No events tracked in ${year}`);
+                    }
+
+                    heatmapLoaded = true;
+                }
+
+                function selectHeatmapDate(dateKey, cellData) {
+                    // Highlight selected cell
+                    d3.selectAll(".heatmap-cell").classed("heatmap-cell-selected", false);
+                    d3.selectAll(`.heatmap-cell[data-date="${dateKey}"]`).classed("heatmap-cell-selected", true);
+                    heatmapSelectedDate = dateKey;
+
+                    // Fetch filtered entries
+                    const [y, m, d] = dateKey.split("-");
+                    const params = new URLSearchParams({ year: y, month: String(parseInt(m)), day: String(parseInt(d)) });
+                    const groupId = timelineState.groupId;
+                    if (groupId) params.set("group_id", String(groupId));
+
+                    const entriesContainer = document.getElementById("heatmap-entries");
+                    entriesContainer.innerHTML = '<div class="text-body-secondary py-3">Loading entries\u2026</div>';
+
+                    fetch(`/timeline/heatmap/entries?${params}`)
+                        .then(r => { if (!r.ok) throw new Error("Failed"); return r.text(); })
+                        .then(html => {
+                            entriesContainer.innerHTML = html;
+                            const clearBtn = entriesContainer.querySelector("[data-heatmap-clear-filter]");
+                            if (clearBtn) clearBtn.addEventListener("click", clearHeatmapFilter);
+                        })
+                        .catch(() => {
+                            entriesContainer.innerHTML = '<div class="text-danger py-3">Could not load entries.</div>';
+                        });
+                }
+
+                function clearHeatmapFilter() {
+                    heatmapSelectedDate = null;
+                    d3.selectAll(".heatmap-cell").classed("heatmap-cell-selected", false);
+                    document.getElementById("heatmap-entries").innerHTML = "";
+                }
+
+                // Theme change observer — re-render heatmap when theme toggles
+                new MutationObserver(() => {
+                    if (state.view === "heatmap" && heatmapLoaded) {
+                        loadHeatmap(heatmapYear);
+                    }
+                }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-bs-theme"] });
+            })();
+        </script>
+    {% else %}
+        <div class="empty-state card shadow-sm border-0">
+            <div class="card-body p-4">
+                {% if is_filtered %}
+                    <h2 class="h5">No matching entries</h2>
+                    <p class="text-body-secondary mb-0">Try a different English query or clear the filter.</p>
+                {% else %}
+                    <h2 class="h5">No entries yet</h2>
+                    <p class="text-body-secondary mb-0">Create your first event to start building the timeline.</p>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+{% endblock %}

@@ -1,0 +1,237 @@
+<h2>Activity Heatmap — Design Overview</h2>
+<p class="subtitle">Full architecture at a glance</p>
+
+<div class="mockup">
+  <div class="mockup-header">Timeline Page — Heatmap Tab Active</div>
+  <div class="mockup-body" style="background: #0f172a; padding: 0;">
+    <svg viewBox="0 0 800 520" style="width:100%;height:auto;" font-family="Inter, sans-serif">
+      <!-- Navbar -->
+      <rect x="0" y="0" width="800" height="40" fill="#1e293b"/>
+      <text x="20" y="26" fill="#06b6d4" font-size="14" font-weight="600">EventTracker</text>
+      <rect x="300" y="10" width="200" height="22" rx="4" fill="#0f172a" stroke="#334155"/>
+      <text x="310" y="25" fill="#64748b" font-size="10">Search entries...</text>
+
+      <!-- Hero section -->
+      <rect x="0" y="40" width="800" height="50" fill="#0f172a"/>
+      <text x="60" y="72" fill="#f1f5f9" font-size="16" font-weight="600">AI Development Timeline</text>
+      <text x="310" y="72" fill="#64748b" font-size="11">142 entries</text>
+
+      <!-- Visualization toolbar -->
+      <rect x="60" y="100" width="680" height="36" rx="8" fill="#1e293b" stroke="#334155"/>
+      <!-- Tab buttons -->
+      <rect x="64" y="104" width="70" height="28" rx="6" fill="transparent"/>
+      <text x="80" y="122" fill="#94a3b8" font-size="10">Details</text>
+      <rect x="138" y="104" width="85" height="28" rx="6" fill="transparent"/>
+      <text x="150" y="122" fill="#94a3b8" font-size="10">Summaries</text>
+      <rect x="227" y="104" width="70" height="28" rx="6" fill="transparent"/>
+      <text x="242" y="122" fill="#94a3b8" font-size="10">Months</text>
+      <rect x="301" y="104" width="60" height="28" rx="6" fill="transparent"/>
+      <text x="314" y="122" fill="#94a3b8" font-size="10">Years</text>
+      <!-- Active heatmap tab -->
+      <rect x="365" y="104" width="80" height="28" rx="6" fill="#164e63"/>
+      <text x="377" y="122" fill="#06b6d4" font-size="10" font-weight="600">Heatmap</text>
+
+      <!-- Year navigation -->
+      <text x="620" y="122" fill="#64748b" font-size="10">◀</text>
+      <text x="645" y="122" fill="#f1f5f9" font-size="11" font-family="JetBrains Mono, monospace">2025</text>
+      <text x="685" y="122" fill="#64748b" font-size="10">▶</text>
+
+      <!-- Heatmap area -->
+      <rect x="60" y="150" width="680" height="130" rx="8" fill="#162032" stroke="#1e3a5f" stroke-width="0.5"/>
+
+      <!-- Year label -->
+      <text x="75" y="172" fill="#f1f5f9" font-size="12" font-family="JetBrains Mono, monospace">2025</text>
+
+      <!-- Month labels -->
+      <text x="120" y="172" fill="#64748b" font-size="8">Jan</text>
+      <text x="168" y="172" fill="#64748b" font-size="8">Feb</text>
+      <text x="216" y="172" fill="#64748b" font-size="8">Mar</text>
+      <text x="264" y="172" fill="#64748b" font-size="8">Apr</text>
+      <text x="312" y="172" fill="#64748b" font-size="8">May</text>
+      <text x="360" y="172" fill="#64748b" font-size="8">Jun</text>
+      <text x="408" y="172" fill="#64748b" font-size="8">Jul</text>
+      <text x="456" y="172" fill="#64748b" font-size="8">Aug</text>
+      <text x="504" y="172" fill="#64748b" font-size="8">Sep</text>
+      <text x="552" y="172" fill="#64748b" font-size="8">Oct</text>
+      <text x="600" y="172" fill="#64748b" font-size="8">Nov</text>
+      <text x="648" y="172" fill="#64748b" font-size="8">Dec</text>
+
+      <!-- Day-of-week labels -->
+      <text x="80" y="190" fill="#475569" font-size="7">Mon</text>
+      <text x="80" y="202" fill="#475569" font-size="7">Wed</text>
+      <text x="80" y="214" fill="#475569" font-size="7">Fri</text>
+
+      <!-- Heatmap grid cells (representative sample) -->
+      <g transform="translate(110, 178)">
+        <!-- Jan weeks -->
+        <rect x="0" y="0" width="8" height="8" rx="2" fill="#1e293b"/><rect x="0" y="10" width="8" height="8" rx="2" fill="#164e63"/>
+        <rect x="0" y="20" width="8" height="8" rx="2" fill="#1e293b"/><rect x="0" y="30" width="8" height="8" rx="2" fill="#0891b2"/>
+        <rect x="0" y="40" width="8" height="8" rx="2" fill="#1e293b"/><rect x="0" y="50" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="0" y="60" width="8" height="8" rx="2" fill="#164e63"/>
+        <rect x="10" y="0" width="8" height="8" rx="2" fill="#1e293b"/><rect x="10" y="10" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="10" y="20" width="8" height="8" rx="2" fill="#06b6d4"/><rect x="10" y="30" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="10" y="40" width="8" height="8" rx="2" fill="#164e63"/><rect x="10" y="50" width="8" height="8" rx="2" fill="#0891b2"/>
+        <rect x="10" y="60" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="20" y="0" width="8" height="8" rx="2" fill="#164e63"/><rect x="20" y="10" width="8" height="8" rx="2" fill="#0891b2"/>
+        <rect x="20" y="20" width="8" height="8" rx="2" fill="#1e293b"/><rect x="20" y="30" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="20" y="40" width="8" height="8" rx="2" fill="#06b6d4"/><rect x="20" y="50" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="20" y="60" width="8" height="8" rx="2" fill="#164e63"/>
+        <rect x="30" y="0" width="8" height="8" rx="2" fill="#1e293b"/><rect x="30" y="10" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="30" y="20" width="8" height="8" rx="2" fill="#1e293b"/><rect x="30" y="30" width="8" height="8" rx="2" fill="#0e7490"/>
+        <rect x="30" y="40" width="8" height="8" rx="2" fill="#1e293b"/><rect x="30" y="50" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="30" y="60" width="8" height="8" rx="2" fill="#0891b2"/>
+
+        <!-- Feb weeks -->
+        <rect x="50" y="0" width="8" height="8" rx="2" fill="#06b6d4"/><rect x="50" y="10" width="8" height="8" rx="2" fill="#06b6d4"/>
+        <rect x="50" y="20" width="8" height="8" rx="2" fill="#0891b2"/><rect x="50" y="30" width="8" height="8" rx="2" fill="#164e63"/>
+        <rect x="50" y="40" width="8" height="8" rx="2" fill="#1e293b"/><rect x="50" y="50" width="8" height="8" rx="2" fill="#164e63"/>
+        <rect x="50" y="60" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="60" y="0" width="8" height="8" rx="2" fill="#1e293b"/><rect x="60" y="10" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="60" y="20" width="8" height="8" rx="2" fill="#164e63"/><rect x="60" y="30" width="8" height="8" rx="2" fill="#0891b2"/>
+        <rect x="60" y="40" width="8" height="8" rx="2" fill="#06b6d4"/><rect x="60" y="50" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="60" y="60" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="70" y="0" width="8" height="8" rx="2" fill="#1e293b"/><rect x="70" y="10" width="8" height="8" rx="2" fill="#0e7490"/>
+        <rect x="70" y="20" width="8" height="8" rx="2" fill="#1e293b"/><rect x="70" y="30" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="70" y="40" width="8" height="8" rx="2" fill="#1e293b"/><rect x="70" y="50" width="8" height="8" rx="2" fill="#164e63"/>
+        <rect x="70" y="60" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="80" y="0" width="8" height="8" rx="2" fill="#164e63"/><rect x="80" y="10" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="80" y="20" width="8" height="8" rx="2" fill="#06b6d4"/><rect x="80" y="30" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="80" y="40" width="8" height="8" rx="2" fill="#1e293b"/><rect x="80" y="50" width="8" height="8" rx="2" fill="#0891b2"/>
+        <rect x="80" y="60" width="8" height="8" rx="2" fill="#1e293b"/>
+
+        <!-- Mar weeks -->
+        <rect x="100" y="0" width="8" height="8" rx="2" fill="#1e293b"/><rect x="100" y="10" width="8" height="8" rx="2" fill="#06b6d4"/>
+        <rect x="100" y="20" width="8" height="8" rx="2" fill="#06b6d4"/><rect x="100" y="30" width="8" height="8" rx="2" fill="#0891b2"/>
+        <rect x="100" y="40" width="8" height="8" rx="2" fill="#164e63"/><rect x="100" y="50" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="100" y="60" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="110" y="0" width="8" height="8" rx="2" fill="#0891b2"/><rect x="110" y="10" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="110" y="20" width="8" height="8" rx="2" fill="#1e293b"/><rect x="110" y="30" width="8" height="8" rx="2" fill="#164e63"/>
+        <rect x="110" y="40" width="8" height="8" rx="2" fill="#06b6d4"/><rect x="110" y="50" width="8" height="8" rx="2" fill="#0891b2"/>
+        <rect x="110" y="60" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="120" y="0" width="8" height="8" rx="2" fill="#1e293b"/><rect x="120" y="10" width="8" height="8" rx="2" fill="#0e7490"/>
+        <rect x="120" y="20" width="8" height="8" rx="2" fill="#1e293b"/><rect x="120" y="30" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="120" y="40" width="8" height="8" rx="2" fill="#164e63"/><rect x="120" y="50" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="120" y="60" width="8" height="8" rx="2" fill="#06b6d4"/>
+        <rect x="130" y="0" width="8" height="8" rx="2" fill="#0891b2"/><rect x="130" y="10" width="8" height="8" rx="2" fill="#164e63"/>
+        <rect x="130" y="20" width="8" height="8" rx="2" fill="#1e293b"/><rect x="130" y="30" width="8" height="8" rx="2" fill="#06b6d4"/>
+        <rect x="130" y="40" width="8" height="8" rx="2" fill="#1e293b"/><rect x="130" y="50" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="130" y="60" width="8" height="8" rx="2" fill="#0e7490"/>
+
+        <!-- Apr-Dec (sparser) -->
+        <rect x="150" y="0" width="8" height="8" rx="2" fill="#1e293b"/><rect x="150" y="10" width="8" height="8" rx="2" fill="#164e63"/>
+        <rect x="150" y="20" width="8" height="8" rx="2" fill="#1e293b"/><rect x="150" y="30" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="150" y="40" width="8" height="8" rx="2" fill="#0891b2"/><rect x="150" y="50" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="150" y="60" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="160" y="0" width="8" height="8" rx="2" fill="#1e293b"/><rect x="160" y="10" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="160" y="20" width="8" height="8" rx="2" fill="#0e7490"/><rect x="160" y="30" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="160" y="40" width="8" height="8" rx="2" fill="#1e293b"/><rect x="160" y="50" width="8" height="8" rx="2" fill="#164e63"/>
+        <rect x="160" y="60" width="8" height="8" rx="2" fill="#1e293b"/>
+
+        <!-- More sparse months -->
+        <rect x="200" y="0" width="8" height="8" rx="2" fill="#1e293b"/><rect x="200" y="10" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="200" y="20" width="8" height="8" rx="2" fill="#164e63"/><rect x="200" y="30" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="200" y="40" width="8" height="8" rx="2" fill="#1e293b"/><rect x="200" y="50" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="200" y="60" width="8" height="8" rx="2" fill="#0891b2"/>
+
+        <rect x="250" y="0" width="8" height="8" rx="2" fill="#06b6d4"/><rect x="250" y="10" width="8" height="8" rx="2" fill="#0891b2"/>
+        <rect x="250" y="20" width="8" height="8" rx="2" fill="#1e293b"/><rect x="250" y="30" width="8" height="8" rx="2" fill="#164e63"/>
+        <rect x="250" y="40" width="8" height="8" rx="2" fill="#1e293b"/><rect x="250" y="50" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="250" y="60" width="8" height="8" rx="2" fill="#1e293b"/>
+
+        <rect x="300" y="0" width="8" height="8" rx="2" fill="#1e293b"/><rect x="300" y="10" width="8" height="8" rx="2" fill="#164e63"/>
+        <rect x="300" y="20" width="8" height="8" rx="2" fill="#0e7490"/><rect x="300" y="30" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="300" y="40" width="8" height="8" rx="2" fill="#06b6d4"/><rect x="300" y="50" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="300" y="60" width="8" height="8" rx="2" fill="#1e293b"/>
+
+        <rect x="350" y="0" width="8" height="8" rx="2" fill="#1e293b"/><rect x="350" y="10" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="350" y="20" width="8" height="8" rx="2" fill="#1e293b"/><rect x="350" y="30" width="8" height="8" rx="2" fill="#0891b2"/>
+        <rect x="350" y="40" width="8" height="8" rx="2" fill="#1e293b"/><rect x="350" y="50" width="8" height="8" rx="2" fill="#164e63"/>
+        <rect x="350" y="60" width="8" height="8" rx="2" fill="#1e293b"/>
+
+        <rect x="400" y="0" width="8" height="8" rx="2" fill="#164e63"/><rect x="400" y="10" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="400" y="20" width="8" height="8" rx="2" fill="#1e293b"/><rect x="400" y="30" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="400" y="40" width="8" height="8" rx="2" fill="#0e7490"/><rect x="400" y="50" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="400" y="60" width="8" height="8" rx="2" fill="#06b6d4"/>
+
+        <rect x="450" y="0" width="8" height="8" rx="2" fill="#1e293b"/><rect x="450" y="10" width="8" height="8" rx="2" fill="#0891b2"/>
+        <rect x="450" y="20" width="8" height="8" rx="2" fill="#1e293b"/><rect x="450" y="30" width="8" height="8" rx="2" fill="#164e63"/>
+        <rect x="450" y="40" width="8" height="8" rx="2" fill="#1e293b"/><rect x="450" y="50" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="450" y="60" width="8" height="8" rx="2" fill="#1e293b"/>
+
+        <rect x="500" y="0" width="8" height="8" rx="2" fill="#1e293b"/><rect x="500" y="10" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="500" y="20" width="8" height="8" rx="2" fill="#06b6d4"/><rect x="500" y="30" width="8" height="8" rx="2" fill="#1e293b"/>
+        <rect x="500" y="40" width="8" height="8" rx="2" fill="#164e63"/><rect x="500" y="50" width="8" height="8" rx="2" fill="#0891b2"/>
+        <rect x="500" y="60" width="8" height="8" rx="2" fill="#1e293b"/>
+      </g>
+
+      <!-- Legend -->
+      <text x="480" y="268" fill="#64748b" font-size="8">Less</text>
+      <rect x="500" y="261" width="8" height="8" rx="2" fill="#1e293b"/>
+      <rect x="511" y="261" width="8" height="8" rx="2" fill="#164e63"/>
+      <rect x="522" y="261" width="8" height="8" rx="2" fill="#0e7490"/>
+      <rect x="533" y="261" width="8" height="8" rx="2" fill="#0891b2"/>
+      <rect x="544" y="261" width="8" height="8" rx="2" fill="#06b6d4"/>
+      <text x="556" y="268" fill="#64748b" font-size="8">More</text>
+
+      <!-- Stats summary -->
+      <text x="75" y="268" fill="#94a3b8" font-size="9">142 events across 2025</text>
+
+      <!-- Tooltip mockup -->
+      <rect x="230" y="195" width="140" height="36" rx="6" fill="#334155" stroke="#475569" stroke-width="0.5"/>
+      <text x="240" y="210" fill="#f1f5f9" font-size="9" font-weight="600">3 entries</text>
+      <text x="240" y="223" fill="#94a3b8" font-size="8">March 12, 2025</text>
+      <!-- Arrow -->
+      <polygon points="280,231 286,237 274,237" fill="#334155"/>
+
+      <!-- Divider -->
+      <line x1="60" y1="285" x2="740" y2="285" stroke="#1e3a5f" stroke-width="0.5"/>
+
+      <!-- Filtered entries below -->
+      <text x="75" y="305" fill="#06b6d4" font-size="10" font-weight="600">March 12, 2025</text>
+      <text x="200" y="305" fill="#64748b" font-size="9">3 entries</text>
+
+      <!-- Entry card 1 -->
+      <rect x="60" y="315" width="680" height="56" rx="6" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+      <text x="75" y="336" fill="#f1f5f9" font-size="11" font-weight="500">GPT-4.5 Turbo Released with Improved Reasoning</text>
+      <rect x="75" y="343" width="65" height="16" rx="3" fill="#164e63"/>
+      <text x="82" y="354" fill="#06b6d4" font-size="8" font-family="JetBrains Mono, monospace">2025-03-12</text>
+      <rect x="148" y="343" width="30" height="16" rx="3" fill="#1e293b" stroke="#334155"/>
+      <text x="153" y="354" fill="#94a3b8" font-size="8">GPT</text>
+      <rect x="183" y="343" width="22" height="16" rx="3" fill="#1e293b" stroke="#334155"/>
+      <text x="188" y="354" fill="#94a3b8" font-size="8">AI</text>
+
+      <!-- Entry card 2 -->
+      <rect x="60" y="380" width="680" height="56" rx="6" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+      <text x="75" y="401" fill="#f1f5f9" font-size="11" font-weight="500">Anthropic Publishes Constitutional AI v2 Paper</text>
+      <rect x="75" y="408" width="65" height="16" rx="3" fill="#164e63"/>
+      <text x="82" y="419" fill="#06b6d4" font-size="8" font-family="JetBrains Mono, monospace">2025-03-12</text>
+      <rect x="148" y="408" width="60" height="16" rx="3" fill="#1e293b" stroke="#334155"/>
+      <text x="153" y="419" fill="#94a3b8" font-size="8">Anthropic</text>
+      <rect x="213" y="408" width="40" height="16" rx="3" fill="#1e293b" stroke="#334155"/>
+      <text x="218" y="419" fill="#94a3b8" font-size="8">Safety</text>
+
+      <!-- Entry card 3 -->
+      <rect x="60" y="445" width="680" height="56" rx="6" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+      <text x="75" y="466" fill="#f1f5f9" font-size="11" font-weight="500">EU AI Act Enforcement Begins for Foundation Models</text>
+      <rect x="75" y="473" width="65" height="16" rx="3" fill="#164e63"/>
+      <text x="82" y="484" fill="#06b6d4" font-size="8" font-family="JetBrains Mono, monospace">2025-03-12</text>
+      <rect x="148" y="473" width="60" height="16" rx="3" fill="#1e293b" stroke="#334155"/>
+      <text x="153" y="484" fill="#94a3b8" font-size="8">Regulation</text>
+      <rect x="213" y="473" width="22" height="16" rx="3" fill="#1e293b" stroke="#334155"/>
+      <text x="218" y="484" fill="#94a3b8" font-size="8">EU</text>
+    </svg>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 24px;">
+  <h3>Key Elements</h3>
+  <ul>
+    <li><strong>Heatmap tab</strong> in the visualization toolbar (5th button)</li>
+    <li><strong>Year navigation</strong> — arrow buttons to page through years</li>
+    <li><strong>GitHub-style grid</strong> — 52 week columns × 7 day rows, cyan color scale</li>
+    <li><strong>Tooltip on hover</strong> — shows entry count and date</li>
+    <li><strong>Click-to-filter</strong> — filtered entry cards appear below the heatmap</li>
+    <li><strong>"Less → More" legend</strong> with 5-step cyan gradient</li>
+    <li><strong>Summary stat</strong> — total events for the displayed year</li>
+  </ul>
+</div>

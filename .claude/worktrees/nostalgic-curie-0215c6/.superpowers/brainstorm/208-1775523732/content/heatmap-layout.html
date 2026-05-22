@@ -1,0 +1,229 @@
+<h2>Heatmap Layout Direction</h2>
+<p class="subtitle">How should the calendar grid be oriented?</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 24px; background: #0f172a;">
+      <!-- GitHub-style: columns = weeks, rows = days of week -->
+      <svg viewBox="0 0 520 100" style="width:100%;height:auto;">
+        <text x="0" y="12" fill="#94a3b8" font-size="10" font-family="monospace">2025</text>
+        <!-- Month labels -->
+        <text x="40" y="12" fill="#94a3b8" font-size="8" font-family="sans-serif">Jan</text>
+        <text x="100" y="12" fill="#94a3b8" font-size="8" font-family="sans-serif">Feb</text>
+        <text x="155" y="12" fill="#94a3b8" font-size="8" font-family="sans-serif">Mar</text>
+        <text x="215" y="12" fill="#94a3b8" font-size="8" font-family="sans-serif">Apr</text>
+        <text x="275" y="12" fill="#94a3b8" font-size="8" font-family="sans-serif">May</text>
+        <text x="335" y="12" fill="#94a3b8" font-size="8" font-family="sans-serif">Jun</text>
+        <text x="395" y="12" fill="#94a3b8" font-size="8" font-family="sans-serif">Jul</text>
+        <text x="450" y="12" fill="#94a3b8" font-size="8" font-family="sans-serif">Aug</text>
+        <!-- Day labels -->
+        <text x="25" y="30" fill="#64748b" font-size="7" font-family="sans-serif">Mon</text>
+        <text x="25" y="54" fill="#64748b" font-size="7" font-family="sans-serif">Wed</text>
+        <text x="25" y="78" fill="#64748b" font-size="7" font-family="sans-serif">Fri</text>
+        <!-- Grid cells - weeks as columns, days as rows -->
+        <g transform="translate(40, 18)">
+          <!-- Sample cells with varying intensity -->
+          <rect x="0" y="0" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+          <rect x="0" y="12" width="9" height="9" rx="2" fill="#164e63" stroke="#334155" stroke-width="0.5"/>
+          <rect x="0" y="24" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+          <rect x="0" y="36" width="9" height="9" rx="2" fill="#0891b2" stroke="#334155" stroke-width="0.5"/>
+          <rect x="0" y="48" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+          <rect x="0" y="60" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+          <rect x="0" y="72" width="9" height="9" rx="2" fill="#164e63" stroke="#334155" stroke-width="0.5"/>
+
+          <rect x="12" y="0" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+          <rect x="12" y="12" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+          <rect x="12" y="24" width="9" height="9" rx="2" fill="#06b6d4" stroke="#334155" stroke-width="0.5"/>
+          <rect x="12" y="36" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+          <rect x="12" y="48" width="9" height="9" rx="2" fill="#164e63" stroke="#334155" stroke-width="0.5"/>
+          <rect x="12" y="60" width="9" height="9" rx="2" fill="#0891b2" stroke="#334155" stroke-width="0.5"/>
+          <rect x="12" y="72" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+
+          <rect x="24" y="0" width="9" height="9" rx="2" fill="#164e63" stroke="#334155" stroke-width="0.5"/>
+          <rect x="24" y="12" width="9" height="9" rx="2" fill="#0891b2" stroke="#334155" stroke-width="0.5"/>
+          <rect x="24" y="24" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+          <rect x="24" y="36" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+          <rect x="24" y="48" width="9" height="9" rx="2" fill="#06b6d4" stroke="#334155" stroke-width="0.5"/>
+          <rect x="24" y="60" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+          <rect x="24" y="72" width="9" height="9" rx="2" fill="#164e63" stroke="#334155" stroke-width="0.5"/>
+
+          <rect x="36" y="0" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+          <rect x="36" y="12" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+          <rect x="36" y="24" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+          <rect x="36" y="36" width="9" height="9" rx="2" fill="#0e7490" stroke="#334155" stroke-width="0.5"/>
+          <rect x="36" y="48" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+          <rect x="36" y="60" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+          <rect x="36" y="72" width="9" height="9" rx="2" fill="#0891b2" stroke="#334155" stroke-width="0.5"/>
+
+          <!-- More weeks... -->
+          <rect x="48" y="0" width="9" height="9" rx="2" fill="#06b6d4" stroke="#334155" stroke-width="0.5"/>
+          <rect x="48" y="12" width="9" height="9" rx="2" fill="#06b6d4" stroke="#334155" stroke-width="0.5"/>
+          <rect x="48" y="24" width="9" height="9" rx="2" fill="#0891b2" stroke="#334155" stroke-width="0.5"/>
+          <rect x="48" y="36" width="9" height="9" rx="2" fill="#164e63" stroke="#334155" stroke-width="0.5"/>
+          <rect x="48" y="48" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+          <rect x="48" y="60" width="9" height="9" rx="2" fill="#164e63" stroke="#334155" stroke-width="0.5"/>
+          <rect x="48" y="72" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+
+          <rect x="60" y="0" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+          <rect x="60" y="12" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+          <rect x="60" y="24" width="9" height="9" rx="2" fill="#164e63" stroke="#334155" stroke-width="0.5"/>
+          <rect x="60" y="36" width="9" height="9" rx="2" fill="#0891b2" stroke="#334155" stroke-width="0.5"/>
+          <rect x="60" y="48" width="9" height="9" rx="2" fill="#06b6d4" stroke="#334155" stroke-width="0.5"/>
+          <rect x="60" y="60" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+          <rect x="60" y="72" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+
+          <!-- Sparse later months -->
+          <rect x="72" y="0" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+          <rect x="72" y="12" width="9" height="9" rx="2" fill="#0e7490" stroke="#334155" stroke-width="0.5"/>
+          <rect x="72" y="24" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+          <rect x="72" y="36" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+          <rect x="72" y="48" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+          <rect x="72" y="60" width="9" height="9" rx="2" fill="#164e63" stroke="#334155" stroke-width="0.5"/>
+          <rect x="72" y="72" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+        </g>
+        <!-- Legend -->
+        <text x="350" y="90" fill="#94a3b8" font-size="8" font-family="sans-serif">Less</text>
+        <rect x="370" y="83" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+        <rect x="382" y="83" width="9" height="9" rx="2" fill="#164e63" stroke="#334155" stroke-width="0.5"/>
+        <rect x="394" y="83" width="9" height="9" rx="2" fill="#0e7490" stroke="#334155" stroke-width="0.5"/>
+        <rect x="406" y="83" width="9" height="9" rx="2" fill="#0891b2" stroke="#334155" stroke-width="0.5"/>
+        <rect x="418" y="83" width="9" height="9" rx="2" fill="#06b6d4" stroke="#334155" stroke-width="0.5"/>
+        <text x="430" y="90" fill="#94a3b8" font-size="8" font-family="sans-serif">More</text>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>A. GitHub-Style Horizontal</h3>
+      <p>Weeks as columns, days of week as rows. One row per year. The classic, instantly recognizable pattern. Scrolls horizontally if many years.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 24px; background: #0f172a;">
+      <!-- Calendar-style: months as grid, days fill each month block -->
+      <svg viewBox="0 0 520 160" style="width:100%;height:auto;">
+        <text x="0" y="14" fill="#94a3b8" font-size="11" font-family="monospace">2025</text>
+        <!-- Month blocks as mini calendars -->
+        <g transform="translate(0, 24)">
+          <!-- January -->
+          <text x="10" y="10" fill="#94a3b8" font-size="8" font-family="sans-serif">Jan</text>
+          <g transform="translate(0, 14)">
+            <rect x="0" y="0" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+            <rect x="9" y="0" width="7" height="7" rx="1.5" fill="#164e63" stroke="#334155" stroke-width="0.3"/>
+            <rect x="18" y="0" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+            <rect x="27" y="0" width="7" height="7" rx="1.5" fill="#0891b2" stroke="#334155" stroke-width="0.3"/>
+            <rect x="36" y="0" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+            <rect x="45" y="0" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+            <rect x="54" y="0" width="7" height="7" rx="1.5" fill="#06b6d4" stroke="#334155" stroke-width="0.3"/>
+            <rect x="0" y="9" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+            <rect x="9" y="9" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+            <rect x="18" y="9" width="7" height="7" rx="1.5" fill="#164e63" stroke="#334155" stroke-width="0.3"/>
+            <rect x="27" y="9" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+            <rect x="36" y="9" width="7" height="7" rx="1.5" fill="#0891b2" stroke="#334155" stroke-width="0.3"/>
+            <rect x="45" y="9" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+            <rect x="54" y="9" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+            <rect x="0" y="18" width="7" height="7" rx="1.5" fill="#0e7490" stroke="#334155" stroke-width="0.3"/>
+            <rect x="9" y="18" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+            <rect x="18" y="18" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+            <rect x="27" y="18" width="7" height="7" rx="1.5" fill="#06b6d4" stroke="#334155" stroke-width="0.3"/>
+            <rect x="36" y="18" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+            <rect x="45" y="18" width="7" height="7" rx="1.5" fill="#164e63" stroke="#334155" stroke-width="0.3"/>
+            <rect x="54" y="18" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+            <rect x="0" y="27" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+            <rect x="9" y="27" width="7" height="7" rx="1.5" fill="#0891b2" stroke="#334155" stroke-width="0.3"/>
+            <rect x="18" y="27" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+          </g>
+
+          <!-- February -->
+          <g transform="translate(75, 0)">
+            <text x="10" y="10" fill="#94a3b8" font-size="8" font-family="sans-serif">Feb</text>
+            <g transform="translate(0, 14)">
+              <rect x="0" y="0" width="7" height="7" rx="1.5" fill="#164e63" stroke="#334155" stroke-width="0.3"/>
+              <rect x="9" y="0" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="18" y="0" width="7" height="7" rx="1.5" fill="#06b6d4" stroke="#334155" stroke-width="0.3"/>
+              <rect x="27" y="0" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="36" y="0" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="45" y="0" width="7" height="7" rx="1.5" fill="#0891b2" stroke="#334155" stroke-width="0.3"/>
+              <rect x="54" y="0" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="0" y="9" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="9" y="9" width="7" height="7" rx="1.5" fill="#0e7490" stroke="#334155" stroke-width="0.3"/>
+              <rect x="18" y="9" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="27" y="9" width="7" height="7" rx="1.5" fill="#164e63" stroke="#334155" stroke-width="0.3"/>
+              <rect x="36" y="9" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="45" y="9" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="54" y="9" width="7" height="7" rx="1.5" fill="#06b6d4" stroke="#334155" stroke-width="0.3"/>
+              <rect x="0" y="18" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="9" y="18" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="18" y="18" width="7" height="7" rx="1.5" fill="#0891b2" stroke="#334155" stroke-width="0.3"/>
+              <rect x="27" y="18" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="36" y="18" width="7" height="7" rx="1.5" fill="#164e63" stroke="#334155" stroke-width="0.3"/>
+              <rect x="45" y="18" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="54" y="18" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+            </g>
+          </g>
+
+          <!-- March -->
+          <g transform="translate(150, 0)">
+            <text x="10" y="10" fill="#94a3b8" font-size="8" font-family="sans-serif">Mar</text>
+            <g transform="translate(0, 14)">
+              <rect x="0" y="0" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="9" y="0" width="7" height="7" rx="1.5" fill="#06b6d4" stroke="#334155" stroke-width="0.3"/>
+              <rect x="18" y="0" width="7" height="7" rx="1.5" fill="#06b6d4" stroke="#334155" stroke-width="0.3"/>
+              <rect x="27" y="0" width="7" height="7" rx="1.5" fill="#0891b2" stroke="#334155" stroke-width="0.3"/>
+              <rect x="36" y="0" width="7" height="7" rx="1.5" fill="#164e63" stroke="#334155" stroke-width="0.3"/>
+              <rect x="45" y="0" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="54" y="0" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="0" y="9" width="7" height="7" rx="1.5" fill="#0891b2" stroke="#334155" stroke-width="0.3"/>
+              <rect x="9" y="9" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="18" y="9" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="27" y="9" width="7" height="7" rx="1.5" fill="#164e63" stroke="#334155" stroke-width="0.3"/>
+              <rect x="36" y="9" width="7" height="7" rx="1.5" fill="#06b6d4" stroke="#334155" stroke-width="0.3"/>
+              <rect x="45" y="9" width="7" height="7" rx="1.5" fill="#0891b2" stroke="#334155" stroke-width="0.3"/>
+              <rect x="54" y="9" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="0" y="18" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="9" y="18" width="7" height="7" rx="1.5" fill="#0e7490" stroke="#334155" stroke-width="0.3"/>
+              <rect x="18" y="18" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="27" y="18" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="36" y="18" width="7" height="7" rx="1.5" fill="#164e63" stroke="#334155" stroke-width="0.3"/>
+              <rect x="45" y="18" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="54" y="18" width="7" height="7" rx="1.5" fill="#06b6d4" stroke="#334155" stroke-width="0.3"/>
+            </g>
+          </g>
+
+          <!-- April -->
+          <g transform="translate(225, 0)">
+            <text x="10" y="10" fill="#94a3b8" font-size="8" font-family="sans-serif">Apr</text>
+            <g transform="translate(0, 14)">
+              <rect x="0" y="0" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="9" y="0" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="18" y="0" width="7" height="7" rx="1.5" fill="#164e63" stroke="#334155" stroke-width="0.3"/>
+              <rect x="27" y="0" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="36" y="0" width="7" height="7" rx="1.5" fill="#0891b2" stroke="#334155" stroke-width="0.3"/>
+              <rect x="45" y="0" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="54" y="0" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="0" y="9" width="7" height="7" rx="1.5" fill="#06b6d4" stroke="#334155" stroke-width="0.3"/>
+              <rect x="9" y="9" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="18" y="9" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="27" y="9" width="7" height="7" rx="1.5" fill="#0e7490" stroke="#334155" stroke-width="0.3"/>
+              <rect x="36" y="9" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+              <rect x="45" y="9" width="7" height="7" rx="1.5" fill="#164e63" stroke="#334155" stroke-width="0.3"/>
+              <rect x="54" y="9" width="7" height="7" rx="1.5" fill="#1e293b" stroke="#334155" stroke-width="0.3"/>
+            </g>
+          </g>
+        </g>
+
+        <!-- Legend -->
+        <text x="350" y="150" fill="#94a3b8" font-size="8" font-family="sans-serif">Less</text>
+        <rect x="370" y="143" width="9" height="9" rx="2" fill="#1e293b" stroke="#334155" stroke-width="0.5"/>
+        <rect x="382" y="143" width="9" height="9" rx="2" fill="#164e63" stroke="#334155" stroke-width="0.5"/>
+        <rect x="394" y="143" width="9" height="9" rx="2" fill="#0e7490" stroke="#334155" stroke-width="0.5"/>
+        <rect x="406" y="143" width="9" height="9" rx="2" fill="#0891b2" stroke="#334155" stroke-width="0.5"/>
+        <rect x="418" y="143" width="9" height="9" rx="2" fill="#06b6d4" stroke="#334155" stroke-width="0.5"/>
+        <text x="430" y="150" fill="#94a3b8" font-size="8" font-family="sans-serif">More</text>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>B. Calendar Month Grid</h3>
+      <p>Mini calendar blocks for each month arranged in a row. More compact per year, familiar calendar layout. Each year is a row of 12 mini month grids. Cells represent individual days within each month.</p>
+    </div>
+  </div>
+</div>

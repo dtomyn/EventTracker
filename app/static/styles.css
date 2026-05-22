@@ -2106,3 +2106,57 @@ textarea {
     padding-bottom: 0.5rem;
     border-bottom: 1px solid var(--et-border);
 }
+
+/* --- Entry Preview Pane (split view) --- */
+.timeline-with-preview {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+}
+
+.timeline-main-column {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.entry-preview-pane {
+    display: none;
+    flex: 0 0 40%;
+    min-width: 0;
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+}
+
+.timeline-with-preview.is-split .timeline-main-column {
+    flex: 0 0 58%;
+}
+
+.timeline-with-preview.is-split .entry-preview-pane {
+    display: block;
+}
+
+@media (max-width: 991.98px) {
+    .timeline-with-preview.is-split .timeline-main-column {
+        flex: 1 1 auto;
+    }
+    .timeline-with-preview.is-split .entry-preview-pane {
+        display: none;
+    }
+}
+
+.timeline-card.is-previewing {
+    border-left: 3px solid var(--et-primary) !important;
+}
+
+.entry-preview-header {
+    position: sticky;
+    top: 0;
+    background: var(--et-card-bg);
+    z-index: 1;
+}
+
+.entry-preview-title-block {
+    overflow: hidden;
+}

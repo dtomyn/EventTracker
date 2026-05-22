@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Execution Tracer | EventTracker Dev</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js" crossorigin="anonymous"></script>
+    <style>
+        body { font-family: 'Courier New', monospace; font-size: 13px; }
+        #flame-container { position: relative; overflow-x: auto; background: #111; border-radius: 6px; min-height: 200px; }
+        #flame-svg { display: block; }
+
+        .span-bar { cursor: pointer; transition: opacity 0.1s; }
+        .span-bar:hover { opacity: 0.8; }
+        .span-label { font-size: 11px; fill: #fff; pointer-events: none; font-weight: 500; }
+
+        #connection-status { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+        .status-connected { background: #22c55e; }
+        .status-disconnected { background: #ef4444; }
+        .status-connecting { background: #f97316; animation: pulse 1s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+        #log-table td { font-size: 12px; }
+        .layer-badge { font-size: 10px; padding: 1px 6px; }
+
+        #tooltip { position: absolute; background: #1e293b; border: 1px solid #475569; color: #e2e8f0; padding: 8px; border-radius: 4px; font-size: 11px; z-index: 10; pointer-events: none; }
+        #tooltip strong { color: #60a5fa; }
+
+        .legend-box { display: flex; gap: 20px; flex-wrap: wrap; }
+        .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+        .legend-color { width: 16px; height: 16px; border-radius: 2px; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid py-3">
+        <!-- Header -->
+        <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+            <h5 class="mb-0 fw-semibold">⚡ Execution Tracer</h5>
+            <span id="connection-status" class="status-connecting" title="Connecting..."></span>
+            <span id="connection-label" class="text-muted small">Connecting...</span>
+
+            <div class="ms-2">
+                <label for="trace-select" class="form-label mb-0 small me-2">Trace:</label>
+                <select id="trace-select" class="form-select form-select-sm" style="width: 200px; display: inline-block;">
+                    <option value="">— waiting for requests —</option>
+                </select>
+            </div>
+
+            <button id="clear-btn" class="btn btn-sm btn-outline-danger ms-auto">Clear</button>
+        </div>
+
+        <!-- Legend -->
+        <div class="legend-box mb-2">
+            <div class="legend-item">
+                <div class="legend-color" style="background: #3b82f6;"></div>
+                <span>Route</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #f97316;"></div>
+                <span>Service</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #22c55e;"></div>
+                <span>Database</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #ef4444;"></div>
+                <span>AI/External</span>
+            </div>
+        </div>
+
+        <!-- Flame Graph -->
+        <div class="mb-3">
+            <h6 class="mb-2">Flame Graph</h6>
+            <div id="flame-container">
+                <svg id="flame-svg" width="100%" height="200"></svg>
+                <div id="tooltip" class="d-none">
+                    <strong id="tooltip-name"></strong><br>
+                    <span id="tooltip-info"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Span Detail Panel -->
+        <div id="span-detail" class="mb-3 d-none">
+            <div class="card bg-dark border-secondary">
+                <div class="card-body py-2">
+                    <h6 id="detail-name" class="mb-2"></h6>
+                    <div class="text-muted small">
+                        <div><strong>Duration:</strong> <span id="detail-duration"></span></div>
+                        <div><strong>Layer:</strong> <span id="detail-layer"></span></div>
+                        <div><strong>Depth:</strong> <span id="detail-depth"></span></div>
+                        <div><strong>Trace ID:</strong> <span id="detail-trace-id" class="text-secondary"></span></div>
+                        <div><strong>Span ID:</strong> <span id="detail-span-id" class="text-secondary"></span></div>
+                        <div class="mt-2"><strong>Arguments/Data:</strong><br><code id="detail-data" class="d-block text-success mt-1"></code></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Log Table -->
+        <div class="mb-2">
+            <h6 class="d-inline">Recent Spans</h6>
+            <span class="badge bg-secondary ms-2" id="span-count">0</span>
+        </div>
+        <div style="max-height: 400px; overflow-y: auto; border-radius: 6px;">
+            <table class="table table-dark table-sm table-hover mb-0" id="log-table">
+                <thead class="sticky-top">
+                    <tr class="text-secondary">
+                        <th style="width: 70px;">Layer</th>
+                        <th style="width: 40%;">Function</th>
+                        <th style="width: 80px;">Duration</th>
+                        <th style="width: 50px;">Depth</th>
+                        <th style="width: 40%;">Arguments</th>
+                        <th style="width: 100px;">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="log-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+    // ── Constants ──────────────────────────────────────────────────────────
+    const ROW_HEIGHT = 28;
+    const MIN_LABEL_WIDTH = 60;
+    const MAX_LOG_ROWS = 200;
+    const LAYER_COLORS = {
+        route:   '#3b82f6',
+        service: '#f97316',
+        db:      '#22c55e',
+        ai:      '#ef4444',
+    };
+
+    // ── State ──────────────────────────────────────────────────────────────
+    let allTraces = {};           // traceId → { spans: Map(spanId → span), startMs, endMs }
+    let currentTraceId = null;
+    let pendingRender = false;
+    let totalLogRows = 0;
+
+    // ── SSE Connection ─────────────────────────────────────────────────────
+    const statusEl = document.getElementById('connection-status');
+    const statusLabel = document.getElementById('connection-label');
+
+    function setStatus(state) {
+        statusEl.className = `status-${state}`;
+        const labels = {
+            connected: 'Connected',
+            disconnected: 'Disconnected',
+            connecting: 'Connecting...'
+        };
+        statusLabel.textContent = labels[state] || state;
+    }
+
+    function connect() {
+        setStatus('connecting');
+        const es = new EventSource('/dev/tracer/stream');
+
+        es.addEventListener('span_start', e => {
+            try {
+                const span = JSON.parse(e.data);
+                handleSpan(span, 'start');
+            } catch (err) {
+                console.error('Failed to parse span_start:', err);
+            }
+        });
+
+        es.addEventListener('span_end', e => {
+            try {
+                const span = JSON.parse(e.data);
+                handleSpan(span, 'end');
+            } catch (err) {
+                console.error('Failed to parse span_end:', err);
+            }
+        });
+
+        es.onopen = () => setStatus('connected');
+        es.onerror = () => {
+            setStatus('disconnected');
+            es.close();
+            setTimeout(connect, 3000);  // Auto-reconnect
+        };
+    }
+    connect();
+
+    // ── Span Processing ────────────────────────────────────────────────────
+    function handleSpan(span, eventType) {
+        const { trace_id, span_id } = span;
+
+        // Initialize trace bucket
+        if (!allTraces[trace_id]) {
+            allTraces[trace_id] = {
+                spans: new Map(),
+                startMs: span.start_ms,
+                endMs: span.start_ms
+            };
+            addTraceToSelect(trace_id);
+        }
+
+        const trace = allTraces[trace_id];
+        trace.spans.set(span_id, span);
+
+        // Track min/max times
+        if (span.start_ms < trace.startMs) trace.startMs = span.start_ms;
+        if (span.duration_ms && span.start_ms + span.duration_ms > trace.endMs) {
+            trace.endMs = span.start_ms + span.duration_ms;
+        }
+
+        // Auto-switch to newest trace for root spans
+        if (eventType === 'start' && span.depth === 0) {
+            currentTraceId = trace_id;
+            document.getElementById('trace-select').value = trace_id;
+        }
+
+        // Update log table
+        updateLogRow(span, eventType);
+
+        // Schedule render
+        if (!pendingRender) {
+            pendingRender = true;
+            requestAnimationFrame(renderFlame);
+        }
+    }
+
+    // ── Trace Select ───────────────────────────────────────────────────────
+    function addTraceToSelect(traceId) {
+        const sel = document.getElementById('trace-select');
+
+        // Remove placeholder
+        if (sel.options[0]?.value === '') sel.remove(0);
+
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+        const opt = document.createElement('option');
+        opt.value = traceId;
+        opt.textContent = `${traceId.slice(0, 8)} — ${timeStr}`;
+        sel.insertBefore(opt, sel.firstChild);  // newest at top
+        sel.value = traceId;
+
+        // Keep only 20 recent
+        while (sel.options.length > 20) sel.remove(sel.options.length - 1);
+    }
+
+    document.getElementById('trace-select').addEventListener('change', e => {
+        currentTraceId = e.target.value;
+        requestAnimationFrame(renderFlame);
+    });
+
+    // ── Flame Graph Rendering ─────────────────────────────────────────────
+    const svg = d3.select('#flame-svg');
+    const flameContainer = document.getElementById('flame-container');
+
+    function renderFlame() {
+        pendingRender = false;
+        const trace = allTraces[currentTraceId];
+        if (!trace) return;
+
+        const spans = Array.from(trace.spans.values());
+        const maxDepth = Math.max(...spans.map(s => s.depth), 0);
+        const svgH = (maxDepth + 2) * ROW_HEIGHT;
+        const svgW = flameContainer.clientWidth || 1000;
+        const totalMs = Math.max((trace.endMs - trace.startMs) || 1, 1);
+        const traceStart = trace.startMs;
+
+        svg.attr('height', svgH).attr('width', svgW);
+
+        // D3 data join
+        const bars = svg.selectAll('g.span-group')
+            .data(spans, d => d.span_id);
+
+        // Enter: create new groups
+        const entered = bars.enter()
+            .append('g')
+            .attr('class', 'span-group')
+            .on('click', (event, d) => {
+                event.stopPropagation();
+                showDetail(d);
+            })
+            .on('mousemove', (event, d) => showTooltip(event, d))
+            .on('mouseleave', () => hideTooltip());
+
+        entered.append('rect').attr('class', 'span-bar').attr('rx', 3);
+        entered.append('text').attr('class', 'span-label').attr('dy', '0.8em').attr('dx', '4');
+
+        // Merge enter + update
+        const merged = entered.merge(bars);
+
+        merged.each(function(d) {
+            const barW = Math.max(((d.duration_ms || 5) / totalMs) * svgW, 2);
+            const barX = ((d.start_ms - traceStart) / totalMs) * svgW;
+            const barY = d.depth * ROW_HEIGHT + 2;
+
+            d3.select(this).select('rect')
+                .attr('x', barX).attr('y', barY)
+                .attr('width', barW).attr('height', ROW_HEIGHT - 4)
+                .attr('fill', d.color || LAYER_COLORS[d.layer] || '#6b7280')
+                .attr('opacity', d.error ? 0.6 : 1)
+                .attr('stroke', d.error ? '#ff6b6b' : 'none')
+                .attr('stroke-width', d.error ? 2 : 0);
+
+            const label = d.name.split('.').pop();
+            d3.select(this).select('text')
+                .attr('x', barX + 4).attr('y', barY + 8)
+                .text(barW > MIN_LABEL_WIDTH ? label : '')
+                .style('font-size', '11px')
+                .style('fill', '#fff');
+        });
+
+        // Exit: remove
+        bars.exit().remove();
+    }
+
+    function showTooltip(event, d) {
+        const tooltip = document.getElementById('tooltip');
+        const dur = d.duration_ms != null ? `${d.duration_ms.toFixed(1)}ms` : 'in progress';
+        const info = `${d.layer} | ${dur}${d.error ? ` | ERROR: ${d.error}` : ''}`;
+
+        document.getElementById('tooltip-name').textContent = d.name;
+        document.getElementById('tooltip-info').textContent = info;
+
+        tooltip.classList.remove('d-none');
+        tooltip.style.left = (event.offsetX + 12) + 'px';
+        tooltip.style.top = (event.offsetY - 10) + 'px';
+    }
+
+    function hideTooltip() {
+        document.getElementById('tooltip').classList.add('d-none');
+    }
+
+    // ── Span Detail Panel ──────────────────────────────────────────────────
+    function showDetail(span) {
+        document.getElementById('span-detail').classList.remove('d-none');
+        document.getElementById('detail-name').textContent = span.name;
+        document.getElementById('detail-duration').textContent =
+            span.duration_ms != null ? `${span.duration_ms.toFixed(2)}ms` : 'in progress';
+        document.getElementById('detail-layer').textContent = span.layer;
+        document.getElementById('detail-depth').textContent = span.depth;
+        document.getElementById('detail-trace-id').textContent = span.trace_id;
+        document.getElementById('detail-span-id').textContent = span.span_id;
+        document.getElementById('detail-data').textContent = span.data_summary || '(no data)';
+    }
+
+    // ── Log Table ──────────────────────────────────────────────────────────
+    const logRows = new Map();  // spanId → <tr> element
+
+    function updateLogRow(span, eventType) {
+        const tbody = document.getElementById('log-tbody');
+        const layerBadgeClass = {
+            route: 'primary',
+            service: 'warning',
+            db: 'success',
+            ai: 'danger'
+        }[span.layer] || 'secondary';
+
+        if (eventType === 'start') {
+            const tr = document.createElement('tr');
+            tr.id = `row-${span.span_id}`;
+            tr.innerHTML = `
+                <td><span class="badge bg-${layerBadgeClass} layer-badge">${span.layer}</span></td>
+                <td class="font-monospace text-truncate" title="${escapeHtml(span.name)}">${escapeHtml(span.name.split('.').pop())}</td>
+                <td class="text-warning">…</td>
+                <td>${span.depth}</td>
+                <td class="text-muted text-truncate" style="max-width: 250px" title="${escapeHtml(span.data_summary)}">${escapeHtml(span.data_summary)}</td>
+                <td><span class="badge bg-secondary">running</span></td>
+            `;
+            tbody.insertBefore(tr, tbody.firstChild);
+            logRows.set(span.span_id, tr);
+
+            totalLogRows++;
+            document.getElementById('span-count').textContent = totalLogRows;
+
+            // Prune old rows
+            while (tbody.children.length > MAX_LOG_ROWS) tbody.removeChild(tbody.lastChild);
+
+        } else if (eventType === 'end') {
+            const tr = logRows.get(span.span_id);
+            if (tr) {
+                const dur = span.duration_ms != null ? `${span.duration_ms.toFixed(1)}ms` : '?';
+                const cells = tr.querySelectorAll('td');
+                cells[2].textContent = dur;
+                cells[2].className = span.duration_ms > 100 ? 'text-danger' : 'text-success';
+                cells[5].innerHTML = span.error
+                    ? `<span class="badge bg-danger">error: ${escapeHtml(span.error)}</span>`
+                    : `<span class="badge bg-success">done</span>`;
+            }
+        }
+    }
+
+    // ── Clear Button ───────────────────────────────────────────────────────
+    document.getElementById('clear-btn').addEventListener('click', () => {
+        allTraces = {};
+        currentTraceId = null;
+        logRows.clear();
+        totalLogRows = 0;
+        document.getElementById('log-tbody').innerHTML = '';
+        document.getElementById('span-count').textContent = '0';
+        document.getElementById('trace-select').innerHTML = '<option value="">— cleared —</option>';
+        document.getElementById('span-detail').classList.add('d-none');
+        svg.selectAll('*').remove();
+    });
+
+    // ── Utilities ──────────────────────────────────────────────────────────
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+    </script>
+</body>
+</html>

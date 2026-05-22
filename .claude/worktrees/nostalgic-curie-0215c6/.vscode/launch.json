@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug EventTracker",
+      "type": "python",
+      "request": "launch",
+      "module": "scripts.run_dev",
+      "args": [
+        "--reload"
+      ],
+      "console": "integratedTerminal",
+      "jinja": true,
+      "justMyCode": true,
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      }
+    }
+  ]
+}

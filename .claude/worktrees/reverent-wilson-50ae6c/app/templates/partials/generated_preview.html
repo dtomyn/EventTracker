@@ -1,0 +1,49 @@
+{% set current_generated_text = generated_text if generated_text is defined else (form_state.values.get('generated_text', '') if form_state is defined else '') %}
+{% set current_source_snapshot_source_url = source_snapshot_source_url if source_snapshot_source_url is defined else (form_state.values.get('source_snapshot_source_url', '') if form_state is defined else '') %}
+{% set current_source_snapshot_final_url = source_snapshot_final_url if source_snapshot_final_url is defined else (form_state.values.get('source_snapshot_final_url', '') if form_state is defined else '') %}
+{% set current_source_snapshot_title = source_snapshot_title if source_snapshot_title is defined else (form_state.values.get('source_snapshot_title', '') if form_state is defined else '') %}
+{% set current_source_snapshot_markdown = source_snapshot_markdown if source_snapshot_markdown is defined else (form_state.values.get('source_snapshot_markdown', '') if form_state is defined else '') %}
+{% set current_source_snapshot_content_type = source_snapshot_content_type if source_snapshot_content_type is defined else (form_state.values.get('source_snapshot_content_type', '') if form_state is defined else '') %}
+{% set current_source_snapshot_fetched_utc = source_snapshot_fetched_utc if source_snapshot_fetched_utc is defined else (form_state.values.get('source_snapshot_fetched_utc', '') if form_state is defined else '') %}
+{% set current_source_snapshot_http_etag = source_snapshot_http_etag if source_snapshot_http_etag is defined else (form_state.values.get('source_snapshot_http_etag', '') if form_state is defined else '') %}
+{% set current_source_snapshot_http_last_modified = source_snapshot_http_last_modified if source_snapshot_http_last_modified is defined else (form_state.values.get('source_snapshot_http_last_modified', '') if form_state is defined else '') %}
+{% set current_source_snapshot_extractor_name = source_snapshot_extractor_name if source_snapshot_extractor_name is defined else (form_state.values.get('source_snapshot_extractor_name', '') if form_state is defined else '') %}
+{% set current_source_snapshot_extractor_version = source_snapshot_extractor_version if source_snapshot_extractor_version is defined else (form_state.values.get('source_snapshot_extractor_version', '') if form_state is defined else '') %}
+<input type="hidden" id="generated_text" name="generated_text" value="{{ current_generated_text }}">
+<input type="hidden" id="source_snapshot_source_url" name="source_snapshot_source_url" value="{{ current_source_snapshot_source_url }}">
+<input type="hidden" id="source_snapshot_final_url" name="source_snapshot_final_url" value="{{ current_source_snapshot_final_url }}">
+<input type="hidden" id="source_snapshot_title" name="source_snapshot_title" value="{{ current_source_snapshot_title }}">
+<textarea id="source_snapshot_markdown" name="source_snapshot_markdown" hidden>{{ current_source_snapshot_markdown }}</textarea>
+<input type="hidden" id="source_snapshot_content_type" name="source_snapshot_content_type" value="{{ current_source_snapshot_content_type }}">
+<input type="hidden" id="source_snapshot_fetched_utc" name="source_snapshot_fetched_utc" value="{{ current_source_snapshot_fetched_utc }}">
+<input type="hidden" id="source_snapshot_http_etag" name="source_snapshot_http_etag" value="{{ current_source_snapshot_http_etag }}">
+<input type="hidden" id="source_snapshot_http_last_modified" name="source_snapshot_http_last_modified" value="{{ current_source_snapshot_http_last_modified }}">
+<input type="hidden" id="source_snapshot_extractor_name" name="source_snapshot_extractor_name" value="{{ current_source_snapshot_extractor_name }}">
+<input type="hidden" id="source_snapshot_extractor_version" name="source_snapshot_extractor_version" value="{{ current_source_snapshot_extractor_version }}">
+<div id="generate-feedback" class="form-text{% if feedback_class is defined and feedback_class %} {{ feedback_class }}{% endif %}">{{ feedback_message if feedback_message is defined else '' }}</div>
+<input type="hidden" id="generated_suggested_title" value="{{ suggested_title if suggested_title is defined else '' }}">
+<input type="hidden" id="generated_suggested_event_year" value="{{ suggested_event_year if suggested_event_year is defined else '' }}">
+<input type="hidden" id="generated_suggested_event_month" value="{{ suggested_event_month if suggested_event_month is defined else '' }}">
+<input type="hidden" id="generated_suggested_event_day" value="{{ suggested_event_day if suggested_event_day is defined else '' }}">
+<input type="hidden" id="generated_suggested_tags" value="{{ suggested_tags_csv if suggested_tags_csv is defined else '' }}">
+{% if suggested_title is defined and suggested_title %}
+	<div class="small text-body-secondary mt-2">Suggested title: <strong>{{ suggested_title }}</strong></div>
+{% endif %}
+{% if suggested_event_year is defined and suggested_event_year %}
+	<div class="small text-body-secondary">Suggested date: {{ suggested_event_year }}{% if suggested_event_month is defined and suggested_event_month %}-{{ suggested_event_month }}{% endif %}{% if suggested_event_day is defined and suggested_event_day %}-{{ suggested_event_day }}{% endif %}</div>
+{% endif %}
+{% if suggested_tags is defined and suggested_tags %}
+	<div class="small text-body-secondary mt-2">Suggested tags:</div>
+	<div class="d-flex flex-wrap gap-2 mt-1">
+		{% for suggested_tag in suggested_tags %}
+			<span class="badge text-bg-light border">{{ suggested_tag }}</span>
+		{% endfor %}
+	</div>
+{% endif %}
+{% if suggested_connections is defined and suggested_connections %}
+	<div id="generated_suggested_connections"
+		data-connections='{{ suggested_connections | tojson }}'
+		class="small text-body-secondary mt-2">
+		Suggested connections: {{ suggested_connections | length }} related {{ "entry" if suggested_connections | length == 1 else "entries" }} found
+	</div>
+{% endif %}

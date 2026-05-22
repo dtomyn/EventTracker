@@ -14,7 +14,6 @@ import sqlite3
 from typing import Any, TypedDict, cast
 from urllib.parse import urlparse
 
-from bs4 import BeautifulSoup, Tag
 from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request
 from fastapi.responses import (
     HTMLResponse,
@@ -144,6 +143,21 @@ from app.services.story_mode import (
     save_story_artifact,
     save_story,
 )
+from app.route_helpers import (
+    _build_story_citation_contexts,
+    _build_story_page_context,
+    _encode_sse_event,
+    _load_group_scope,
+    _load_timeline_scope,
+    _month_name,
+    _parse_group_id,
+    _parse_search_cursor,
+    _parse_story_format,
+    _parse_story_view_mode,
+    _parse_timeline_cursor,
+    _render_partial,
+    _sanitize_story_html,
+)
 
 
 load_app_env()
@@ -187,8 +201,36 @@ from app.csrf import (
     csrf_middleware,
 )
 
+# ---------------------------------------------------------------------------
+# Execution tracer (dev tool)
+# ---------------------------------------------------------------------------
+from app.tracing import (
+    TraceMiddleware,
+    instrument,
+    make_instrumented_connection_context,
+    subscribe,
+    unsubscribe,
+)
+
 app.middleware("http")(csrf_middleware)
+app.add_middleware(TraceMiddleware)
 templates.env.globals["csrf_hidden_input"] = csrf_hidden_input
+
+# ---------------------------------------------------------------------------
+# Instrument key service functions for execution tracer
+# ---------------------------------------------------------------------------
+connection_context = make_instrumented_connection_context(connection_context)
+save_entry = instrument("service")(save_entry)
+update_entry = instrument("service")(update_entry)
+get_entry = instrument("service")(get_entry)
+list_timeline_entries = instrument("service")(list_timeline_entries)
+list_timeline_entries_page = instrument("service")(list_timeline_entries_page)
+search_entries = instrument("service")(search_entries)
+filter_timeline_entries = instrument("service")(filter_timeline_entries)
+list_timeline_groups = instrument("service")(list_timeline_groups)
+get_timeline_group = instrument("service")(get_timeline_group)
+generate_entry_suggestion = instrument("ai")(generate_entry_suggestion)
+stream_event_chat_events = instrument("ai")(stream_event_chat_events)
 
 
 class TimelineWebSearchState(TypedDict):
@@ -2304,6 +2346,19 @@ def view_entry(request: Request, entry_id: int) -> HTMLResponse:
     )
 
 
+@app.get("/entries/{entry_id:int}/preview", response_class=HTMLResponse)
+def preview_entry(request: Request, entry_id: int) -> HTMLResponse:
+    with connection_context() as connection:
+        entry = get_entry(connection, entry_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return templates.TemplateResponse(
+        request,
+        "partials/entry_preview.html",
+        cast(dict[str, object], {"entry": entry}),
+    )
+
+
 @app.post("/entries/new", response_model=None)
 async def create_entry(
     request: Request, background_tasks: BackgroundTasks
@@ -2807,103 +2862,45 @@ async def dev_extract(source_url: str) -> JSONResponse:
     return JSONResponse(success_payload)
 
 
-def _parse_group_id(raw_group_id: str) -> int | None:
-    normalized = raw_group_id.strip()
-    if not normalized:
-        return None
-    if normalized.lower() == "all":
-        return None
-    try:
-        value = int(normalized)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail="Timeline group not found") from exc
-    if value <= 0:
-        raise HTTPException(status_code=404, detail="Timeline group not found")
-    return value
+@app.get("/dev/tracer", response_class=HTMLResponse)
+async def dev_tracer_dashboard(request: Request) -> HTMLResponse:
+    """Execution tracer dashboard — shows live flame graph and call log."""
+    return templates.TemplateResponse(
+        request,
+        "dev_tracer.html",
+        {"page_title": "Execution Tracer"},
+    )
 
 
-def _parse_timeline_cursor(cursor: str) -> tuple[int, str, int] | None:
-    normalized_cursor = cursor.strip()
-    if not normalized_cursor:
-        return None
-    try:
-        return decode_timeline_cursor(normalized_cursor)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Invalid timeline cursor") from exc
+@app.get("/dev/tracer/stream")
+async def dev_tracer_stream() -> StreamingResponse:
+    """SSE stream of execution spans for the tracer dashboard."""
+
+    async def stream_spans() -> AsyncGenerator[str, None]:
+        q = await subscribe()
+        try:
+            while True:
+                try:
+                    item = await asyncio.wait_for(q.get(), timeout=30.0)
+                    yield _encode_sse_event(item["event"], item["span"])
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            await unsubscribe(q)
+
+    return StreamingResponse(
+        stream_spans(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
-def _parse_search_cursor(cursor: str) -> int | None:
-    normalized_cursor = cursor.strip()
-    if not normalized_cursor:
-        return None
-    try:
-        return decode_search_cursor(normalized_cursor)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Invalid search cursor") from exc
-
-
-def _load_group_scope(
-    connection: sqlite3.Connection, *, q: str, group_id: str
-) -> GroupScope:
-    normalized_query = q.strip()
-    normalized_group_id = group_id.strip().lower()
-    explicit_all_groups = normalized_group_id == "all"
-    selected_group_id = _parse_group_id(group_id)
-    timeline_filters = list_timeline_groups(connection)
-    selected_group = None
-    if explicit_all_groups:
-        selected_group_id = None
-    elif selected_group_id is not None:
-        selected_group = get_timeline_group(connection, selected_group_id)
-        if selected_group is None:
-            raise HTTPException(status_code=404, detail="Timeline group not found")
-    else:
-        selected_group = get_default_timeline_group(connection)
-        if selected_group is not None:
-            selected_group_id = selected_group.id
-
-    return {
-        "normalized_query": normalized_query,
-        "selected_group_id": selected_group_id,
-        "selected_group_query_value": (
-            "all"
-            if explicit_all_groups
-            else (str(selected_group_id) if selected_group_id is not None else "")
-        ),
-        "timeline_filters": timeline_filters,
-        "selected_group": selected_group,
-        "explicit_all_groups": explicit_all_groups,
-        "scope_key": _build_timeline_scope_key(selected_group_id, normalized_query),
-    }
-
-
-def _load_timeline_scope(
-    connection: sqlite3.Connection, *, q: str, group_id: str
-) -> TimelineScope:
-    group_scope = _load_group_scope(connection, q=q, group_id=group_id)
-
-    match_count = None
-    if group_scope["normalized_query"]:
-        match_count = len(
-            filter_timeline_entries(
-                connection,
-                group_scope["normalized_query"],
-                group_id=group_scope["selected_group_id"],
-            )
-        )
-
-    timeline_web_search: TimelineWebSearchState = {
-        "show_panel": bool(
-            group_scope["selected_group"]
-            and group_scope["selected_group"].web_search_query
-        ),
-        "provider_is_copilot": _is_copilot_provider(),
-    }
-    return {
-        **group_scope,
-        "match_count": match_count,
-        "timeline_web_search": timeline_web_search,
-    }
 
 
 def _build_timeline_scope_key(group_id: int | None, query: str) -> str:
@@ -2997,13 +2994,6 @@ def _load_story_page_scope(
     return group_scope, story_scope
 
 
-def _parse_story_format(raw_value: str) -> StoryFormat:
-    normalized = raw_value.strip() or "executive_summary"
-    if normalized not in _STORY_FORMAT_LABELS:
-        raise HTTPException(status_code=400, detail="Invalid story format")
-    return cast(StoryFormat, normalized)
-
-
 def _build_story_format_options(
     selected_format: StoryFormat,
 ) -> list[StoryFormatOption]:
@@ -3060,52 +3050,6 @@ def _build_story_scope_details(
         "month": story_scope.month,
         "description": " | ".join(parts),
     }
-
-
-def _build_story_page_context(
-    request: Request,
-    *,
-    group_scope: GroupScope,
-    story_scope: TimelineStoryScope,
-    story_format: StoryFormat,
-    source_entry_count: int,
-    feedback_message: str | None = None,
-    feedback_class: str = "warning",
-    story_result: StoryResultContext | None = None,
-    story_view_mode: str = "narrative",
-) -> StoryPageContext:
-    selected_group_name = (
-        group_scope["selected_group"].name
-        if group_scope["selected_group"]
-        else "All groups"
-    )
-    context: StoryPageContext = {
-        "request": request,
-        "page_title": "Story Mode",
-        "query": group_scope["normalized_query"],
-        "timeline_filters": group_scope["timeline_filters"],
-        "selected_group_id": group_scope["selected_group_id"],
-        "selected_group_query_value": group_scope["selected_group_query_value"],
-        "selected_group_name": selected_group_name,
-        "story_form_state": _build_story_form_state(
-            q=group_scope["normalized_query"],
-            group_id=group_scope["selected_group_query_value"],
-            year=story_scope.year,
-            month=story_scope.month,
-            story_format=story_format,
-        ),
-        "story_formats": _build_story_format_options(story_format),
-        "story_scope": _build_story_scope_details(
-            story_scope=story_scope,
-            selected_group_name=selected_group_name,
-        ),
-        "source_entry_count": source_entry_count,
-        "feedback_message": feedback_message,
-        "feedback_class": feedback_class,
-        "story_result": story_result,
-        "story_view_mode": story_view_mode,
-    }
-    return context
 
 
 def _build_generated_story_result(
@@ -3223,28 +3167,6 @@ def _build_posted_story_result(
     }
 
 
-def _build_story_citation_contexts(
-    citations: list[TimelineStoryCitation],
-    entry_lookup: Mapping[int, Entry | None],
-) -> list[StoryCitationContext]:
-    contexts: list[StoryCitationContext] = []
-    for citation in citations:
-        entry = entry_lookup.get(citation.entry_id)
-        contexts.append(
-            {
-                "citation_order": citation.citation_order,
-                "entry_id": citation.entry_id,
-                "entry_title": entry.title
-                if entry is not None
-                else f"Entry #{citation.entry_id}",
-                "entry_url": (
-                    f"/entries/{citation.entry_id}/view" if entry is not None else None
-                ),
-                "entry_date": entry.display_date if entry is not None else None,
-                "quote_text": citation.quote_text,
-                "note": citation.note,
-            }
-        )
     return contexts
 
 
@@ -3296,40 +3218,6 @@ def _render_story_inline_citation_link(
         f'<a href="{fallback_href}" class="story-inline-citation" '
         f'title="{escape(title)}">{label}</a>'
     )
-
-
-def _sanitize_story_html(value: str) -> str:
-    if not value:
-        return ""
-
-    soup = BeautifulSoup(value, "html.parser")
-    for tag in soup.find_all(True):
-        if not isinstance(tag, Tag):
-            continue
-        if tag.name in {"script", "style"}:
-            tag.decompose()
-            continue
-        if tag.name not in _ALLOWED_STORY_HTML_TAGS:
-            tag.unwrap()
-            continue
-
-        allowed_attributes = _ALLOWED_STORY_HTML_ATTRIBUTES.get(tag.name, set())
-        sanitized_attributes: dict[str, str | list[str]] = {}
-        for attribute_name, attribute_value in tag.attrs.items():
-            if attribute_name not in allowed_attributes:
-                continue
-            if tag.name == "a" and attribute_name == "href":
-                href = str(attribute_value).strip()
-                if _is_safe_story_href(href):
-                    sanitized_attributes[attribute_name] = href
-                continue
-            sanitized_attributes[attribute_name] = cast(
-                str | list[str],
-                attribute_value,
-            )
-        tag.attrs = cast(Any, sanitized_attributes)
-
-    return str(soup)
 
 
 def _is_safe_story_href(value: str) -> bool:
@@ -3474,14 +3362,14 @@ def _parse_story_artifact_payload(
     return payload
 
 
-def _parse_story_view_mode(raw_value: str, *, has_presentation: bool) -> str:
+def _OLD_parse_story_view_mode(raw_value: str, *, has_presentation: bool) -> str:
     """Resolve the saved story view mode, falling back to narrative when needed."""
     if has_presentation and raw_value.strip().lower() == "presentation":
         return "presentation"
     return "narrative"
 
 
-def _encode_sse_event(event_name: str, payload: Mapping[str, object]) -> str:
+def _OLD_OLD_encode_sse_event(event_name: str, payload: Mapping[str, object]) -> str:
     body = json.dumps(payload, separators=(",", ":"), default=str)
     return f"event: {event_name}\ndata: {body}\n\n"
 
@@ -3543,14 +3431,9 @@ def _list_timeline_details_for_scope(
     )
 
 
-def _render_partial(template_name: str, **context: object) -> str:
-    template = templates.get_template(template_name)
-    return template.render(**context)
 
 
-def _month_name(month: int) -> str:
-    import calendar
-    return calendar.month_name[month]
+
 
 
 def _build_timeline_group_web_search_payload(

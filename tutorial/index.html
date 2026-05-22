@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EventTracker Flashcards</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 600px;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #4ade80;
+            transition: width 0.3s ease;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            color: white;
+            margin-top: 15px;
+            font-size: 0.9em;
+        }
+
+        .flashcard {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            min-height: 300px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-bottom: 30px;
+        }
+
+        .flashcard:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 25px 70px rgba(0, 0, 0, 0.35);
+        }
+
+        .flashcard.flipped {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .card-label {
+            font-size: 0.85em;
+            font-weight: 600;
+            color: #667eea;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 15px;
+        }
+
+        .flashcard.flipped .card-label {
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .card-content {
+            font-size: 1.2em;
+            text-align: center;
+            line-height: 1.6;
+            min-height: 150px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .card-hint {
+            margin-top: 20px;
+            font-size: 0.9em;
+            color: #999;
+            font-style: italic;
+        }
+
+        .flashcard.flipped .card-hint {
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 30px;
+        }
+
+        button {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-width: 140px;
+        }
+
+        .btn-primary {
+            background: white;
+            color: #667eea;
+        }
+
+        .btn-primary:hover {
+            background: #f0f0f0;
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid white;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .completion {
+            text-align: center;
+            color: white;
+            padding: 30px;
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+        }
+
+        .completion h2 {
+            font-size: 2em;
+            margin-bottom: 15px;
+        }
+
+        .completion p {
+            margin-bottom: 20px;
+            opacity: 0.9;
+        }
+
+        .difficulty-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .difficulty-easy {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .difficulty-medium {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .difficulty-hard {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .shortcuts {
+            color: white;
+            text-align: center;
+            font-size: 0.85em;
+            margin-top: 20px;
+            opacity: 0.8;
+        }
+
+        .flip-hint {
+            color: #999;
+            font-size: 0.9em;
+            margin-top: 15px;
+        }
+
+        .flashcard.flipped .flip-hint {
+            color: rgba(255, 255, 255, 0.6);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📚 EventTracker</h1>
+            <p>Test Your Understanding</p>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="stats">
+                <span>Card <strong id="currentCard">1</strong> / <strong id="totalCards">0</strong></span>
+                <span>Correct: <strong id="correctCount">0</strong></span>
+                <span>Skipped: <strong id="skippedCount">0</strong></span>
+            </div>
+        </div>
+
+        <div id="cardContainer">
+            <div class="flashcard" id="flashcard">
+                <div class="card-label" id="cardLabel">Question</div>
+                <div class="card-content" id="cardContent">Click to start</div>
+                <div class="flip-hint">Click card to reveal answer</div>
+            </div>
+        </div>
+
+        <div class="controls" id="controls">
+            <button class="btn-secondary" id="prevBtn" onclick="previousCard()">← Previous</button>
+            <button class="btn-primary" id="revealBtn" onclick="toggleFlip()">Reveal</button>
+            <button class="btn-secondary" id="nextBtn" onclick="nextCard()">Next →</button>
+        </div>
+
+        <div class="controls">
+            <button class="btn-secondary" id="skipBtn" onclick="skipCard()">Skip</button>
+            <button class="btn-secondary" id="resetBtn" onclick="resetCards()">Reset</button>
+        </div>
+
+        <div class="shortcuts">
+            <p>💡 Tip: Use arrow keys or Space to navigate · Click card to flip</p>
+        </div>
+    </div>
+
+    <script>
+        const FLASHCARDS = [
+            {
+                question: "What is EventTracker?",
+                answer: "A local-first timeline application built with FastAPI, SQLite, Jinja2, and Bootstrap. It's a single-process, server-rendered app where entries are stored in one SQLite file.",
+                difficulty: "easy"
+            },
+            {
+                question: "Which framework does EventTracker use for the backend?",
+                answer: "FastAPI - a modern Python web framework for building APIs.",
+                difficulty: "easy"
+            },
+            {
+                question: "What database does EventTracker use?",
+                answer: "SQLite with FTS5 (Full-Text Search) indexes and optional sqlite-vec embeddings support.",
+                difficulty: "easy"
+            },
+            {
+                question: "Where is the main composition root for all routes located?",
+                answer: "In app/main.py - a large file (~90KB) containing all FastAPI route handlers, CSRF middleware, and Jinja2 setup.",
+                difficulty: "easy"
+            },
+            {
+                question: "Name three services in the app/services/ directory.",
+                answer: "Any three of: entries.py (CRUD & validation), search.py (FTS5 & semantic search), story_mode.py (Story Mode scoping), ai_generate.py (AI drafts), embeddings.py (sqlite-vec), extraction.py (URL extraction), event_chat.py (RAG Q&A), or topics.py (clustering).",
+                difficulty: "medium"
+            },
+            {
+                question: "How are entries sorted in EventTracker?",
+                answer: "Using a sort_key derived as YYYYMMDD format, with '00' used when the day is missing.",
+                difficulty: "medium"
+            },
+            {
+                question: "What frontend templating engine does EventTracker use?",
+                answer: "Jinja2 for server-rendered templates located in app/templates/, with partials/ for reusable fragments.",
+                difficulty: "easy"
+            },
+            {
+                question: "How is dark mode implemented in EventTracker?",
+                answer: "Using Bootstrap's data-bs-theme attribute with localStorage persistence for user preference.",
+                difficulty: "easy"
+            },
+            {
+                question: "What is the entry point to start the development server?",
+                answer: "uv run python -m scripts.run_dev --reload - starts the server on http://127.0.0.1:35231/",
+                difficulty: "easy"
+            },
+            {
+                question: "How is CSRF protection implemented?",
+                answer: "Using HMAC-SHA256 per-session tokens via cookie + form/header validation.",
+                difficulty: "hard"
+            },
+            {
+                question: "What's unique about EventTracker's database approach?",
+                answer: "No ORM and no migration framework - uses raw sqlite3 with context manager in app/db.py. Schema compatibility is checked at startup.",
+                difficulty: "hard"
+            },
+            {
+                question: "What are the two testing frameworks used in EventTracker?",
+                answer: "Python: pytest-based unit/integration tests. TypeScript: Playwright E2E tests with custom harness using temp DB copies and free ports.",
+                difficulty: "medium"
+            },
+            {
+                question: "How are external APIs (OpenAI, Copilot) handled in tests?",
+                answer: "They are mocked in Python tests. The app gracefully degrades without AI/embeddings since they're optional.",
+                difficulty: "hard"
+            },
+            {
+                question: "What Python type checker is used?",
+                answer: "Pyright - configured in pyproject.toml with a curated file list, not the full tree.",
+                difficulty: "medium"
+            },
+            {
+                question: "Where is configuration stored and how is it loaded?",
+                answer: "In a .env file, loaded by python-dotenv. Key variables are prefixed with EVENTTRACKER_. See .env.example for templates.",
+                difficulty: "easy"
+            },
+            {
+                question: "What does the FTS5 index in EventTracker cover?",
+                answer: "Only the final_text field - embeddings are also derived from final_text only.",
+                difficulty: "hard"
+            },
+            {
+                question: "What should happen with credentials in the codebase?",
+                answer: "NEVER hardcode credentials - always use environment variables. Never commit .env files.",
+                difficulty: "medium"
+            },
+            {
+                question: "What is Story Mode?",
+                answer: "A feature that scopes and generates AI-powered narrative summaries of events. Implemented in story_mode.py and ai_story_mode.py services.",
+                difficulty: "medium"
+            },
+            {
+                question: "What optional feature provides semantic search capabilities?",
+                answer: "sqlite-vec embeddings, which are optional and allow semantic similarity search in addition to FTS5 keyword search.",
+                difficulty: "hard"
+            },
+            {
+                question: "What is Event Chat used for?",
+                answer: "Retrieval-augmented conversational Q&A over stored events - implemented in event_chat.py.",
+                difficulty: "medium"
+            },
+            {
+                question: "How should you run a single pytest test?",
+                answer: "uv run pytest tests/test_entries.py -k \"test_name\" for a specific test, or uv run pytest tests/test_entries.py for a whole file.",
+                difficulty: "easy"
+            },
+            {
+                question: "What does the TESTING=1 environment variable do?",
+                answer: "Bypasses CSRF protection for E2E tests in Python Playwright.",
+                difficulty: "hard"
+            },
+            {
+                question: "How are Python packages managed?",
+                answer: "Using uv (uv sync, uv sync --dev). EventTracker is not an installable package (tool.uv package = false).",
+                difficulty: "medium"
+            },
+            {
+                question: "Where should new TypeScript Playwright specs import from?",
+                answer: "From the custom harness at tstests/e2e/helpers/harness.ts, not from @playwright/test directly.",
+                difficulty: "hard"
+            },
+            {
+                question: "What does the Copilot integration provide?",
+                answer: "GitHub Copilot integration for AI-assisted functionality, managed through copilot_sdk.py and copilot_runtime.py services.",
+                difficulty: "medium"
+            }
+        ];
+
+        let currentIndex = 0;
+        let flipped = false;
+        let correct = 0;
+        let skipped = 0;
+
+        function initializeCards() {
+            document.getElementById('totalCards').textContent = FLASHCARDS.length;
+            renderCard();
+            updateProgress();
+        }
+
+        function renderCard() {
+            const card = FLASHCARDS[currentIndex];
+            const flashcardEl = document.getElementById('flashcard');
+            const contentEl = document.getElementById('cardContent');
+            const labelEl = document.getElementById('cardLabel');
+            const currentEl = document.getElementById('currentCard');
+
+            flipped = false;
+            flashcardEl.classList.remove('flipped');
+            currentEl.textContent = currentIndex + 1;
+
+            labelEl.textContent = 'Question';
+            contentEl.innerHTML = `<div>${card.question}</div><span class="difficulty-badge difficulty-${card.difficulty}">${card.difficulty.toUpperCase()}</span>`;
+
+            updateProgress();
+        }
+
+        function toggleFlip() {
+            const card = FLASHCARDS[currentIndex];
+            const flashcardEl = document.getElementById('flashcard');
+            const contentEl = document.getElementById('cardContent');
+            const labelEl = document.getElementById('cardLabel');
+
+            flipped = !flipped;
+
+            if (flipped) {
+                flashcardEl.classList.add('flipped');
+                labelEl.textContent = 'Answer';
+                contentEl.textContent = card.answer;
+            } else {
+                flashcardEl.classList.remove('flipped');
+                labelEl.textContent = 'Question';
+                contentEl.innerHTML = `<div>${card.question}</div><span class="difficulty-badge difficulty-${card.difficulty}">${card.difficulty.toUpperCase()}</span>`;
+            }
+        }
+
+        function nextCard() {
+            if (currentIndex < FLASHCARDS.length - 1) {
+                currentIndex++;
+                renderCard();
+            }
+        }
+
+        function previousCard() {
+            if (currentIndex > 0) {
+                currentIndex--;
+                renderCard();
+            }
+        }
+
+        function skipCard() {
+            skipped++;
+            document.getElementById('skippedCount').textContent = skipped;
+            if (currentIndex < FLASHCARDS.length - 1) {
+                nextCard();
+            } else {
+                showCompletion();
+            }
+        }
+
+        function markCorrect() {
+            correct++;
+            document.getElementById('correctCount').textContent = correct;
+            if (currentIndex < FLASHCARDS.length - 1) {
+                nextCard();
+            } else {
+                showCompletion();
+            }
+        }
+
+        function updateProgress() {
+            const percentage = ((currentIndex + 1) / FLASHCARDS.length) * 100;
+            document.getElementById('progressFill').style.width = percentage + '%';
+        }
+
+        function showCompletion() {
+            const percentage = Math.round((correct / FLASHCARDS.length) * 100);
+            const cardContainer = document.getElementById('cardContainer');
+            cardContainer.innerHTML = `
+                <div class="completion">
+                    <h2>🎉 Complete!</h2>
+                    <p>You got <strong>${correct} out of ${FLASHCARDS.length}</strong> correct (${percentage}%)</p>
+                    <p>Skipped: ${skipped}</p>
+                    <button class="btn-primary" onclick="resetCards()" style="margin-top: 15px;">Try Again</button>
+                </div>
+            `;
+        }
+
+        function resetCards() {
+            currentIndex = 0;
+            flipped = false;
+            correct = 0;
+            skipped = 0;
+            document.getElementById('correctCount').textContent = '0';
+            document.getElementById('skippedCount').textContent = '0';
+            document.getElementById('cardContainer').innerHTML = `
+                <div class="flashcard" id="flashcard">
+                    <div class="card-label" id="cardLabel">Question</div>
+                    <div class="card-content" id="cardContent">Click to start</div>
+                    <div class="flip-hint">Click card to reveal answer</div>
+                </div>
+            `;
+            document.getElementById('flashcard').addEventListener('click', toggleFlip);
+            renderCard();
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ') {
+                e.preventDefault();
+                if (flipped) {
+                    markCorrect();
+                } else {
+                    toggleFlip();
+                }
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                previousCard();
+            }
+        });
+
+        // Click to flip
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'flashcard' || e.target.closest('#flashcard')) {
+                toggleFlip();
+            }
+        });
+
+        // Initialize
+        initializeCards();
+    </script>
+</body>
+</html>

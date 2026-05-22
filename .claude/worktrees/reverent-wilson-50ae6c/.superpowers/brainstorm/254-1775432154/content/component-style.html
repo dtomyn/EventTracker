@@ -1,0 +1,85 @@
+<h2>Which component style feels right?</h2>
+<p class="subtitle">This sets the tone for cards, panels, and containers across the whole app</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 2rem; background: #0f172a;">
+      <!-- Subtle border card -->
+      <div style="background: #1e293b; border: 1px solid rgba(6, 182, 212, 0.15); border-radius: 8px; padding: 1.25rem; font-family: 'Inter', system-ui;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+          <span style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.12em; color: #06b6d4; font-family: 'SF Mono', 'Fira Code', monospace;">Mar 2026</span>
+          <span style="background: rgba(6, 182, 212, 0.1); color: #22d3ee; padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 0.65rem; border: 1px solid rgba(6, 182, 212, 0.2); font-family: 'SF Mono', monospace;">milestone</span>
+        </div>
+        <div style="font-size: 0.95rem; font-weight: 600; color: #f1f5f9; margin-bottom: 0.5rem;">Project Alpha Launch</div>
+        <div style="font-size: 0.8rem; color: #94a3b8; line-height: 1.5;">Deployed v2.0 to production with zero downtime migration.</div>
+      </div>
+      <div style="height: 12px;"></div>
+      <div style="background: #1e293b; border: 1px solid rgba(6, 182, 212, 0.15); border-radius: 8px; padding: 1.25rem; font-family: 'Inter', system-ui;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+          <span style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.12em; color: #06b6d4; font-family: 'SF Mono', 'Fira Code', monospace;">Feb 2026</span>
+          <span style="background: rgba(16, 185, 129, 0.1); color: #34d399; padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 0.65rem; border: 1px solid rgba(16, 185, 129, 0.2); font-family: 'SF Mono', monospace;">shipped</span>
+        </div>
+        <div style="font-size: 0.95rem; font-weight: 600; color: #f1f5f9; margin-bottom: 0.5rem;">API Rate Limiting</div>
+        <div style="font-size: 0.8rem; color: #94a3b8; line-height: 1.5;">Implemented sliding window rate limiter for all public endpoints.</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. Subtle Border</h3>
+      <p>Flat dark surface with faint cyan-tinted borders. Minimal, clean, information-forward. Similar to Linear, GitHub dark.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 2rem; background: #0f172a;">
+      <!-- Glow border card -->
+      <div style="background: #1e293b; border: 1px solid rgba(6, 182, 212, 0.25); border-radius: 8px; padding: 1.25rem; font-family: 'Inter', system-ui; box-shadow: 0 0 20px rgba(6, 182, 212, 0.08), inset 0 1px 0 rgba(6, 182, 212, 0.1);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+          <span style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.12em; color: #06b6d4; font-family: 'SF Mono', 'Fira Code', monospace;">Mar 2026</span>
+          <span style="background: rgba(6, 182, 212, 0.15); color: #22d3ee; padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 0.65rem; border: 1px solid rgba(6, 182, 212, 0.3); font-family: 'SF Mono', monospace; text-shadow: 0 0 8px rgba(6, 182, 212, 0.4);">milestone</span>
+        </div>
+        <div style="font-size: 0.95rem; font-weight: 600; color: #f1f5f9; margin-bottom: 0.5rem;">Project Alpha Launch</div>
+        <div style="font-size: 0.8rem; color: #94a3b8; line-height: 1.5;">Deployed v2.0 to production with zero downtime migration.</div>
+      </div>
+      <div style="height: 12px;"></div>
+      <div style="background: #1e293b; border: 1px solid rgba(6, 182, 212, 0.25); border-radius: 8px; padding: 1.25rem; font-family: 'Inter', system-ui; box-shadow: 0 0 20px rgba(6, 182, 212, 0.08), inset 0 1px 0 rgba(6, 182, 212, 0.1);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+          <span style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.12em; color: #06b6d4; font-family: 'SF Mono', 'Fira Code', monospace;">Feb 2026</span>
+          <span style="background: rgba(16, 185, 129, 0.15); color: #34d399; padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 0.65rem; border: 1px solid rgba(16, 185, 129, 0.3); font-family: 'SF Mono', monospace; text-shadow: 0 0 8px rgba(16, 185, 129, 0.4);">shipped</span>
+        </div>
+        <div style="font-size: 0.95rem; font-weight: 600; color: #f1f5f9; margin-bottom: 0.5rem;">API Rate Limiting</div>
+        <div style="font-size: 0.8rem; color: #94a3b8; line-height: 1.5;">Implemented sliding window rate limiter for all public endpoints.</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. Subtle Glow</h3>
+      <p>Same structure but with soft cyan glow on borders and badges. Adds depth and atmosphere without being flashy. Terminal-inspired ambient light.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 2rem; background: #0f172a;">
+      <!-- Glassmorphism card -->
+      <div style="background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(6, 182, 212, 0.2); border-radius: 12px; padding: 1.25rem; font-family: 'Inter', system-ui; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+          <span style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.12em; color: #06b6d4; font-family: 'SF Mono', 'Fira Code', monospace;">Mar 2026</span>
+          <span style="background: rgba(6, 182, 212, 0.15); color: #22d3ee; padding: 0.1rem 0.5rem; border-radius: 6px; font-size: 0.65rem; backdrop-filter: blur(4px); font-family: 'SF Mono', monospace;">milestone</span>
+        </div>
+        <div style="font-size: 0.95rem; font-weight: 600; color: #f1f5f9; margin-bottom: 0.5rem;">Project Alpha Launch</div>
+        <div style="font-size: 0.8rem; color: #94a3b8; line-height: 1.5;">Deployed v2.0 to production with zero downtime migration.</div>
+      </div>
+      <div style="height: 12px;"></div>
+      <div style="background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(6, 182, 212, 0.2); border-radius: 12px; padding: 1.25rem; font-family: 'Inter', system-ui; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+          <span style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.12em; color: #06b6d4; font-family: 'SF Mono', 'Fira Code', monospace;">Feb 2026</span>
+          <span style="background: rgba(16, 185, 129, 0.15); color: #34d399; padding: 0.1rem 0.5rem; border-radius: 6px; font-size: 0.65rem; backdrop-filter: blur(4px); font-family: 'SF Mono', monospace;">shipped</span>
+        </div>
+        <div style="font-size: 0.95rem; font-weight: 600; color: #f1f5f9; margin-bottom: 0.5rem;">API Rate Limiting</div>
+        <div style="font-size: 0.8rem; color: #94a3b8; line-height: 1.5;">Implemented sliding window rate limiter for all public endpoints.</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. Glassmorphism</h3>
+      <p>Frosted glass effect with backdrop blur, transparency, and deeper shadows. More rounded, more depth. The app already uses this partially — this would lean into it fully.</p>
+    </div>
+  </div>
+</div>

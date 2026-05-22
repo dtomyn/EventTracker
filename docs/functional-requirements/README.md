@@ -24,3 +24,6 @@
 - `FR-009-application-shell-and-theme.md`: shared navigation and theme behavior.
 - `FR-010-topic-clustering.md`: semantic topic clustering and D3.js mind map behavior.
 - `FR-011-event-chat.md`: retrieval-augmented conversational Q&A over stored events.
+- `FR-012-heatmap-visualization.md`: calendar-based heatmap visualization of entry density and day-scoped entry filtering.
+- `FR-013-suggested-entry-connections.md`: AI-assisted relationship discovery between entries and suggestion acceptance workflow.
+- `FR-014-connection-graph-visualization.md`: visual graph display of entry-to-entry connections using D3.js.

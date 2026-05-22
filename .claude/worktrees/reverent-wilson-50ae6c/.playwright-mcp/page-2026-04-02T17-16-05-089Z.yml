@@ -1,0 +1,638 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - generic [ref=e3]:
+      - link "Events" [ref=e4] [cursor=pointer]:
+        - /url: /
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - searchbox "Filter timeline in plain English" [ref=e7]
+          - button "Filter" [ref=e8] [cursor=pointer]
+          - button "Search" [ref=e9] [cursor=pointer]
+        - generic [ref=e10]:
+          - link "Export" [ref=e11] [cursor=pointer]:
+            - /url: /entries/export
+          - link "Admin" [ref=e12] [cursor=pointer]:
+            - /url: /admin/groups
+          - button "Toggle dark mode" [ref=e13] [cursor=pointer]:
+            - img [ref=e14]
+          - link "New Entry" [ref=e16] [cursor=pointer]:
+            - /url: /entries/new
+  - main [ref=e17]:
+    - generic [ref=e18]:
+      - generic [ref=e19]:
+        - heading "Agentic Coding Timeline" [level=1] [ref=e21]
+        - group [ref=e22]:
+          - generic "Group Agentic Coding" [ref=e23] [cursor=pointer]:
+            - generic [ref=e24]: Group
+            - generic [ref=e25]: Agentic Coding
+      - generic [ref=e27]:
+        - link "Story Mode" [ref=e28] [cursor=pointer]:
+          - /url: /story?group_id=1
+        - link "Tag Clusters" [ref=e29] [cursor=pointer]:
+          - /url: /groups/1/topics/graph
+    - button "Recent Developments" [ref=e31] [cursor=pointer]:
+      - generic [ref=e32]: Recent Developments
+    - generic "Timeline view controls" [ref=e34]:
+      - group "Timeline views" [ref=e35]:
+        - button "Details" [pressed] [ref=e36] [cursor=pointer]
+        - button "Summaries" [ref=e37] [cursor=pointer]
+        - button "Months" [ref=e38] [cursor=pointer]
+        - button "Years" [ref=e39] [cursor=pointer]
+    - region "Timeline views" [ref=e40]:
+      - generic [ref=e41]:
+        - generic [ref=e42]: Current view
+        - strong [ref=e43]: Details
+        - generic [ref=e44]: 25 loaded, more available
+      - generic [ref=e47]:
+        - generic [ref=e48]:
+          - heading "Open April 2026 in the Months view" [level=2] [ref=e50]:
+            - button "Open April 2026 in the Months view" [ref=e51] [cursor=pointer]: April 2026
+          - article [ref=e53]:
+            - generic [ref=e54]:
+              - generic [ref=e55]:
+                - generic [ref=e56]:
+                  - generic [ref=e57]:
+                    - generic [ref=e58]: April 2, 2026
+                    - generic [ref=e59]: Agentic Coding
+                  - generic [ref=e60]: E2E Test Entry – Updated Title
+                  - generic [ref=e61]: This entry was created by an automated Playwright CLI test.
+                - generic [ref=e62]:
+                  - link "View" [ref=e63] [cursor=pointer]:
+                    - /url: /entries/56/view
+                  - link "Edit" [ref=e64] [cursor=pointer]:
+                    - /url: /entries/56
+              - generic [ref=e65]:
+                - generic [ref=e66]: e2e
+                - generic [ref=e67]: playwright
+                - generic [ref=e68]: test
+              - link "https://example.com/e2e-test" [ref=e70] [cursor=pointer]:
+                - /url: https://example.com/e2e-test
+        - generic [ref=e71]:
+          - heading "Open March 2026 in the Months view" [level=2] [ref=e73]:
+            - button "Open March 2026 in the Months view" [ref=e74] [cursor=pointer]: March 2026
+          - generic [ref=e75]:
+            - article [ref=e76]:
+              - generic [ref=e77]:
+                - generic [ref=e78]:
+                  - generic [ref=e79]:
+                    - generic [ref=e80]:
+                      - generic [ref=e81]: March 18, 2026
+                      - generic [ref=e82]: Agentic Coding
+                    - generic [ref=e83]: "VS Code 1.112: Smarter Agents, Browser Debugging & MCP Sandboxing"
+                    - paragraph [ref=e85]: Visual Studio Code 1.112 shipped on March 18, 2026, with a strong focus on agentic development. Key highlights include integrated browser debugging (debug web apps end-to-end without leaving the editor), Copilot CLI message steering and queueing (send follow-up messages while an agent is still running), MCP server sandboxing (limit what local MCP servers can access on your machine), and agent image support (work with screenshots, diagrams, and binary files directly in agent conversations). The release also adds monorepo customizations for sharing Copilot instructions across packages, and surfaces pending workspace changes in the Chat view before handing off tasks to Copilot CLI.
+                  - generic [ref=e86]:
+                    - link "View" [ref=e87] [cursor=pointer]:
+                      - /url: /entries/50/view
+                    - link "Edit" [ref=e88] [cursor=pointer]:
+                      - /url: /entries/50
+                - generic [ref=e89]:
+                  - generic [ref=e90]: VS Code Release
+                  - generic [ref=e91]: Agentic Development
+                  - generic [ref=e92]: Browser Debugging
+                  - generic [ref=e93]: MCP Sandboxing
+                  - generic [ref=e94]: Copilot CLI
+                - link "https://code.visualstudio.com/updates/v1_112" [ref=e96] [cursor=pointer]:
+                  - /url: https://code.visualstudio.com/updates/v1_112
+            - article [ref=e97]:
+              - generic [ref=e98]:
+                - generic [ref=e99]:
+                  - generic [ref=e100]:
+                    - generic [ref=e101]:
+                      - generic [ref=e102]: March 16, 2026
+                      - generic [ref=e103]: Agentic Coding
+                    - generic [ref=e104]: "Codex Subagents: Parallel Agent Workflows"
+                    - paragraph [ref=e106]:
+                      - strong [ref=e107]: Codex subagents
+                      - text: let Codex spawn specialized agents in parallel and consolidate their results into a single response, useful for highly parallel tasks (e.g., codebase exploration or multi-step feature plans) and for defining custom agents with different model configurations and instructions. Subagent workflows are enabled by default and are currently surfaced in the Codex app and CLI (IDE extension coming soon); Codex only spawns subagents when explicitly requested. Codex orchestrates spawning, routing, waiting for results, and closing threads; subagent runs consume more tokens and can introduce tradeoffs such as context pollution and context rot. Subagents inherit the parent sandbox policy and live runtime overrides; in interactive CLI sessions approval requests from inactive threads surface via an overlay showing the source thread label (press "o" to open), while in non-interactive flows actions requiring new approval fail back to the parent workflow.
+                  - generic [ref=e108]:
+                    - link "View" [ref=e109] [cursor=pointer]:
+                      - /url: /entries/47/view
+                    - link "Edit" [ref=e110] [cursor=pointer]:
+                      - /url: /entries/47
+                - generic [ref=e111]:
+                  - generic [ref=e112]: Parallel Agents
+                  - generic [ref=e113]: AI Orchestration
+                  - generic [ref=e114]: OpenAI
+                  - generic [ref=e115]: Codex
+                  - generic [ref=e116]: Subagents
+                - link "https://developers.openai.com/codex/subagents" [ref=e118] [cursor=pointer]:
+                  - /url: https://developers.openai.com/codex/subagents
+            - article [ref=e119]:
+              - generic [ref=e120]:
+                - generic [ref=e121]:
+                  - generic [ref=e122]:
+                    - generic [ref=e123]:
+                      - generic [ref=e124]: March 10, 2026
+                      - generic [ref=e125]: Agentic Coding
+                    - generic [ref=e126]: "Gemini Embedding 2: First Natively Multimodal Embeddings"
+                    - paragraph [ref=e128]:
+                      - text: Google released
+                      - strong [ref=e129]: Gemini Embedding 2
+                      - text: in public preview — its first natively multimodal embedding model built on the Gemini architecture. The model maps text, images, video, audio, and documents into a single unified embedding space, supporting semantic understanding across
+                      - strong [ref=e130]: over 100 languages
+                      - text: . It natively handles interleaved multimodal inputs (e.g., image + text in one request), simplifying pipelines for tasks like RAG, semantic search, sentiment analysis, and data clustering. Available via the
+                      - strong [ref=e131]: Gemini API
+                      - text: and
+                      - strong [ref=e132]: Vertex AI
+                      - text: .
+                  - generic [ref=e133]:
+                    - link "View" [ref=e134] [cursor=pointer]:
+                      - /url: /entries/1/view
+                    - link "Edit" [ref=e135] [cursor=pointer]:
+                      - /url: /entries/1
+                - generic [ref=e136]:
+                  - generic [ref=e137]: Multimodal AI
+                  - generic [ref=e138]: Embeddings
+                  - generic [ref=e139]: Google Gemini
+                  - generic [ref=e140]: Semantic Search
+                - link "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-embedding-2/" [ref=e142] [cursor=pointer]:
+                  - /url: https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-embedding-2/
+            - article [ref=e143]:
+              - generic [ref=e144]:
+                - generic [ref=e145]:
+                  - generic [ref=e146]:
+                    - generic [ref=e147]:
+                      - generic [ref=e148]: March 9, 2026
+                      - generic [ref=e149]: Agentic Coding
+                    - generic [ref=e150]: VS Code 1.111 — Agent Autopilot & Permissions
+                    - paragraph [ref=e152]:
+                      - strong [ref=e153]: Visual Studio Code 1.111
+                      - text: expands the agent experience with session-scoped Agent permissions (a permissions picker to set autonomy per session),
+                      - strong [ref=e154]: Autopilot (Preview)
+                      - text: for autonomous agent iteration until it signals completion, Agent-scoped hooks (Preview) for pre/post-processing, and Agent troubleshooting with debug event snapshots. Autopilot is enabled by default in Insiders and can be enabled in Stable via
+                      - code [ref=e155]: chat.autopilot.enabled
+                      - text: ". Note: Bypass Approvals and Autopilot can bypass manual approval prompts."
+                  - generic [ref=e156]:
+                    - link "View" [ref=e157] [cursor=pointer]:
+                      - /url: /entries/46/view
+                    - link "Edit" [ref=e158] [cursor=pointer]:
+                      - /url: /entries/46
+                - generic [ref=e159]:
+                  - generic [ref=e160]: VS Code Release
+                  - generic [ref=e161]: Developer Tools
+                  - generic [ref=e162]: AI Agent
+                - link "https://code.visualstudio.com/updates/v1_111" [ref=e164] [cursor=pointer]:
+                  - /url: https://code.visualstudio.com/updates/v1_111
+            - article [ref=e165]:
+              - generic [ref=e166]:
+                - generic [ref=e167]:
+                  - generic [ref=e168]:
+                    - generic [ref=e169]:
+                      - generic [ref=e170]: March 9, 2026
+                      - generic [ref=e171]: Agentic Coding
+                    - generic [ref=e172]: Microsoft’s Copilot Cowork brings agentic AI to Office apps
+                    - paragraph [ref=e174]: At its “Future of Work” event, Microsoft announces Copilot Cowork – a new capability for Microsoft 365 Copilot that introduces a persistent AI agent to the Office suite. Built in partnership with Anthropic and leveraging the long-context, long-running Claude model, Copilot Cowork can work autonomously on tasks across Word, Excel, Outlook, and Teams on a user’s behalf, continuing even when the user is offline. For example, a project manager can ask Cowork to draft a proposal, analyze budget spreadsheets, and prepare a PowerPoint deck overnight; the agent will use the user’s documents and company data (via Microsoft’s Work IQ contextual engine) to produce outputs and coordinate with colleagues via email – all with checkpoints for approval. Cowork transitions Microsoft’s assistant from simple Q&A to a true “autopilot mode” for office work. It underscores a multi-model strategy (Copilot now chooses the best AI model per task, not just using OpenAI by default) and signals that agentic AI has arrived in everyday productivity software.
+                  - generic [ref=e175]:
+                    - link "View" [ref=e176] [cursor=pointer]:
+                      - /url: /entries/2/view
+                    - link "Edit" [ref=e177] [cursor=pointer]:
+                      - /url: /entries/2
+                - generic [ref=e178]:
+                  - generic [ref=e179]: Agentic AI
+                  - generic [ref=e180]: Microsoft 365
+                  - generic [ref=e181]: Office Productivity
+                  - generic [ref=e182]: Claude Integration
+                  - generic [ref=e183]: Autonomous Agents
+                - link "https://www.microsoft.com/en-us/microsoft-365/blog/2026/03/09/copilot-cowork-a-new-way-of-getting-work-done/?msockid=2ab86d77480c67591b747b9749cb66cf" [ref=e185] [cursor=pointer]:
+                  - /url: https://www.microsoft.com/en-us/microsoft-365/blog/2026/03/09/copilot-cowork-a-new-way-of-getting-work-done/?msockid=2ab86d77480c67591b747b9749cb66cf
+            - article [ref=e186]:
+              - generic [ref=e187]:
+                - generic [ref=e188]:
+                  - generic [ref=e189]:
+                    - generic [ref=e190]:
+                      - generic [ref=e191]: March 5, 2026
+                      - generic [ref=e192]: Agentic Coding
+                    - generic [ref=e193]: AWS Launches Lambda Durable Functions Kiro Power
+                    - paragraph [ref=e195]:
+                      - text: AWS announced the
+                      - strong [ref=e196]: Lambda durable functions Kiro power
+                      - text: ", bringing AI agent-assisted development for Lambda durable functions directly into the Kiro IDE. The power dynamically loads relevant guidance covering replay model best practices, step and wait operations, concurrent execution patterns ("
+                      - code [ref=e197]: map
+                      - text: and
+                      - code [ref=e198]: parallel
+                      - text: ), error handling with retry strategies and compensating transactions, and deployment via CloudFormation, CDK, and SAM. Available with one-click installation from the Kiro IDE or the Kiro powers page.
+                  - generic [ref=e199]:
+                    - link "View" [ref=e200] [cursor=pointer]:
+                      - /url: /entries/49/view
+                    - link "Edit" [ref=e201] [cursor=pointer]:
+                      - /url: /entries/49
+                - generic [ref=e202]:
+                  - generic [ref=e203]: AWS Lambda
+                  - generic [ref=e204]: Durable Functions
+                  - generic [ref=e205]: AI Development
+                  - generic [ref=e206]: Kiro IDE
+                  - generic [ref=e207]: Cloud Deployment
+                - link "https://aws.amazon.com/about-aws/whats-new/2026/03/lambda-durable-kiro-power/" [ref=e209] [cursor=pointer]:
+                  - /url: https://aws.amazon.com/about-aws/whats-new/2026/03/lambda-durable-kiro-power/
+            - article [ref=e210]:
+              - generic [ref=e211]:
+                - generic [ref=e212]:
+                  - generic [ref=e213]:
+                    - generic [ref=e214]:
+                      - generic [ref=e215]: March 4, 2026
+                      - generic [ref=e216]: Agentic Coding
+                    - generic [ref=e217]: VS Code Feb 2026 (v1.110) — Agents & Session Tools
+                    - generic [ref=e218]:
+                      - paragraph [ref=e219]: Visual Studio Code "February 2026" release (v1.110), released March 4, 2026.
+                      - list [ref=e220]:
+                        - listitem [ref=e221]:
+                          - text: "Agents: support for longer-running, more complex tasks with agent plugins and agentic browser tools including an"
+                          - strong [ref=e222]: Integrated Browser!
+                        - listitem [ref=e223]: "Session memory & context compaction: persist plans across turns and manually compact history to free context."
+                        - listitem [ref=e224]: "Session management: fork chat sessions to explore alternatives and use the Agent Debug panel for real-time visibility into events and tool calls."
+                        - listitem [ref=e225]: "Usability & extension: create agent customizations from chat and accessibility improvements for screen readers and keyboard navigation."
+                        - listitem [ref=e226]: "Kitty graphics protocol: render high-fidelity images in the integrated terminal."
+                  - generic [ref=e227]:
+                    - link "View" [ref=e228] [cursor=pointer]:
+                      - /url: /entries/48/view
+                    - link "Edit" [ref=e229] [cursor=pointer]:
+                      - /url: /entries/48
+                - generic [ref=e230]:
+                  - generic [ref=e231]: VS Code Release
+                  - generic [ref=e232]: Developer Tools
+                  - generic [ref=e233]: AI Agents
+                  - generic [ref=e234]: Session Management
+                - link "https://code.visualstudio.com/updates/v1_110" [ref=e236] [cursor=pointer]:
+                  - /url: https://code.visualstudio.com/updates/v1_110
+            - article [ref=e237]:
+              - generic [ref=e238]:
+                - generic [ref=e239]:
+                  - generic [ref=e240]:
+                    - generic [ref=e241]:
+                      - generic [ref=e242]: March 2026
+                      - generic [ref=e243]: Agentic Coding
+                    - generic [ref=e244]: "\"Context Engineering\" emerges as the key AI skill"
+                    - paragraph [ref=e246]: By mid-2025, AI practitioners shift focus from crafting clever prompts (“prompt engineering”) toward context engineering – providing models with richer, domain-specific information and tools. Techniques like Retrieval-Augmented Generation (RAG) (which feeds relevant documents into the prompt), the use of shared skill libraries (e.g. SKILL.md files loaded by Claude Code), and frameworks like LangChain become popular. This trend recognizes that powerful LLMs perform best when given the right context and APIs to work with, reducing the need for manual prompt tricks.
+                  - generic [ref=e247]:
+                    - link "View" [ref=e248] [cursor=pointer]:
+                      - /url: /entries/21/view
+                    - link "Edit" [ref=e249] [cursor=pointer]:
+                      - /url: /entries/21
+                - generic [ref=e250]:
+                  - generic [ref=e251]: Context Engineering
+                  - generic [ref=e252]: Prompt Engineering
+                  - generic [ref=e253]: RAG
+                  - generic [ref=e254]: LLM Tooling
+                - link "https://blog.langchain.com/the-rise-of-context-engineering/" [ref=e256] [cursor=pointer]:
+                  - /url: https://blog.langchain.com/the-rise-of-context-engineering/
+        - generic [ref=e257]:
+          - heading "Open February 2026 in the Months view" [level=2] [ref=e259]:
+            - button "Open February 2026 in the Months view" [ref=e260] [cursor=pointer]: February 2026
+          - generic [ref=e261]:
+            - article [ref=e262]:
+              - generic [ref=e263]:
+                - generic [ref=e264]:
+                  - generic [ref=e265]:
+                    - generic [ref=e266]:
+                      - generic [ref=e267]: February 19, 2026
+                      - generic [ref=e268]: Agentic Coding
+                    - generic [ref=e269]: Gemini 3.1 Pro released
+                    - paragraph [ref=e271]:
+                      - strong [ref=e272]: Gemini 3.1 Pro
+                      - text: "announced and rolled out on Feb 19, 2026: an upgraded core model for complex reasoning, delivered in preview across the Gemini API, Vertex AI, the Gemini app, and NotebookLM for developers, enterprises, and consumers. 3.1 Pro builds on the Gemini 3 series and posts strong benchmark gains (ARC-AGI-2 verified score 77.1%)."
+                  - generic [ref=e273]:
+                    - link "View" [ref=e274] [cursor=pointer]:
+                      - /url: /entries/3/view
+                    - link "Edit" [ref=e275] [cursor=pointer]:
+                      - /url: /entries/3
+                - generic [ref=e276]:
+                  - generic [ref=e277]: Google Gemini
+                  - generic [ref=e278]: LLM Release
+                  - generic [ref=e279]: Google
+                - link "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-1-pro/" [ref=e281] [cursor=pointer]:
+                  - /url: https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-1-pro/
+            - article [ref=e282]:
+              - generic [ref=e283]:
+                - generic [ref=e284]:
+                  - generic [ref=e285]:
+                    - generic [ref=e286]:
+                      - generic [ref=e287]: February 19, 2026
+                      - generic [ref=e288]: Agentic Coding
+                    - generic [ref=e289]: Microsoft Agent Framework reaches Release Candidate
+                    - paragraph [ref=e291]: Microsoft’s open-source Agent Framework (codenamed “AgentFx”) hits its 1.0 Release Candidate. Evolving from earlier projects like Semantic Kernel, the Agent Framework provides a unified SDK for building robust AI agents in Python and .NET. It supports features such as multi-agent orchestration, shareable ** agent “plugins”, memory persistence, and integrated support for **Agent-to-Agent (A2A) communication (so different agents can message/delegate to each other). The RC status means enterprises can begin relying on AgentFx for production use, confident in Microsoft’s backing and forthcoming full support. Together with Foundry Local (a preview tool for running LLMs on-premises, also introduced in late 2025), Microsoft’s agent platform enables organizations to build self-hosted, collaborative AI coding agents with enterprise-grade security and compliance – integrating not just OpenAI models but also third-party and open-source LLMs into their development processes.
+                  - generic [ref=e292]:
+                    - link "View" [ref=e293] [cursor=pointer]:
+                      - /url: /entries/4/view
+                    - link "Edit" [ref=e294] [cursor=pointer]:
+                      - /url: /entries/4
+                - generic [ref=e295]:
+                  - generic [ref=e296]: AI Agents
+                  - generic [ref=e297]: Open Source
+                  - generic [ref=e298]: Microsoft
+                  - generic [ref=e299]: .NET SDK
+                - link "https://devblogs.microsoft.com/foundry/microsoft-agent-framework-reaches-release-candidate/" [ref=e301] [cursor=pointer]:
+                  - /url: https://devblogs.microsoft.com/foundry/microsoft-agent-framework-reaches-release-candidate/
+            - article [ref=e302]:
+              - generic [ref=e303]:
+                - generic [ref=e304]:
+                  - generic [ref=e305]:
+                    - generic [ref=e306]:
+                      - generic [ref=e307]: February 10, 2026
+                      - generic [ref=e308]: Agentic Coding
+                    - generic [ref=e309]: "WebMCP: Early Preview Launch"
+                    - paragraph [ref=e311]:
+                      - text: Chrome Developers announced WebMCP on
+                      - strong [ref=e312]: February 10, 2026
+                      - text: . WebMCP proposes a standard and two new browser-agent APIs that let websites expose structured tools so AI agents can take actions (e.g., book flights, file support tickets, navigate data) more reliably than raw DOM actuation. It is available for prototyping to early-preview participants, with documentation and demos provided to registrants.
+                  - generic [ref=e313]:
+                    - link "View" [ref=e314] [cursor=pointer]:
+                      - /url: /entries/45/view
+                    - link "Edit" [ref=e315] [cursor=pointer]:
+                      - /url: /entries/45
+                - generic [ref=e316]:
+                  - generic [ref=e317]: Web APIs
+                  - generic [ref=e318]: Browser Agents
+                  - generic [ref=e319]: AI Automation
+                  - generic [ref=e320]: Developer Preview
+                - link "https://developer.chrome.com/blog/webmcp-epp" [ref=e322] [cursor=pointer]:
+                  - /url: https://developer.chrome.com/blog/webmcp-epp
+            - article [ref=e323]:
+              - generic [ref=e324]:
+                - generic [ref=e325]:
+                  - generic [ref=e326]:
+                    - generic [ref=e327]:
+                      - generic [ref=e328]: February 5, 2026
+                      - generic [ref=e329]: Agentic Coding
+                    - generic [ref=e330]: Claude Opus 4.6 sets new benchmarks for coding and reasoning
+                    - paragraph [ref=e332]: Anthropic releases Claude Opus 4.6, its most powerful model to date. With a 1 million token context window (in beta) and further improvements in structured reasoning, Opus 4.6 excels at handling entire codebases and complex projects in one go. It scores state-of-the-art results on coding benchmarks and “computer use” tasks, outperforming both its predecessor (Opus 4.5) and OpenAI’s latest GPT-5 on many evaluations. By enabling even more accurate long-horizon reasoning and multi-tool workflows, Claude 4.6 cements Anthropic’s position at the cutting edge of coding agents, though its high computational cost underscores the ongoing trade-offs between capability and efficiency for frontier models.
+                  - generic [ref=e333]:
+                    - link "View" [ref=e334] [cursor=pointer]:
+                      - /url: /entries/5/view
+                    - link "Edit" [ref=e335] [cursor=pointer]:
+                      - /url: /entries/5
+                - generic [ref=e336]:
+                  - generic [ref=e337]: LLM Release
+                  - generic [ref=e338]: Anthropic
+                  - generic [ref=e339]: 1M token window
+                - link "https://www.anthropic.com/news/claude-opus-4-6" [ref=e341] [cursor=pointer]:
+                  - /url: https://www.anthropic.com/news/claude-opus-4-6
+            - article [ref=e342]:
+              - generic [ref=e343]:
+                - generic [ref=e344]:
+                  - generic [ref=e345]:
+                    - generic [ref=e346]:
+                      - generic [ref=e347]: February 2026
+                      - generic [ref=e348]: Agentic Coding
+                    - generic [ref=e349]: OpenClaw’s viral rise and “always-on” agents
+                    - paragraph [ref=e351]: "In early 2026, the open-source project OpenClaw sparks a frenzy, around persistent, autonomous coding agents. Initially known as “Clawdbot,” OpenClaw provides a local-first, autonomous agent platform that can run continuously and perform tasks end-to-end. Within weeks of its v1 release, OpenClaw’s user base exploded (over 180,000 developers by Jan 2026, per VentureBeat) and even garnered a passionate community movement nicknamed “raising lobsters” in China. Chinese tech giants scrambled to integrate or offer OpenClaw services – for example, Alibaba’s “JVS Claw” app (launched Mar 12, 2026) lets anyone deploy OpenClaw agents on mobile devices within minutes. This mass adoption of an always-on AI agent led to both supportive local government policies and national security restrictions in China, highlighting excitement about agentic AI’s potential as well as concerns about autonomous software running unsupervised. OpenClaw’s saga underlines a pivotal moment: AI agents proved they can operate persistently and at scale in the wild, performing multi-step tasks like a human developer – and forcing organizations worldwide to consider new security and governance measures for autonomous AI assistants."
+                  - generic [ref=e352]:
+                    - link "View" [ref=e353] [cursor=pointer]:
+                      - /url: /entries/6/view
+                    - link "Edit" [ref=e354] [cursor=pointer]:
+                      - /url: /entries/6
+                - generic [ref=e355]:
+                  - generic [ref=e356]: Developer Tools
+                  - generic [ref=e357]: AI Agents
+                  - generic [ref=e358]: Open Source
+                  - generic [ref=e359]: Autonomous Coding
+        - generic [ref=e360]:
+          - heading "Open January 2026 in the Months view" [level=2] [ref=e362]:
+            - button "Open January 2026 in the Months view" [ref=e363] [cursor=pointer]: January 2026
+          - generic [ref=e364]:
+            - article [ref=e365]:
+              - generic [ref=e366]:
+                - generic [ref=e367]:
+                  - generic [ref=e368]:
+                    - generic [ref=e369]:
+                      - generic [ref=e370]: January 21, 2026
+                      - generic [ref=e371]: Agentic Coding
+                    - generic [ref=e372]: Eight Trends Shaping Agentic Software Development in 2026
+                    - paragraph [ref=e374]: "Read Anthropic's report on the eight trends predicted to define agentic coding in 2026, organized around foundation, capability, and impact categories. A key finding: while developers use AI in roughly 60% of their work, they can fully delegate only 0–20% of tasks — making active human collaboration and oversight essential. Engineers are shifting from writing code to coordinating agents, focusing expertise on architecture and strategic decisions. Highlighted examples include Rakuten's use of Claude Code to implement a feature in a 12.5-million-line codebase with 99.9% numerical accuracy in seven autonomous hours."
+                  - generic [ref=e375]:
+                    - link "View" [ref=e376] [cursor=pointer]:
+                      - /url: /entries/55/view
+                    - link "Edit" [ref=e377] [cursor=pointer]:
+                      - /url: /entries/55
+                - generic [ref=e378]:
+                  - generic [ref=e379]: Anthropic
+                  - generic [ref=e380]: Trends
+                - link "https://claude.com/blog/eight-trends-defining-how-software-gets-built-in-2026" [ref=e382] [cursor=pointer]:
+                  - /url: https://claude.com/blog/eight-trends-defining-how-software-gets-built-in-2026
+            - article [ref=e383]:
+              - generic [ref=e384]:
+                - generic [ref=e385]:
+                  - generic [ref=e386]:
+                    - generic [ref=e387]:
+                      - generic [ref=e388]: January 20, 2026
+                      - generic [ref=e389]: Agentic Coding
+                    - generic [ref=e390]: Skills.sh – an “App Store” for AI Agent Skills – goes live
+                    - paragraph [ref=e392]: "Vercel and the open-source community launch Skills.sh, a public registry of Agent Skills (reusable prompt and tool modules for AI agents). Much like an app store or package manager, Skills.sh lets developers share and download predefined “skills” to quickly extend an AI agent’s capabilities (for example, a web-scraping skill or React debugging skill). Within days, thousands of users download skills ranging from database querying to graphic design. Skills.sh embodies the shift to modular context engineering: rather than hand-crafting prompts, users can now plug in community-created context packages that teach their AI new tricks. This development makes customizing agentic coding assistants easier and accelerates a virtuous cycle: as more skills are contributed, AI agents continually become more capable and specialized for various domains and tasks."
+                  - generic [ref=e393]:
+                    - link "View" [ref=e394] [cursor=pointer]:
+                      - /url: /entries/7/view
+                    - link "Edit" [ref=e395] [cursor=pointer]:
+                      - /url: /entries/7
+                - generic [ref=e396]:
+                  - generic [ref=e397]: Developer Tools
+                  - generic [ref=e398]: AI Agents
+                  - generic [ref=e399]: Context Engineering
+                  - generic [ref=e400]: Open Source
+                  - generic [ref=e401]: Package Registry
+                - link "https://vercel.com/changelog/introducing-skills-the-open-agent-skills-ecosystem" [ref=e403] [cursor=pointer]:
+                  - /url: https://vercel.com/changelog/introducing-skills-the-open-agent-skills-ecosystem
+            - article [ref=e404]:
+              - generic [ref=e405]:
+                - generic [ref=e406]:
+                  - generic [ref=e407]:
+                    - generic [ref=e408]:
+                      - generic [ref=e409]: January 8, 2026
+                      - generic [ref=e410]: Agentic Coding
+                    - generic [ref=e411]: Visual Studio Code integrates “Agent Skills” (v1.108)
+                    - paragraph [ref=e413]: "The popular code editor VS Code releases an update that incorporates early agentic capabilities. The November 2025 (v1.108) update adds support for user-defined “skills”: GitHub Copilot can now auto-load skill modules from a project’s repository (e.g. a `.github/skills/` folder), granting the AI custom domain knowledge or abilities via natural language files. The update also improves the Copilot Chat’s session memory and plugin support, narrowing the gap between the built-in IDE assistant and specialized agentic coding tools like Claude Code. This move by Microsoft indicates a trend of mainstream developer tools adopting agentic features, allowing AI to be extended and customized by end-users."
+                  - generic [ref=e414]:
+                    - link "View" [ref=e415] [cursor=pointer]:
+                      - /url: /entries/8/view
+                    - link "Edit" [ref=e416] [cursor=pointer]:
+                      - /url: /entries/8
+                - generic [ref=e417]:
+                  - generic [ref=e418]: VS Code Release
+                  - generic [ref=e419]: AI Coding
+                  - generic [ref=e420]: Agentic Tools
+                  - generic [ref=e421]: GitHub Copilot
+                - link "https://code.visualstudio.com/updates/v1_108" [ref=e423] [cursor=pointer]:
+                  - /url: https://code.visualstudio.com/updates/v1_108
+            - article [ref=e424]:
+              - generic [ref=e425]:
+                - generic [ref=e426]:
+                  - generic [ref=e427]:
+                    - generic [ref=e428]:
+                      - generic [ref=e429]: January 2026
+                      - generic [ref=e430]: Agentic Coding
+                    - generic [ref=e431]: AI providers adjust access models amid competitive pressure
+                    - paragraph [ref=e433]: The rapid rise of third-party coding agents leads to friction with model providers. In early 2026, Anthropic restricts external tools from exploiting its flat-rate **Claude Code subscription credentials** to run intensive agent workloads. (Some developers had used one Claude account to power constant, round-the-clock coding agents like OpenCode and Cursor; Anthropic’s policy change now blocks this workaround.) The policy shift forces independent agent developers to use pay-as-you-go API billing for Claude, reflecting both the growing demand for always-on coding agents and providers’ need to manage API costs. OpenAI, facing similar issues, begins enforcing tighter rate limits on GPT-4 for agent use. These adjustments show the tension between open ecosystems and platform control as agentic AI goes mainstream.
+                  - generic [ref=e434]:
+                    - link "View" [ref=e435] [cursor=pointer]:
+                      - /url: /entries/10/view
+                    - link "Edit" [ref=e436] [cursor=pointer]:
+                      - /url: /entries/10
+                - generic [ref=e437]:
+                  - generic [ref=e438]: Anthropic
+                  - generic [ref=e439]: AI Policy
+                  - generic [ref=e440]: Coding Agents
+                  - generic [ref=e441]: API Billing
+                  - generic [ref=e442]: Competitive Pressure
+            - article [ref=e443]:
+              - generic [ref=e444]:
+                - generic [ref=e445]:
+                  - generic [ref=e446]:
+                    - generic [ref=e447]:
+                      - generic [ref=e448]: January 2026
+                      - generic [ref=e449]: Agentic Coding
+                    - generic [ref=e450]: Anthropic releases Claude Cowork (agentic AI with a GUI)
+                    - paragraph [ref=e452]: Anthropic expands its coding assistant suite with Claude Cowork, a graphical AI coworker designed for non-programmers and general knowledge work. Released in January 2026 as a research preview, Claude Cowork provides a user-friendly “auto-pilot” interface (distinct from the developer-focused Claude Code CLI) that can persist over long durations. Notably, Claude Cowork was itself built using Claude Code, demonstrating meta-use of AI in creating AI tools. By allowing continuous background operation and a more accessible UI, Cowork represents the trend of agentic AI moving into everyday productivity apps, not just coding—setting the stage for AI assistants that are always-on collaborators across domains.
+                  - generic [ref=e453]:
+                    - link "View" [ref=e454] [cursor=pointer]:
+                      - /url: /entries/9/view
+                    - link "Edit" [ref=e455] [cursor=pointer]:
+                      - /url: /entries/9
+                - generic [ref=e456]:
+                  - generic [ref=e457]: Agentic AI
+                  - generic [ref=e458]: Anthropic
+                  - generic [ref=e459]: GUI Tools
+                  - generic [ref=e460]: No-Code AI
+                  - generic [ref=e461]: AI Assistants
+                - link "https://www.anthropic.com/webinars/future-of-ai-at-work-introducing-cowork" [ref=e463] [cursor=pointer]:
+                  - /url: https://www.anthropic.com/webinars/future-of-ai-at-work-introducing-cowork
+        - generic [ref=e464]:
+          - heading "Open December 2025 in the Months view" [level=2] [ref=e466]:
+            - button "Open December 2025 in the Months view" [ref=e467] [cursor=pointer]: December 2025
+          - generic [ref=e468]:
+            - article [ref=e469]:
+              - generic [ref=e470]:
+                - generic [ref=e471]:
+                  - generic [ref=e472]:
+                    - generic [ref=e473]:
+                      - generic [ref=e474]: December 15, 2025
+                      - generic [ref=e475]: Agentic Coding
+                    - generic [ref=e476]: NVIDIA introduces Nemotron 3 open models for multi-agent AI
+                    - paragraph [ref=e478]: NVIDIA launches the Nemotron 3 family of foundation models and tools for agentic AI. These open-source models (available in “Nano,” “Super,” and “Ultra” sizes) use a Mixture-of-Experts architecture to achieve 4× higher throughput than previous models, handling many tokens in parallel – ideal for powering multiple agents simultaneously. NVIDIA positions Nemotron as transparent, efficient models for multi-agent systems, noting that partners like Deloitte, Oracle, and Zoom are early adopters. Alongside the models, NVIDIA releases 3 trillion tokens of training data and new RL libraries (NeMo Gym for training, NeMo RL for agent fine-tuning) to support building specialized AI “teammates”. Nemotron 3’s release underscores the importance of openness and efficiency in the agentic AI era – providing an alternative to costly proprietary “frontier” models and encouraging the community to develop on a scalable open platform.
+                  - generic [ref=e479]:
+                    - link "View" [ref=e480] [cursor=pointer]:
+                      - /url: /entries/12/view
+                    - link "Edit" [ref=e481] [cursor=pointer]:
+                      - /url: /entries/12
+                - generic [ref=e482]:
+                  - generic [ref=e483]: NVIDIA
+                  - generic [ref=e484]: Open Source AI
+                  - generic [ref=e485]: Multi-Agent Systems
+                  - generic [ref=e486]: Mixture of Experts
+                - link "https://nvidianews.nvidia.com/news/nvidia-debuts-nemotron-3-family-of-open-models" [ref=e488] [cursor=pointer]:
+                  - /url: https://nvidianews.nvidia.com/news/nvidia-debuts-nemotron-3-family-of-open-models
+            - article [ref=e489]:
+              - generic [ref=e490]:
+                - generic [ref=e491]:
+                  - generic [ref=e492]:
+                    - generic [ref=e493]:
+                      - generic [ref=e494]: December 15, 2025
+                      - generic [ref=e495]: Agentic Coding
+                    - generic [ref=e496]: "A2UI: Google open-sources agent-driven UI format"
+                    - paragraph [ref=e498]:
+                      - strong [ref=e499]: A2UI
+                      - text: was made public by Google as an open format and initial set of renderers to let agents generate updateable, cross-platform UIs (renderers include Lit, Angular, Flutter). The project sends UI layouts as messages (not executable code), supports common and client-advertised custom components, and invites the community to help refine specs, add transports, renderers, and integrations.
+                  - generic [ref=e500]:
+                    - link "View" [ref=e501] [cursor=pointer]:
+                      - /url: /entries/11/view
+                    - link "Edit" [ref=e502] [cursor=pointer]:
+                      - /url: /entries/11
+                - generic [ref=e503]:
+                  - generic [ref=e504]: AI Agents
+                  - generic [ref=e505]: Open Source
+                  - generic [ref=e506]: UI Framework
+                - link "https://developers.googleblog.com/introducing-a2ui-an-open-project-for-agent-driven-interfaces/" [ref=e508] [cursor=pointer]:
+                  - /url: https://developers.googleblog.com/introducing-a2ui-an-open-project-for-agent-driven-interfaces/
+            - article [ref=e509]:
+              - generic [ref=e510]:
+                - generic [ref=e511]:
+                  - generic [ref=e512]:
+                    - generic [ref=e513]:
+                      - generic [ref=e514]: December 11, 2025
+                      - generic [ref=e515]: Agentic Coding
+                    - generic [ref=e516]: Streamline ADK agents with Google's Interactions API
+                    - paragraph [ref=e518]:
+                      - text: With the beta launch of the
+                      - strong [ref=e519]: Interactions API
+                      - text: ", developers using the Agent Development Kit (ADK) can replace raw"
+                      - code [ref=e520]: generateContent
+                      - text: "calls with a server-side, stateful interface: ADK agents keep lightweight pointers to API-managed inference state, retain control flow and routing in the ADK (outer loop), and delegate complex context management and inner-loop inference to the Interactions API. The pattern preserves Agent2Agent (A2A) interoperability; see the ADK sample for step-by-step integration."
+                  - generic [ref=e521]:
+                    - link "View" [ref=e522] [cursor=pointer]:
+                      - /url: /entries/13/view
+                    - link "Edit" [ref=e523] [cursor=pointer]:
+                      - /url: /entries/13
+                - generic [ref=e524]:
+                  - generic [ref=e525]: Developer Tools
+                  - generic [ref=e526]: AI Agents
+                  - generic [ref=e527]: Google API
+                  - generic [ref=e528]: Context Management
+                  - generic [ref=e529]: Google
+                - link "https://developers.googleblog.com/building-agents-with-the-adk-and-the-new-interactions-api/" [ref=e531] [cursor=pointer]:
+                  - /url: https://developers.googleblog.com/building-agents-with-the-adk-and-the-new-interactions-api/
+            - article [ref=e532]:
+              - generic [ref=e533]:
+                - generic [ref=e534]:
+                  - generic [ref=e535]:
+                    - generic [ref=e536]:
+                      - generic [ref=e537]: December 2025
+                      - generic [ref=e538]: Agentic Coding
+                    - generic [ref=e539]: Claude Code’s holiday viral moment
+                    - paragraph [ref=e541]: Over the winter holiday season of 2025, Claude Code enjoys a surge of grassroots popularity among programmers on social media and forums. Developers share success stories of using Claude Code for “vibe coding” – collaborative, creative coding sessions for personal projects – and marvel at how the AI can complete entire tasks while they are away on vacation. This viral enthusiasm translates into a spike in new users for Claude Code in early 2026, highlighting how far AI coding agents have matured to become a trusted partner for developers in both professional and hobby contexts.
+                  - generic [ref=e542]:
+                    - link "View" [ref=e543] [cursor=pointer]:
+                      - /url: /entries/14/view
+                    - link "Edit" [ref=e544] [cursor=pointer]:
+                      - /url: /entries/14
+                - generic [ref=e545]:
+                  - generic [ref=e546]: Developer Tools
+                  - generic [ref=e547]: AI Coding
+                  - generic [ref=e548]: Viral Growth
+                  - generic [ref=e549]: Vibe Coding
+                - link "https://fortune.com/2026/01/24/anthropic-boris-cherny-claude-code-non-coders-software-engineers/" [ref=e551] [cursor=pointer]:
+                  - /url: https://fortune.com/2026/01/24/anthropic-boris-cherny-claude-code-non-coders-software-engineers/
+        - generic [ref=e552]:
+          - heading "Open November 2025 in the Months view" [level=2] [ref=e554]:
+            - button "Open November 2025 in the Months view" [ref=e555] [cursor=pointer]: November 2025
+          - generic [ref=e556]:
+            - article [ref=e557]:
+              - generic [ref=e558]:
+                - generic [ref=e559]:
+                  - generic [ref=e560]:
+                    - generic [ref=e561]:
+                      - generic [ref=e562]: November 24, 2025
+                      - generic [ref=e563]: Agentic Coding
+                    - generic [ref=e564]: Claude Opus 4.5 released (AI coding at new heights)
+                    - paragraph [ref=e566]: "An anthropic releases Claude Opus 4.5, the largest model in the Claude 4.5 lineup (following the smaller Haiku and Sonnet versions). Claude Opus 4.5 demonstrates how far AI coding agents have progressed: when paired with Claude Code, it became widely regarded as the top AI coding assistant as of early 2026. This version solidified Anthropic’s dominance in AI-driven software development (surpassing even OpenAI’s GPT-5 on some enterprise coding tasks, according to industry surveys), though at a higher cost, highlighting the intensifying competition between AI research labs for coding supremacy."
+                  - generic [ref=e567]:
+                    - link "View" [ref=e568] [cursor=pointer]:
+                      - /url: /entries/15/view
+                    - link "Edit" [ref=e569] [cursor=pointer]:
+                      - /url: /entries/15
+                - generic [ref=e570]:
+                  - generic [ref=e571]: LLM Release
+                  - generic [ref=e572]: Anthropic
+                  - generic [ref=e573]: AI Coding
+                  - generic [ref=e574]: AI Competition
+                - link "https://www.anthropic.com/news/claude-opus-4-5" [ref=e576] [cursor=pointer]:
+                  - /url: https://www.anthropic.com/news/claude-opus-4-5
+            - article [ref=e577]:
+              - generic [ref=e578]:
+                - generic [ref=e579]:
+                  - generic [ref=e580]:
+                    - generic [ref=e581]:
+                      - generic [ref=e582]: November 20, 2025
+                      - generic [ref=e583]: Agentic Coding
+                    - generic [ref=e584]: Google Antigravity — Agentic Dev Platform (Public Preview)
+                    - paragraph [ref=e586]:
+                      - strong [ref=e587]: Google Antigravity
+                      - text: is a new agentic development platform released in public preview that lets you deploy agents to autonomously plan, execute, and verify complex tasks across your editor, terminal, and browser. Agents generate verifiable "Artifacts" (task lists, implementation plans, screenshots, recordings), accept inline feedback, and save useful context to a knowledge base. The cross‑platform preview is free for individuals and supports Gemini 3 Pro, Anthropic's Claude Sonnet 4.5, and OpenAI's GPT‑OSS; download at antigravity.goog.
+                  - generic [ref=e588]:
+                    - link "View" [ref=e589] [cursor=pointer]:
+                      - /url: /entries/16/view
+                    - link "Edit" [ref=e590] [cursor=pointer]:
+                      - /url: /entries/16
+                - generic [ref=e591]:
+                  - generic [ref=e592]: Developer Tools
+                  - generic [ref=e593]: Agentic AI
+                  - generic [ref=e594]: Google
+                  - generic [ref=e595]: Antigravity
+                - link "https://developers.googleblog.com/build-with-google-antigravity-our-new-agentic-development-platform/" [ref=e597] [cursor=pointer]:
+                  - /url: https://developers.googleblog.com/build-with-google-antigravity-our-new-agentic-development-platform/

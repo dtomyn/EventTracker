@@ -1,0 +1,14 @@
+{% if entries %}
+    <div class="heatmap-entries-header mb-3">
+        <strong class="text-primary">{{ date_label }}</strong>
+        <span class="text-body-secondary ms-2">{{ entries | length }} {% if entries | length == 1 %}entry{% else %}entries{% endif %}</span>
+        <button class="btn btn-sm btn-outline-secondary ms-2" type="button" data-heatmap-clear-filter aria-label="Clear date filter">&times;</button>
+    </div>
+    <div class="vstack gap-3">
+        {% for entry in entries %}
+            {% include "partials/entry_card.html" %}
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="text-body-secondary py-3">No entries on {{ date_label }}.</div>
+{% endif %}

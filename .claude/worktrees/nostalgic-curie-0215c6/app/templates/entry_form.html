@@ -1,0 +1,763 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="row justify-content-center">
+        <div class="col-xl-9">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h1 class="h3 mb-1">{{ page_title }}</h1>
+                    <p class="text-body-secondary mb-0">Entries are stored locally in SQLite. Event summaries support basic HTML formatting.</p>
+                </div>
+                <a class="btn btn-link" href="/">Back to timeline</a>
+            </div>
+
+            <form method="post" action="{% if entry_id %}/entries/{{ entry_id }}{% else %}/entries/new{% endif %}" class="card shadow-sm border-0">
+                {{ csrf_hidden_input(request) }}
+                <div class="card-body p-4 p-lg-5">
+                    {# === Section A: Source & Generation === #}
+                    <div class="entry-form-section entry-form-section--first">
+                        <div class="entry-form-section-label">Source &amp; Generation</div>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label" for="source_url">Source URL</label>
+                                <input class="form-control {% if form_state.errors.get('source_url') %}is-invalid{% endif %}" id="source_url" name="source_url" value="{{ form_state.values.get('source_url', '') }}" placeholder="https://example.com/article">
+                                {% if form_state.errors.get('source_url') %}<div class="invalid-feedback">{{ form_state.errors['source_url'] }}</div>{% endif %}
+                                <div class="form-text">When available, the saved entry keeps a normalized Markdown snapshot of the fetched source alongside the URL.</div>
+                            </div>
+
+                            <div class="col-12">
+                                {% set has_instructions = form_state.values.get('summary_instructions', '') %}
+                                <a class="entry-form-collapse-toggle" href="#summary-instructions-collapse" role="button" aria-expanded="{{ 'true' if has_instructions else 'false' }}" aria-controls="summary-instructions-collapse" data-collapse-toggle>
+                                    <span class="collapse-chevron">&#9656;</span> Generation instructions
+                                </a>
+                                <div class="collapse {{ 'show' if has_instructions else '' }}" id="summary-instructions-collapse">
+                                    <div class="mt-2">
+                                        <label class="form-label" for="summary_instructions">Summary Instructions</label>
+                                        <textarea class="form-control" id="summary_instructions" name="summary_instructions" rows="3" maxlength="1000" placeholder="Optional guidance for AI summarization, for example: focus on release milestones and omit marketing language.">{{ form_state.values.get('summary_instructions', '') }}</textarea>
+                                        <div class="form-text">Optional. Used only when generating from the source URL or current input, and never stored with the entry.</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-12">
+                                <button class="btn btn-generate" type="button" id="generate-button">
+                                    <span id="generate-button-label">Generate</span>
+                                    <span id="generate-spinner" class="spinner-border d-none" role="status" aria-hidden="true"></span>
+                                </button>
+                                <div class="generate-hint">Fetches the article and drafts a summary, title, date, and tags. <kbd>Ctrl+Enter</kbd> in the URL field.</div>
+                            </div>
+
+                            <div class="col-12">
+                                <div id="generated-preview-container" class="mb-2">
+                                    {% include "partials/generated_preview.html" %}
+                                </div>
+                            </div>
+
+                            {% if entry_id and source_snapshot %}
+                                <div class="col-12">
+                                    <details class="source-snapshot-card source-snapshot-card--compact">
+                                        <summary>Saved source snapshot</summary>
+                                        <div class="source-snapshot-compact-body">
+                                            <p class="text-body-secondary mb-3">This is the Markdown snapshot currently attached to the entry. Generate from the source URL and save if you want to replace it.</p>
+
+                                            <div class="source-snapshot-meta mb-3">
+                                                <span class="source-snapshot-pill">Captured {{ source_snapshot.fetched_utc | replace('T', ' ') | replace('+00:00', ' UTC') }}</span>
+                                                <span class="source-snapshot-pill">{{ source_snapshot.markdown_char_count }} chars</span>
+                                                <span class="source-snapshot-pill">{{ source_snapshot.extractor_name }} {{ source_snapshot.extractor_version }}</span>
+                                            </div>
+
+                                            <div class="source-snapshot-rendered source-snapshot-rendered--compact">{{ source_snapshot.markdown | render_source_markdown | safe }}</div>
+
+                                            <label class="form-label mt-3" for="saved_source_snapshot_markdown">Raw Markdown</label>
+                                            <textarea class="form-control font-mono source-snapshot-textarea" id="saved_source_snapshot_markdown" rows="10" readonly spellcheck="false">{{ source_snapshot.markdown }}</textarea>
+                                        </div>
+                                    </details>
+                                </div>
+                            {% elif entry_id and form_state.values.get('source_url', '') %}
+                                <div class="col-12">
+                                    <div class="source-snapshot-missing">
+                                        No saved Markdown snapshot is attached to this entry yet. Generate from the current source URL and save the entry to store one.
+                                    </div>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {# === Section B: Entry Details === #}
+                    <div class="entry-form-section">
+                        <div class="entry-form-section-label">Entry Details</div>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label" for="group_id">Timeline Group</label>
+                                <select class="form-select {% if form_state.errors.get('group_id') %}is-invalid{% endif %}" id="group_id" name="group_id">
+                                    <option value="">Select a group</option>
+                                    {% for timeline_filter in timeline_filters %}
+                                        <option value="{{ timeline_filter.id }}" {% if form_state.values.get('group_id') == (timeline_filter.id | string) %}selected{% endif %}>{{ timeline_filter.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                {% if form_state.errors.get('group_id') %}<div class="invalid-feedback">{{ form_state.errors['group_id'] }}</div>{% endif %}
+                            </div>
+
+                            <div class="col-md-4">
+                                <label class="form-label" for="event_year">Year</label>
+                                <input class="form-control {% if form_state.errors.get('event_year') %}is-invalid{% endif %}" id="event_year" name="event_year" value="{{ form_state.values.get('event_year', '') }}" inputmode="numeric">
+                                {% if form_state.errors.get('event_year') %}<div class="invalid-feedback">{{ form_state.errors['event_year'] }}</div>{% endif %}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label" for="event_month">Month</label>
+                                <input class="form-control {% if form_state.errors.get('event_month') %}is-invalid{% endif %}" id="event_month" name="event_month" value="{{ form_state.values.get('event_month', '') }}" inputmode="numeric">
+                                {% if form_state.errors.get('event_month') %}<div class="invalid-feedback">{{ form_state.errors['event_month'] }}</div>{% endif %}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label" for="event_day">Day</label>
+                                <input class="form-control {% if form_state.errors.get('event_day') %}is-invalid{% endif %}" id="event_day" name="event_day" value="{{ form_state.values.get('event_day', '') }}" inputmode="numeric">
+                                {% if form_state.errors.get('event_day') %}<div class="invalid-feedback">{{ form_state.errors['event_day'] }}</div>{% endif %}
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label" for="title">Title</label>
+                                <input class="form-control {% if form_state.errors.get('title') %}is-invalid{% endif %}" id="title" name="title" value="{{ form_state.values.get('title', '') }}">
+                                {% if form_state.errors.get('title') %}<div class="invalid-feedback">{{ form_state.errors['title'] }}</div>{% endif %}
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label" for="tags">Tags</label>
+                                <input class="form-control" id="tags" name="tags" value="{{ form_state.values.get('tags', '') }}" placeholder="research, milestone, release">
+                                <div class="form-text">Comma-separated. Tags are normalized and deduplicated on save.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {# === Section C: Content === #}
+                    <div class="entry-form-section">
+                        <div class="entry-form-section-label">Content</div>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label" for="final_text">Event Summary</label>
+                                <textarea class="form-control {% if form_state.errors.get('final_text') %}is-invalid{% endif %}" id="final_text" name="final_text" rows="8" data-html-preview-source data-preview-target="final-text-preview">{{ form_state.values.get('final_text', '') }}</textarea>
+                                {% if form_state.errors.get('final_text') %}<div class="invalid-feedback">{{ form_state.errors['final_text'] }}</div>{% endif %}
+                                <div class="form-text">Supports basic HTML such as &lt;b&gt;, &lt;i&gt;, &lt;ul&gt;, &lt;ol&gt;, and &lt;li&gt;.</div>
+                                <div class="entry-live-preview mt-3">
+                                    <div class="entry-live-preview-label">Live preview</div>
+                                    <div class="entry-live-preview-body" id="final-text-preview" aria-live="polite">
+                                        {% set preview_html = form_state.values.get('final_text', '') | render_entry_html %}
+                                        {% set empty_message = 'Event summary preview updates here as you type.' %}
+                                        {% include "partials/html_preview_content.html" %}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-12">
+                                {% set has_links = form_state.link_rows | length > 0 and (form_state.link_rows[0].url or form_state.link_rows[0].note) %}
+                                <a class="entry-form-collapse-toggle" href="#additional-links-collapse" role="button" aria-expanded="{{ 'true' if has_links else 'false' }}" aria-controls="additional-links-collapse" data-collapse-toggle>
+                                    <span class="collapse-chevron">&#9656;</span> Additional Links
+                                </a>
+                                <div class="collapse {{ 'show' if has_links else '' }}" id="additional-links-collapse">
+                                    <div class="vstack gap-3 mt-2" id="entry-links-container">
+                                        {% for link_row in form_state.link_rows %}
+                                            {% set row_index = loop.index0 %}
+                                            <div class="border rounded p-3" data-link-row>
+                                                <div class="row g-3 align-items-start">
+                                                    <div class="col-md-6">
+                                                        <label class="form-label" for="link_url_{{ row_index }}">URL</label>
+                                                        <input class="form-control {% if form_state.errors.get('link_url_' ~ row_index) %}is-invalid{% endif %}" id="link_url_{{ row_index }}" name="link_url" value="{{ link_row.url }}" placeholder="https://example.com/reference">
+                                                        {% if form_state.errors.get('link_url_' ~ row_index) %}<div class="invalid-feedback">{{ form_state.errors['link_url_' ~ row_index] }}</div>{% endif %}
+                                                    </div>
+                                                    <div class="col-md-5">
+                                                        <label class="form-label" for="link_note_{{ row_index }}">Brief Note</label>
+                                                        <input class="form-control {% if form_state.errors.get('link_note_' ~ row_index) %}is-invalid{% endif %}" id="link_note_{{ row_index }}" name="link_note" value="{{ link_row.note }}" placeholder="Why this link matters">
+                                                        {% if form_state.errors.get('link_note_' ~ row_index) %}<div class="invalid-feedback">{{ form_state.errors['link_note_' ~ row_index] }}</div>{% endif %}
+                                                    </div>
+                                                    <div class="col-md-1 d-flex align-items-end">
+                                                        <button class="btn btn-outline-danger w-100" type="button" data-remove-link-row aria-label="Remove link row">x</button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center gap-3 mt-2">
+                                    <div class="form-text mb-0">Each extra URL requires a short note explaining why it was added.</div>
+                                    <button class="btn btn-outline-secondary btn-sm" type="button" id="add-link-row">Add Link</button>
+                                </div>
+                            </div>
+
+                            <div class="col-12">
+                                {% set has_connections = form_state.connection_rows | length > 0 and form_state.connection_rows[0].entry_id %}
+                                <a class="entry-form-collapse-toggle" href="#connected-entries-collapse" role="button" aria-expanded="{{ 'true' if has_connections else 'false' }}" aria-controls="connected-entries-collapse" data-collapse-toggle>
+                                    <span class="collapse-chevron">&#9656;</span> Connected Entries
+                                </a>
+                                <div class="collapse {{ 'show' if has_connections else '' }}" id="connected-entries-collapse">
+                                    <div class="vstack gap-3 mt-2" id="entry-connections-container">
+                                        {% for conn_row in form_state.connection_rows %}
+                                            {% set row_index = loop.index0 %}
+                                            <div class="border rounded p-3" data-connection-row>
+                                                <div class="row g-3 align-items-start">
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Linked Entry</label>
+                                                        <input type="hidden" name="connection_entry_id" value="{{ conn_row.entry_id }}" data-connection-entry-id>
+                                                        <input type="hidden" name="connection_entry_title" value="{{ conn_row.entry_title }}" data-connection-entry-title>
+                                                        <div class="connection-selected-entry{% if not conn_row.entry_id %} d-none{% endif %}" data-connection-selected>
+                                                            <span class="badge text-bg-light border d-inline-flex align-items-center gap-1">
+                                                                <span data-connection-badge-text>{{ conn_row.entry_title }}</span>
+                                                                <button type="button" class="btn-close btn-close-sm ms-1" aria-label="Clear selection" data-connection-clear style="font-size: 0.55em;"></button>
+                                                            </span>
+                                                        </div>
+                                                        <div class="connection-search-wrapper position-relative{% if conn_row.entry_id %} d-none{% endif %}" data-connection-search-wrapper>
+                                                            <input class="form-control" type="text" placeholder="Search entries by title..." data-connection-search autocomplete="off">
+                                                            <div class="list-group position-absolute w-100 shadow-sm d-none" style="z-index: 1050; max-height: 240px; overflow-y: auto;" data-connection-results></div>
+                                                        </div>
+                                                        {% if form_state.errors.get('connection_entry_id_' ~ row_index) %}<div class="invalid-feedback d-block">{{ form_state.errors['connection_entry_id_' ~ row_index] }}</div>{% endif %}
+                                                    </div>
+                                                    <div class="col-md-5">
+                                                        <label class="form-label" for="connection_note_{{ row_index }}">Relationship Note</label>
+                                                        <input class="form-control" id="connection_note_{{ row_index }}" name="connection_note" value="{{ conn_row.note }}" placeholder="e.g. caused by, follow-up to">
+                                                    </div>
+                                                    <div class="col-md-1 d-flex align-items-end">
+                                                        <button class="btn btn-outline-danger w-100" type="button" data-remove-connection-row aria-label="Remove connection row">x</button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center gap-3 mt-2">
+                                    <div class="form-text mb-0">Link this entry to related entries for cross-referencing.</div>
+                                    <button class="btn btn-outline-secondary btn-sm" type="button" id="add-connection-row">Add Connection</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-transparent d-flex justify-content-end gap-2 p-4 pt-0">
+                    <a class="btn btn-link" href="/">Cancel</a>
+                    <button class="btn btn-primary" type="submit">Save Entry</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const generateButton = document.getElementById('generate-button');
+        const generateButtonLabel = document.getElementById('generate-button-label');
+        const generateSpinner = document.getElementById('generate-spinner');
+        const previewContainer = document.getElementById('generated-preview-container');
+        const linkContainer = document.getElementById('entry-links-container');
+        const addLinkRowButton = document.getElementById('add-link-row');
+        const connectionContainer = document.getElementById('entry-connections-container');
+        const addConnectionRowButton = document.getElementById('add-connection-row');
+        const finalTextField = document.getElementById('final_text');
+        const sourceUrlField = document.getElementById('source_url');
+        const htmlPreviewEndpoint = '/entries/preview-html';
+        const htmlPreviewTimers = new WeakMap();
+        const htmlPreviewControllers = new WeakMap();
+
+        function getCsrfToken() {
+            const meta = document.querySelector('meta[name="csrf-token"]');
+            return meta ? meta.getAttribute('content') : '';
+        }
+
+        function setGenerateLoading(isLoading) {
+            generateButton.disabled = isLoading;
+            generateButtonLabel.textContent = isLoading ? 'Generating\u2026' : 'Generate';
+            generateSpinner.classList.toggle('d-none', !isLoading);
+        }
+
+        function highlightField(fieldId) {
+            const field = document.getElementById(fieldId);
+            if (!field) return;
+            field.classList.remove('field-just-filled');
+            void field.offsetWidth;
+            field.classList.add('field-just-filled');
+        }
+
+        function renderGenerationFeedback(feedbackClass = 'text-body-secondary', feedbackMessage = '') {
+            return `
+                <input type="hidden" id="generated_text" name="generated_text" value="">
+                <input type="hidden" id="source_snapshot_source_url" name="source_snapshot_source_url" value="">
+                <input type="hidden" id="source_snapshot_final_url" name="source_snapshot_final_url" value="">
+                <input type="hidden" id="source_snapshot_title" name="source_snapshot_title" value="">
+                <textarea id="source_snapshot_markdown" name="source_snapshot_markdown" hidden></textarea>
+                <input type="hidden" id="source_snapshot_content_type" name="source_snapshot_content_type" value="">
+                <input type="hidden" id="source_snapshot_fetched_utc" name="source_snapshot_fetched_utc" value="">
+                <input type="hidden" id="source_snapshot_http_etag" name="source_snapshot_http_etag" value="">
+                <input type="hidden" id="source_snapshot_http_last_modified" name="source_snapshot_http_last_modified" value="">
+                <input type="hidden" id="source_snapshot_extractor_name" name="source_snapshot_extractor_name" value="">
+                <input type="hidden" id="source_snapshot_extractor_version" name="source_snapshot_extractor_version" value="">
+                <div id="generate-feedback" class="${feedbackClass}">${feedbackMessage}</div>
+                <input type="hidden" id="generated_suggested_title" value="">
+                <input type="hidden" id="generated_suggested_event_year" value="">
+                <input type="hidden" id="generated_suggested_event_month" value="">
+                <input type="hidden" id="generated_suggested_event_day" value="">
+                <input type="hidden" id="generated_suggested_tags" value="">
+            `;
+        }
+
+        function clearSourceSnapshotFields() {
+            [
+                'source_snapshot_source_url',
+                'source_snapshot_final_url',
+                'source_snapshot_title',
+                'source_snapshot_markdown',
+                'source_snapshot_content_type',
+                'source_snapshot_fetched_utc',
+                'source_snapshot_http_etag',
+                'source_snapshot_http_last_modified',
+                'source_snapshot_extractor_name',
+                'source_snapshot_extractor_version',
+            ].forEach((fieldId) => {
+                const field = document.getElementById(fieldId);
+                if (field) {
+                    field.value = '';
+                }
+            });
+        }
+
+        function scheduleHtmlPreview(field, delay = 160) {
+            const existingTimer = htmlPreviewTimers.get(field);
+            if (existingTimer) {
+                window.clearTimeout(existingTimer);
+            }
+
+            const timerId = window.setTimeout(() => {
+                htmlPreviewTimers.delete(field);
+                void refreshHtmlPreview(field);
+            }, delay);
+            htmlPreviewTimers.set(field, timerId);
+        }
+
+        async function refreshHtmlPreview(field) {
+            const previewTargetId = field.dataset.previewTarget;
+            const previewTarget = previewTargetId ? document.getElementById(previewTargetId) : null;
+
+            if (!previewTarget) {
+                return;
+            }
+
+            const existingController = htmlPreviewControllers.get(field);
+            if (existingController) {
+                existingController.abort();
+            }
+
+            const controller = new AbortController();
+            htmlPreviewControllers.set(field, controller);
+
+            const payload = new FormData();
+            payload.append('raw_html', field.value);
+            payload.append('csrf_token', getCsrfToken());
+
+            try {
+                const response = await fetch(htmlPreviewEndpoint, {
+                    method: 'POST',
+                    body: payload,
+                    headers: {
+                        'x-csrf-token': getCsrfToken(),
+                    },
+                    signal: controller.signal,
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Preview request failed with ${response.status}`);
+                }
+
+                previewTarget.innerHTML = await response.text();
+            } catch {
+                if (controller.signal.aborted) {
+                    return;
+                }
+                previewTarget.innerHTML = '<p class="entry-live-preview-empty text-danger mb-0">Preview is temporarily unavailable.</p>';
+            } finally {
+                if (htmlPreviewControllers.get(field) === controller) {
+                    htmlPreviewControllers.delete(field);
+                }
+            }
+        }
+
+        function createLinkRow(url = '', note = '') {
+            const rowIndex = linkContainer.querySelectorAll('[data-link-row]').length;
+            const wrapper = document.createElement('div');
+            wrapper.className = 'border rounded p-3';
+            wrapper.setAttribute('data-link-row', '');
+            wrapper.innerHTML = `
+                <div class="row g-3 align-items-start">
+                    <div class="col-md-6">
+                        <label class="form-label" for="link_url_${rowIndex}">URL</label>
+                        <input class="form-control" id="link_url_${rowIndex}" name="link_url" placeholder="https://example.com/reference">
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label" for="link_note_${rowIndex}">Brief Note</label>
+                        <input class="form-control" id="link_note_${rowIndex}" name="link_note" placeholder="Why this link matters">
+                    </div>
+                    <div class="col-md-1 d-flex align-items-end">
+                        <button class="btn btn-outline-danger w-100" type="button" data-remove-link-row aria-label="Remove link row">x</button>
+                    </div>
+                </div>
+            `;
+            wrapper.querySelector(`#link_url_${rowIndex}`).value = url;
+            wrapper.querySelector(`#link_note_${rowIndex}`).value = note;
+            return wrapper;
+        }
+
+        function ensureAtLeastOneLinkRow() {
+            if (!linkContainer.querySelector('[data-link-row]')) {
+                linkContainer.appendChild(createLinkRow());
+            }
+        }
+
+        addLinkRowButton.addEventListener('click', () => {
+            const linksCollapse = document.getElementById('additional-links-collapse');
+            if (linksCollapse && !linksCollapse.classList.contains('show')) {
+                linksCollapse.classList.add('show');
+                const toggle = document.querySelector('[aria-controls="additional-links-collapse"]');
+                if (toggle) toggle.setAttribute('aria-expanded', 'true');
+            }
+            linkContainer.appendChild(createLinkRow());
+        });
+
+        linkContainer.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-remove-link-row]');
+            if (!button) {
+                return;
+            }
+            button.closest('[data-link-row]')?.remove();
+            ensureAtLeastOneLinkRow();
+        });
+
+        function applySuggestedMetadata() {
+            const suggestedTitle = document.getElementById('generated_suggested_title');
+            const suggestedYear = document.getElementById('generated_suggested_event_year');
+            const suggestedMonth = document.getElementById('generated_suggested_event_month');
+            const suggestedDay = document.getElementById('generated_suggested_event_day');
+            const suggestedTags = document.getElementById('generated_suggested_tags');
+            const fieldsToHighlight = [];
+
+            if (suggestedTitle && suggestedTitle.value) {
+                document.getElementById('title').value = suggestedTitle.value;
+                fieldsToHighlight.push('title');
+            }
+            if (suggestedYear && suggestedYear.value) {
+                document.getElementById('event_year').value = suggestedYear.value;
+                fieldsToHighlight.push('event_year');
+            }
+            if (suggestedMonth && suggestedMonth.value) {
+                document.getElementById('event_month').value = suggestedMonth.value;
+                fieldsToHighlight.push('event_month');
+            }
+            if (suggestedDay) {
+                document.getElementById('event_day').value = suggestedDay.value;
+                if (suggestedDay.value) fieldsToHighlight.push('event_day');
+            }
+            if (suggestedTags && suggestedTags.value) {
+                document.getElementById('tags').value = suggestedTags.value;
+                fieldsToHighlight.push('tags');
+            }
+
+            requestAnimationFrame(() => {
+                fieldsToHighlight.forEach(id => highlightField(id));
+            });
+        }
+
+        function applySuggestedConnections() {
+            const el = document.getElementById('generated_suggested_connections');
+            if (!el) return;
+            let connections;
+            try {
+                connections = JSON.parse(el.dataset.connections || '[]');
+            } catch { return; }
+            if (!connections.length) return;
+
+            // Remove existing empty connection rows (rows without a selected entry).
+            connectionContainer.querySelectorAll('[data-connection-row]').forEach(row => {
+                if (!row.querySelector('[data-connection-entry-id]').value) {
+                    row.remove();
+                }
+            });
+
+            // Collect already-selected entry IDs so we don't add duplicates.
+            const existingIds = new Set();
+            connectionContainer.querySelectorAll('[data-connection-entry-id]').forEach(input => {
+                if (input.value) existingIds.add(input.value);
+            });
+
+            for (const conn of connections) {
+                const entryId = String(conn.entry_id);
+                if (existingIds.has(entryId)) continue;
+                const row = createConnectionRow(entryId, conn.title, conn.suggested_note || '');
+                // Update badge text to include date and group, matching manual selection display.
+                const badgeText = conn.group_name
+                    ? `${conn.title} (${conn.display_date} - ${conn.group_name})`
+                    : `${conn.title} (${conn.display_date})`;
+                const badge = row.querySelector('[data-connection-badge-text]');
+                if (badge) badge.textContent = badgeText;
+                connectionContainer.appendChild(row);
+                existingIds.add(entryId);
+            }
+
+            // Expand the Connected Entries section if we added rows.
+            const connectionsCollapse = document.getElementById('connected-entries-collapse');
+            if (connectionsCollapse && !connectionsCollapse.classList.contains('show')) {
+                connectionsCollapse.classList.add('show');
+                const toggle = document.querySelector('[aria-controls="connected-entries-collapse"]');
+                if (toggle) toggle.setAttribute('aria-expanded', 'true');
+            }
+
+            // Highlight the section.
+            requestAnimationFrame(() => highlightField('entry-connections-container'));
+        }
+
+        generateButton.addEventListener('click', async () => {
+            const currentSummaryText = finalTextField.value;
+            setGenerateLoading(true);
+            previewContainer.innerHTML = renderGenerationFeedback('text-body-secondary', 'Generating summary...');
+            document.getElementById('generated_text').value = currentSummaryText;
+
+            const payload = new FormData();
+            payload.append('title', document.getElementById('title').value);
+            payload.append('group_id', document.getElementById('group_id').value);
+            payload.append('source_url', document.getElementById('source_url').value);
+            const summaryInstructionsField = document.getElementById('summary_instructions');
+            if (summaryInstructionsField) {
+                payload.append('summary_instructions', summaryInstructionsField.value);
+            }
+            payload.append('generated_text', currentSummaryText);
+            payload.append('entry_id', getCurrentEntryId());
+            payload.append('csrf_token', getCsrfToken());
+
+            try {
+                const response = await fetch('/entries/generate', {
+                    method: 'POST',
+                    body: payload,
+                    headers: {
+                        'x-csrf-token': getCsrfToken(),
+                    },
+                });
+                const responseContentType = response.headers.get('content-type') || '';
+                if (!responseContentType.includes('text/html')) {
+                    // Non-HTML response — most likely a CSRF rejection from the middleware.
+                    // Restore the hidden input structure so the form stays usable.
+                    const errorMessage = response.status === 403
+                        ? 'Session expired — please reload the page and try again.'
+                        : 'Generation failed. You can still write manually.';
+                    previewContainer.innerHTML = renderGenerationFeedback('text-danger', errorMessage);
+                    document.getElementById('generated_text').value = currentSummaryText;
+                    return;
+                }
+                const responseHtml = await response.text();
+                previewContainer.innerHTML = responseHtml;
+                if (response.ok) {
+                    const generatedText = document.getElementById('generated_text');
+                    if (generatedText) {
+                        finalTextField.value = generatedText.value;
+                        scheduleHtmlPreview(finalTextField, 0);
+                        finalTextField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        finalTextField.focus();
+                    }
+                    applySuggestedMetadata();
+                    applySuggestedConnections();
+                }
+            } catch {
+                previewContainer.innerHTML = renderGenerationFeedback('text-danger', 'Summary generation request failed. You can still write manually.');
+                document.getElementById('generated_text').value = currentSummaryText;
+            } finally {
+                setGenerateLoading(false);
+            }
+        });
+
+        sourceUrlField.addEventListener('keydown', (event) => {
+            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                event.preventDefault();
+                generateButton.click();
+            }
+        });
+
+        sourceUrlField.addEventListener('input', () => {
+            clearSourceSnapshotFields();
+        });
+
+        document.addEventListener('input', (event) => {
+            if (!(event.target instanceof HTMLTextAreaElement)) {
+                return;
+            }
+            if (!event.target.hasAttribute('data-html-preview-source')) {
+                return;
+            }
+            scheduleHtmlPreview(event.target);
+        });
+
+        // Manual collapse toggle (Bootstrap JS is not loaded)
+        document.addEventListener('click', (event) => {
+            const toggle = event.target.closest('[data-collapse-toggle]');
+            if (!toggle) return;
+            event.preventDefault();
+            const targetId = toggle.getAttribute('aria-controls');
+            const target = document.getElementById(targetId);
+            if (!target) return;
+            const isExpanded = target.classList.toggle('show');
+            toggle.setAttribute('aria-expanded', String(isExpanded));
+        });
+
+        // === Connected Entries logic ===
+        function getCurrentEntryId() {
+            const match = window.location.pathname.match(/\/entries\/(\d+)/);
+            return match ? match[1] : '';
+        }
+
+        function createConnectionRow(entryId = '', entryTitle = '', note = '') {
+            const rowIndex = connectionContainer.querySelectorAll('[data-connection-row]').length;
+            const wrapper = document.createElement('div');
+            wrapper.className = 'border rounded p-3';
+            wrapper.setAttribute('data-connection-row', '');
+            const hasSelection = entryId !== '';
+            wrapper.innerHTML = `
+                <div class="row g-3 align-items-start">
+                    <div class="col-md-6">
+                        <label class="form-label">Linked Entry</label>
+                        <input type="hidden" name="connection_entry_id" value="" data-connection-entry-id>
+                        <input type="hidden" name="connection_entry_title" value="" data-connection-entry-title>
+                        <div class="connection-selected-entry${hasSelection ? '' : ' d-none'}" data-connection-selected>
+                            <span class="badge text-bg-light border d-inline-flex align-items-center gap-1">
+                                <span data-connection-badge-text></span>
+                                <button type="button" class="btn-close btn-close-sm ms-1" aria-label="Clear selection" data-connection-clear style="font-size: 0.55em;"></button>
+                            </span>
+                        </div>
+                        <div class="connection-search-wrapper position-relative${hasSelection ? ' d-none' : ''}" data-connection-search-wrapper>
+                            <input class="form-control" type="text" placeholder="Search entries by title..." data-connection-search autocomplete="off">
+                            <div class="list-group position-absolute w-100 shadow-sm d-none" style="z-index: 1050; max-height: 240px; overflow-y: auto;" data-connection-results></div>
+                        </div>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label" for="connection_note_${rowIndex}">Relationship Note</label>
+                        <input class="form-control" id="connection_note_${rowIndex}" name="connection_note" placeholder="e.g. caused by, follow-up to">
+                    </div>
+                    <div class="col-md-1 d-flex align-items-end">
+                        <button class="btn btn-outline-danger w-100" type="button" data-remove-connection-row aria-label="Remove connection row">x</button>
+                    </div>
+                </div>
+            `;
+            wrapper.querySelector('[data-connection-entry-id]').value = entryId;
+            wrapper.querySelector('[data-connection-entry-title]').value = entryTitle;
+            wrapper.querySelector('[data-connection-badge-text]').textContent = entryTitle;
+            wrapper.querySelector(`#connection_note_${rowIndex}`).value = note;
+            return wrapper;
+        }
+
+        function ensureAtLeastOneConnectionRow() {
+            if (!connectionContainer.querySelector('[data-connection-row]')) {
+                connectionContainer.appendChild(createConnectionRow());
+            }
+        }
+
+        addConnectionRowButton.addEventListener('click', () => {
+            const connectionsCollapse = document.getElementById('connected-entries-collapse');
+            if (connectionsCollapse && !connectionsCollapse.classList.contains('show')) {
+                connectionsCollapse.classList.add('show');
+                const toggle = document.querySelector('[aria-controls="connected-entries-collapse"]');
+                if (toggle) toggle.setAttribute('aria-expanded', 'true');
+            }
+            connectionContainer.appendChild(createConnectionRow());
+        });
+
+        connectionContainer.addEventListener('click', (event) => {
+            const removeBtn = event.target.closest('[data-remove-connection-row]');
+            if (removeBtn) {
+                removeBtn.closest('[data-connection-row]')?.remove();
+                ensureAtLeastOneConnectionRow();
+                return;
+            }
+
+            const clearBtn = event.target.closest('[data-connection-clear]');
+            if (clearBtn) {
+                const row = clearBtn.closest('[data-connection-row]');
+                if (!row) return;
+                row.querySelector('[data-connection-entry-id]').value = '';
+                row.querySelector('[data-connection-entry-title]').value = '';
+                row.querySelector('[data-connection-badge-text]').textContent = '';
+                row.querySelector('[data-connection-selected]').classList.add('d-none');
+                const searchWrapper = row.querySelector('[data-connection-search-wrapper]');
+                searchWrapper.classList.remove('d-none');
+                searchWrapper.querySelector('[data-connection-search]').value = '';
+                return;
+            }
+
+            const resultItem = event.target.closest('[data-connection-result-id]');
+            if (resultItem) {
+                const row = resultItem.closest('[data-connection-row]');
+                if (!row) return;
+                const entryId = resultItem.getAttribute('data-connection-result-id');
+                const title = resultItem.getAttribute('data-connection-result-title');
+                const displayDate = resultItem.getAttribute('data-connection-result-date');
+                const groupName = resultItem.getAttribute('data-connection-result-group');
+                const badgeText = groupName ? `${title} (${displayDate} - ${groupName})` : `${title} (${displayDate})`;
+                row.querySelector('[data-connection-entry-id]').value = entryId;
+                row.querySelector('[data-connection-entry-title]').value = title;
+                row.querySelector('[data-connection-badge-text]').textContent = badgeText;
+                row.querySelector('[data-connection-selected]').classList.remove('d-none');
+                row.querySelector('[data-connection-search-wrapper]').classList.add('d-none');
+                row.querySelector('[data-connection-results]').classList.add('d-none');
+                return;
+            }
+        });
+
+        const connectionSearchTimers = new WeakMap();
+
+        connectionContainer.addEventListener('input', (event) => {
+            const searchInput = event.target.closest('[data-connection-search]');
+            if (!searchInput) return;
+            const existingTimer = connectionSearchTimers.get(searchInput);
+            if (existingTimer) window.clearTimeout(existingTimer);
+            const timerId = window.setTimeout(() => {
+                connectionSearchTimers.delete(searchInput);
+                void fetchConnectionResults(searchInput);
+            }, 300);
+            connectionSearchTimers.set(searchInput, timerId);
+        });
+
+        async function fetchConnectionResults(searchInput) {
+            const query = searchInput.value.trim();
+            const row = searchInput.closest('[data-connection-row]');
+            const resultsEl = row.querySelector('[data-connection-results]');
+            if (!query) {
+                resultsEl.classList.add('d-none');
+                resultsEl.innerHTML = '';
+                return;
+            }
+            const excludeId = getCurrentEntryId();
+            let url = `/api/entries/search?q=${encodeURIComponent(query)}`;
+            if (excludeId) url += `&exclude_id=${excludeId}`;
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    resultsEl.classList.add('d-none');
+                    return;
+                }
+                const results = await response.json();
+                if (results.length === 0) {
+                    resultsEl.innerHTML = '<div class="list-group-item text-body-secondary small">No matching entries found.</div>';
+                    resultsEl.classList.remove('d-none');
+                    return;
+                }
+                resultsEl.innerHTML = results.map(r =>
+                    `<button type="button" class="list-group-item list-group-item-action small" data-connection-result-id="${r.id}" data-connection-result-title="${r.title.replace(/"/g, '&quot;')}" data-connection-result-date="${r.display_date.replace(/"/g, '&quot;')}" data-connection-result-group="${r.group_name.replace(/"/g, '&quot;')}">
+                        <div class="fw-medium">${r.title}</div>
+                        <div class="text-body-secondary" style="font-size: 0.8em;">${r.display_date} &middot; ${r.group_name}</div>
+                    </button>`
+                ).join('');
+                resultsEl.classList.remove('d-none');
+            } catch {
+                resultsEl.classList.add('d-none');
+            }
+        }
+
+        // Close connection search dropdowns when clicking outside
+        document.addEventListener('click', (event) => {
+            if (event.target.closest('[data-connection-results]') || event.target.closest('[data-connection-search]')) return;
+            document.querySelectorAll('[data-connection-results]').forEach(el => {
+                el.classList.add('d-none');
+            });
+        });
+
+        if (!sourceUrlField.value && !document.getElementById('title').value) {
+            sourceUrlField.focus();
+        }
+    </script>
+{% endblock %}

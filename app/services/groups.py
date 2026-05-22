@@ -14,6 +14,15 @@ class TimelineGroupValidationError(ValueError):
         self.field = field
 
 
+def _timeline_group_from_row(row: sqlite3.Row) -> TimelineGroup:
+    return TimelineGroup(
+        id=int(row["id"]),
+        name=row["name"],
+        web_search_query=row["web_search_query"],
+        is_default=bool(row["is_default"]),
+    )
+
+
 def list_timeline_groups(connection: sqlite3.Connection) -> list[TimelineGroup]:
     rows = connection.execute(
         """
@@ -50,12 +59,7 @@ def get_timeline_group(
     ).fetchone()
     if row is None:
         return None
-    return TimelineGroup(
-        id=int(row["id"]),
-        name=row["name"],
-        web_search_query=row["web_search_query"],
-        is_default=bool(row["is_default"]),
-    )
+    return _timeline_group_from_row(row)
 
 
 def get_default_timeline_group(
@@ -66,12 +70,7 @@ def get_default_timeline_group(
     ).fetchone()
     if row is None:
         return None
-    return TimelineGroup(
-        id=int(row["id"]),
-        name=row["name"],
-        web_search_query=row["web_search_query"],
-        is_default=bool(row["is_default"]),
-    )
+    return _timeline_group_from_row(row)
 
 
 def create_timeline_group(

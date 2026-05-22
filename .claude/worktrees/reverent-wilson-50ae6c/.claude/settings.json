@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/darek.tomyn/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/skills/subagent-driven-development/**)",
+      "Bash(git commit:*)",
+      "Read(//c/Users/darek.tomyn/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/skills/brainstorming/**)",
+      "Bash(uv sync:*)",
+      "Bash(uv pip:*)",
+      "Bash(xargs basename:*)",
+      "WebFetch(domain:obsidian.md)",
+      "Bash(taskkill //F //PID 23792)",
+      "Bash(taskkill //F //IM python.exe)",
+      "Bash(netstat -ano)",
+      "Bash(TESTING=1 uv run python -m scripts.run_dev)",
+      "Bash(git stash:*)",
+      "Bash(pkill -f \"scripts.run_dev\")",
+      "Bash(node -e ':*)",
+      "Bash(node scripts/render_story_deck.mjs)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('ok:', d['ok']\\); print\\('slides:', d['html'].count\\('<section id='\\)\\)\")"
+    ],
+    "additionalDirectories": [
+      "\\tmp"
+    ]
+  }
+}

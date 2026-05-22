@@ -100,6 +100,8 @@
     {% endif %}
 
     {% if timeline_groups %}
+        <div id="timeline-with-preview" class="timeline-with-preview">
+        <div class="timeline-main-column">
         <div class="visualization-toolbar" aria-label="Timeline view controls">
             <div class="visualization-segmented-controls" role="group" aria-label="Timeline views">
                 <button class="visualization-view-button" type="button" data-zoom-target="details" aria-pressed="true">Details</button>
@@ -158,6 +160,26 @@
                 </div>
             </div>
         </section>
+
+        </div><!-- /.timeline-main-column -->
+
+        <aside id="entry-preview-pane" class="entry-preview-pane card border-0 shadow-sm" hidden aria-label="Entry preview">
+            <div id="entry-preview-loading">
+                <div class="d-flex justify-content-center py-5">
+                    <div class="spinner-border text-secondary" role="status">
+                        <span class="visually-hidden">Loading…</span>
+                    </div>
+                </div>
+            </div>
+            <div id="entry-preview-error" hidden>
+                <div class="p-4 text-body-secondary">
+                    Could not load entry. <a id="entry-preview-fallback-link" href="#">Open full page →</a>
+                </div>
+            </div>
+            <div id="entry-preview-content"></div>
+        </aside>
+
+        </div><!-- /#timeline-with-preview -->
 
         <script id="timeline-state" type="application/json">{{ timeline_scope | tojson }}</script>
         <script>
@@ -1773,6 +1795,150 @@
                 }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-bs-theme"] });
             })();
         </script>
+        <script>
+            (() => {
+                const DESKTOP_BREAKPOINT = 992;
+                const wrapper = document.getElementById("timeline-with-preview");
+                const pane = document.getElementById("entry-preview-pane");
+                const loadingNode = document.getElementById("entry-preview-loading");
+                const errorNode = document.getElementById("entry-preview-error");
+                const contentNode = document.getElementById("entry-preview-content");
+                const fallbackLink = document.getElementById("entry-preview-fallback-link");
+
+                if (!wrapper || !pane || !loadingNode || !errorNode || !contentNode) {
+                    return;
+                }
+
+                let activeEntryId = null;
+
+                const isDesktop = () => window.innerWidth >= DESKTOP_BREAKPOINT;
+
+                const clearActiveCard = () => {
+                    document.querySelectorAll(".timeline-card.is-previewing").forEach((card) => {
+                        card.classList.remove("is-previewing");
+                    });
+                };
+
+                const markActiveCard = (entryId) => {
+                    clearActiveCard();
+                    const card = document.getElementById(`entry-${entryId}`);
+                    if (card) {
+                        card.classList.add("is-previewing");
+                    }
+                };
+
+                const showLoading = () => {
+                    loadingNode.hidden = false;
+                    errorNode.hidden = true;
+                    contentNode.innerHTML = "";
+                };
+
+                const showError = (entryId) => {
+                    loadingNode.hidden = true;
+                    errorNode.hidden = false;
+                    if (fallbackLink) {
+                        fallbackLink.href = `/entries/${entryId}/view`;
+                    }
+                };
+
+                const openPane = () => {
+                    pane.hidden = false;
+                    wrapper.classList.add("is-split");
+                };
+
+                const closePane = () => {
+                    pane.hidden = true;
+                    wrapper.classList.remove("is-split");
+                    clearActiveCard();
+                    activeEntryId = null;
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete("preview");
+                    history.pushState(null, "", url.toString());
+                };
+
+                const loadPreview = async (entryId) => {
+                    activeEntryId = entryId;
+                    openPane();
+                    showLoading();
+                    markActiveCard(entryId);
+
+                    const url = new URL(window.location.href);
+                    url.searchParams.set("preview", String(entryId));
+                    history.pushState(null, "", url.toString());
+
+                    try {
+                        const response = await fetch(`/entries/${entryId}/preview`);
+                        if (!response.ok) {
+                            throw new Error(`${response.status}`);
+                        }
+                        const html = await response.text();
+                        loadingNode.hidden = true;
+                        contentNode.innerHTML = html;
+
+                        const closeBtn = contentNode.querySelector("[data-preview-close]");
+                        if (closeBtn) {
+                            closeBtn.addEventListener("click", closePane);
+                        }
+                    } catch {
+                        showError(entryId);
+                    }
+                };
+
+                // Intercept "View" link clicks — desktop only, not clicks inside the pane itself
+                document.addEventListener("click", (event) => {
+                    if (!isDesktop()) {
+                        return;
+                    }
+                    const link = event.target.closest("a[href]");
+                    if (!link || pane.contains(link)) {
+                        return;
+                    }
+                    const href = link.getAttribute("href") || "";
+                    const match = href.match(/^\/entries\/(\d+)\/view$/);
+                    if (!match) {
+                        return;
+                    }
+                    event.preventDefault();
+                    const entryId = parseInt(match[1], 10);
+                    if (entryId === activeEntryId) {
+                        closePane();
+                        return;
+                    }
+                    void loadPreview(entryId);
+                });
+
+                // Escape closes pane
+                document.addEventListener("keydown", (event) => {
+                    if (event.key === "Escape" && activeEntryId !== null) {
+                        closePane();
+                    }
+                });
+
+                // Back button support
+                window.addEventListener("popstate", () => {
+                    const params = new URLSearchParams(window.location.search);
+                    const previewId = params.get("preview");
+                    if (!previewId) {
+                        if (activeEntryId !== null) {
+                            pane.hidden = true;
+                            wrapper.classList.remove("is-split");
+                            clearActiveCard();
+                            activeEntryId = null;
+                        }
+                    } else {
+                        void loadPreview(parseInt(previewId, 10));
+                    }
+                });
+
+                // Auto-open from URL on page load (shared links / back button restore)
+                const initParams = new URLSearchParams(window.location.search);
+                const initPreviewId = initParams.get("preview");
+                if (initPreviewId && isDesktop()) {
+                    void loadPreview(parseInt(initPreviewId, 10));
+                }
+            })();
+        </script>
+
     {% else %}
         <div class="empty-state card shadow-sm border-0">
             <div class="card-body p-4">

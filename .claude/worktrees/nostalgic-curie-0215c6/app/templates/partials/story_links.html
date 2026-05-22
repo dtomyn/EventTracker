@@ -1,0 +1,8 @@
+{% macro story_href(selected_group_query_value='', query='', year='', month='') -%}
+    {%- set has_params = selected_group_query_value or query or year or month -%}
+    /story{%- if has_params -%}?{%- endif -%}
+    {%- if selected_group_query_value -%}group_id={{ selected_group_query_value | urlencode }}{%- endif -%}
+    {%- if query -%}{%- if selected_group_query_value -%}&{%- endif -%}q={{ query | urlencode }}{%- endif -%}
+    {%- if year -%}{%- if selected_group_query_value or query -%}&{%- endif -%}year={{ year | string | urlencode }}{%- endif -%}
+    {%- if month -%}{%- if selected_group_query_value or query or year -%}&{%- endif -%}month={{ month | string | urlencode }}{%- endif -%}
+{%- endmacro %}
