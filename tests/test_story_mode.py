@@ -12,6 +12,7 @@ from app.schemas import (
     TimelineStorySavePayload,
 )
 from app.services.embeddings import load_embedding_settings
+from app.models import Entry
 from app.services.entries import EntryPayload, create_timeline_group, save_entry
 from app.services.story_mode import (
     get_story_artifact,

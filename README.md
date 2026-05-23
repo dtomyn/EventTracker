@@ -183,7 +183,7 @@ Tradeoffs and risks:
 - Route handlers, page assembly, and orchestration are concentrated in `app/main.py`; that is pragmatic now, but it can become harder to navigate as feature count grows.
 - Schema evolution is guarded in code rather than managed by a dedicated migration framework, which is lightweight but puts more pressure on startup-time compatibility checks.
 - AI and embeddings are optional at runtime, which is a strength for graceful degradation, but it also means behavior can vary significantly across developer environments depending on `.env` configuration and installed capabilities.
-- Pyright coverage is curated to selected files instead of the full tree, so some future regressions can still land outside the typed surface.
+- Pyright coverage spans all `app/`, `app/services/`, `tests/`, `tests/e2e/`, and the primary `scripts/` files, providing broad static type-checking across the project surface.
 
 ### Python architecture diagram
 
