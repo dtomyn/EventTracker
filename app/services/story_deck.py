@@ -181,6 +181,7 @@ def build_executive_deck_markdown(
     citation_orders_by_entry_id: dict[int, int] = {}
     citation_orders_by_slide: dict[str, list[int]] = {}
     visual_kinds: list[str] = []
+    seen_visual_kinds: set[str] = set()
     lines = [
         "---",
         "marpit: true",
@@ -200,7 +201,8 @@ def build_executive_deck_markdown(
         )
         citation_orders_by_slide[slide.slide_key] = slide_citation_orders
         for visual_kind in slide.visuals:
-            if visual_kind not in visual_kinds:
+            if visual_kind not in seen_visual_kinds:
+                seen_visual_kinds.add(visual_kind)
                 visual_kinds.append(visual_kind)
 
         lines.extend(
@@ -583,14 +585,10 @@ def _build_slide_render_queue(slide: GeneratedExecutiveDeckSlide) -> SlideRender
     body_points = _dedupe_text_items(slide.body_points)
     body_point_keys = {_normalize_content_key(item) for item in body_points}
     callouts: list[str] = []
-    seen_callout_keys: set[str] = set()
     for callout in _dedupe_text_items(slide.callouts):
         normalized_key = _normalize_content_key(callout)
         if not normalized_key or normalized_key in body_point_keys:
             continue
-        if normalized_key in seen_callout_keys:
-            continue
-        seen_callout_keys.add(normalized_key)
         callouts.append(callout)
     return SlideRenderQueue(body_points=body_points, callouts=callouts)
 
