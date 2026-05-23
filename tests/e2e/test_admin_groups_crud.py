@@ -36,6 +36,7 @@ def _ensure_group(
             (name, web_search_query, int(is_default)),
         )
         con.commit()
+        assert cursor.lastrowid is not None
         return int(cursor.lastrowid)
 
 

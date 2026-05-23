@@ -2,6 +2,7 @@
 
 import logging
 import time
+from typing import cast
 
 from app.db import connection_context, is_sqlite_vec_enabled
 from app.services.entries import utc_now_iso
@@ -51,7 +52,7 @@ def run() -> None:
                     logger.info("Progress: %d/%d entries processed...", i, total)
                 continue
 
-            pairs = [(title, s["title"]) for s in similar]
+            pairs = cast(list[tuple[str, str]], [(title, s["title"]) for s in similar])
             notes = generate_relationship_notes(pairs)
             for s, note in zip(similar, notes):
                 s["suggested_note"] = note

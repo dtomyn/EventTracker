@@ -16,6 +16,7 @@ from openai.types.chat import ChatCompletionUserMessageParam
 
 from app.env import load_app_env
 from app.models import (
+    DeckSlidePurpose,
     DeckVisualKind,
     Entry,
     GeneratedExecutiveDeck,
@@ -986,7 +987,7 @@ def _parse_deck_generation_response(
                     fallback=headline,
                 ),
                 headline=headline,
-                purpose=purpose,
+                purpose=cast(DeckSlidePurpose, purpose),
                 body_points=body_points,
                 callouts=callouts,
                 visuals=visuals,
