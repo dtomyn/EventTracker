@@ -26,6 +26,7 @@ def _ensure_group_id(
                 (group_name, web_search_query),
             )
             connection.commit()
+            assert cursor.lastrowid is not None
             return int(cursor.lastrowid)
 
         group_id = int(row[0])
@@ -73,6 +74,7 @@ def _seed_entry(
             (year, month, day, sort_key, group_id, title, final_text, timestamp, timestamp),
         )
         connection.commit()
+        assert cursor.lastrowid is not None
         return int(cursor.lastrowid)
 
 

@@ -36,6 +36,7 @@ def _ensure_group(db_path: Path, name: str) -> int:
             (name,),
         )
         con.commit()
+        assert cursor.lastrowid is not None
         return int(cursor.lastrowid)
 
 
@@ -62,6 +63,7 @@ def _seed_entry(
             (year, month, day, sort_key, group_id, title, final_text, ts, ts),
         )
         con.commit()
+        assert cursor.lastrowid is not None
         return int(cursor.lastrowid)
 
 
@@ -102,6 +104,7 @@ def _seed_story(
             ),
         )
         con.commit()
+        assert cursor.lastrowid is not None
         story_id = int(cursor.lastrowid)
 
         if entry_id is not None:

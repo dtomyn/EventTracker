@@ -990,7 +990,7 @@ def _parse_deck_generation_response(
                     fallback=headline,
                 ),
                 headline=headline,
-                purpose=purpose,
+                purpose=cast(DeckSlidePurpose, purpose),
                 body_points=body_points,
                 callouts=callouts,
                 visuals=visuals,
