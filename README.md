@@ -59,6 +59,14 @@ The canonical product requirements for the repository live in the split requirem
 
 Use this README as a high-level product and architecture overview. Use the requirement documents for implementation-aligned behavioral and operational contracts.
 
+## Architecture decision records
+
+Long-lived architecture decisions and their trade-offs are captured in ADRs under `docs/decisions/`.
+
+- [ADR index](docs/decisions/README.md)
+- [ADR-001: Local-first single-process architecture with FastAPI and SQLite](docs/decisions/ADR-001-local-first-single-process-fastapi-sqlite.md)
+- [ADR-002: Hybrid search with SQLite FTS5 plus optional sqlite-vec semantic recall](docs/decisions/ADR-002-hybrid-search-fts5-plus-optional-sqlite-vec.md)
+
 ## Playwright end-to-end tests
 
 EventTracker has two Playwright browser end-to-end suites:
