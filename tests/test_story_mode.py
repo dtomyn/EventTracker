@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from app.db import connection_context, init_db
+from app.models import Entry
 from app.schemas import (
     TimelineStoryArtifactSavePayload,
     TimelineStoryCitationPayload,
@@ -392,9 +393,7 @@ class TestOrderStoryEntries(unittest.TestCase):
         entry_id: int,
         sort_key: int,
         updated_utc: str,
-    ) -> "Entry":
-        from app.models import Entry
-
+    ) -> Entry:
         return Entry(
             id=entry_id,
             event_year=2025,

@@ -461,8 +461,8 @@ async def compute_topic_clusters(connection: sqlite3.Connection, group_id: int) 
     semaphore = asyncio.Semaphore(5)
 
     async def _generate_tags_for_entry(
-        idx: int, entry: object,
-    ) -> tuple[object, list[str]] | None:
+        idx: int, entry: Entry,
+    ) -> tuple[Entry, list[str]] | None:
         logger.info(f"Generating tags for entry {idx}/{len(entries)}: {entry.title[:60]}")
         try:
             async with semaphore:
@@ -487,4 +487,3 @@ async def compute_topic_clusters(connection: sqlite3.Connection, group_id: int) 
     graph = build_tag_graph(connection, group_id)
     logger.info(f"Tag graph has {len(graph.nodes)} nodes and {len(graph.edges)} edges.")
     return graph
-

@@ -656,9 +656,12 @@ class TestCopilotChatStoryGenerator(unittest.TestCase):
         self.assertEqual(deck.title, "Executive deck")
         self.assertEqual(deck.slides[0].visuals, ["pull_quote"])
         self.assertEqual(deck.slides[0].citations, [7])
-        self.assertEqual(fake_client.config["model"], "gpt-5")
-        self.assertEqual(fake_client.config["on_permission_request"], "approve-all")
-        system_content = fake_client.config["system_message"]["content"]
+        self.assertIsNotNone(fake_client.config)
+        config = cast(dict[str, object], fake_client.config)
+        self.assertEqual(config["model"], "gpt-5")
+        self.assertEqual(config["on_permission_request"], "approve-all")
+        system_message = cast(dict[str, str], config["system_message"])
+        system_content = system_message["content"]
         self.assertIn("You write grounded executive presentation decks", system_content)
         self.assertIn('"slides"', system_content)
 

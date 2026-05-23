@@ -16,6 +16,7 @@ from openai.types.chat import ChatCompletionUserMessageParam
 
 from app.env import load_app_env
 from app.models import (
+    DeckSlidePurpose,
     DeckVisualKind,
     Entry,
     GeneratedExecutiveDeck,
@@ -963,7 +964,12 @@ def _parse_deck_generation_response(
             continue
 
         headline = _normalize_text(str(raw_slide.get("headline", "")))
-        purpose = _normalize_text(str(raw_slide.get("purpose", ""))).lower()
+        raw_purpose = _normalize_text(str(raw_slide.get("purpose", ""))).lower()
+        purpose: DeckSlidePurpose
+        if raw_purpose in _ALLOWED_DECK_PURPOSES:
+            purpose = cast(DeckSlidePurpose, raw_purpose)
+        else:
+            purpose = "summary"
         body_points = _coerce_text_list(raw_slide.get("body_points"))
         callouts = _coerce_text_list(raw_slide.get("callouts"))
         visuals = _parse_deck_visuals(raw_slide.get("visuals"))
@@ -973,8 +979,6 @@ def _parse_deck_generation_response(
         )
         if not headline:
             continue
-        if purpose not in _ALLOWED_DECK_PURPOSES:
-            purpose = "summary"
         _PURPOSES_WITHOUT_REQUIRED_BODY = {"title", "toc", "section_header", "quote", "close", "thank_you"}
         if not body_points and not callouts and not visuals and purpose not in _PURPOSES_WITHOUT_REQUIRED_BODY:
             continue
