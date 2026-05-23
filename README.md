@@ -806,6 +806,133 @@ If you want a PowerShell session with the virtual environment activated:
 
 ## Configuration
 
+### Environment modes and feature availability
+
+EventTracker behavior varies depending on which environment variables are set. The table below maps each feature to the configuration mode that enables it.
+
+| Feature | FTS-only (no AI) | OpenAI draft | Copilot draft | + Embeddings |
+|---|:---:|:---:|:---:|:---:|
+| Timeline, entry CRUD, export | ✅ | ✅ | ✅ | ✅ |
+| Keyword search (FTS5) | ✅ | ✅ | ✅ | ✅ |
+| Ranked search | ✅ keyword-only | ✅ keyword-only | ✅ keyword-only | ✅ hybrid |
+| Entry draft generation | ❌ | ✅ | ✅ | same as base |
+| Event Chat | ❌ | ✅ | ✅ | same as base |
+| Story Mode narrative | ❌ | ✅ | ✅ | same as base |
+| Story Mode presentation | ❌ | ✅ | ✅ | same as base |
+| Group web search (On the web) | ❌ | ❌ | ✅ | same as base |
+| Semantic search | ❌ | ❌ | ❌ | ✅ |
+| AI topic cluster compute | ❌ | ✅ | ✅ | same as base |
+| Suggested connections | ❌ | ❌ | ❌ | ✅ |
+
+The four modes are described below. Embeddings (the `+ Embeddings` column) can be layered on top of either the OpenAI or Copilot base mode — they are not a standalone mode.
+
+#### Mode A — FTS keyword search only (no AI)
+
+No AI-related variables are required. Timeline browsing, entry management, keyword search, export, and import all work. All AI-assisted features (draft generation, Event Chat, Story Mode, group web search) are unavailable and will show an error or be hidden in the UI.
+
+Required variables: none beyond the core host/port settings.
+
+#### Mode B — OpenAI draft generation (default)
+
+`EVENTTRACKER_AI_PROVIDER` defaults to `openai` when omitted. This mode enables entry draft generation, Event Chat, Story Mode, and AI topic clustering. Group web search is not available in this mode.
+
+Required variables:
+
+```env
+EVENTTRACKER_AI_PROVIDER=openai
+OPENAI_API_KEY=your-api-key
+OPENAI_CHAT_MODEL_ID=gpt-5-mini
+```
+
+Optional variables:
+
+```env
+OPENAI_BASE_URL=https://your-compatible-endpoint/v1   # for non-OpenAI-hosted providers
+```
+
+#### Mode C — Copilot draft generation and group web search
+
+Setting `EVENTTRACKER_AI_PROVIDER=copilot` routes all AI generation through the GitHub Copilot SDK. This is the only mode that enables the **On the web** group web search sidebar. Requires a GitHub Copilot subscription and the Copilot CLI installed and authenticated on the local machine.
+
+Required variables:
+
+```env
+EVENTTRACKER_AI_PROVIDER=copilot
+COPILOT_CHAT_MODEL_ID=gpt-5.4
+```
+
+Optional variables:
+
+```env
+COPILOT_CLI_PATH=                                         # leave blank if `copilot` is already on PATH
+COPILOT_CLI_URL=                                          # leave blank for normal local usage
+EVENTTRACKER_GROUP_WEB_SEARCH_TIMEOUT_SECONDS=60
+EVENTTRACKER_GROUP_WEB_SEARCH_BROADENED_TIMEOUT_SECONDS=45
+EVENTTRACKER_GROUP_WEB_SEARCH_REQUEST_TIMEOUT_MS=65000
+```
+
+#### Mode D — Semantic embeddings (additive to B or C)
+
+Adding `OPENAI_EMBEDDING_MODEL_ID` alongside `OPENAI_API_KEY` enables sqlite-vec semantic recall. Ranked search blends FTS5 keyword results with semantic matches using reciprocal rank fusion. This also enables the `compute_suggested_connections` script.
+
+Embeddings require the `sqlite-vec` Python package (included in `pyproject.toml` dependencies) and are silently skipped if the extension cannot be loaded.
+
+Required variables (in addition to the base mode):
+
+```env
+OPENAI_API_KEY=your-api-key
+OPENAI_EMBEDDING_MODEL_ID=text-embedding-3-small
+```
+
+Optional:
+
+```env
+OPENAI_BASE_URL=https://your-compatible-endpoint/v1
+```
+
+After configuring embeddings for the first time, rebuild the index for any existing entries:
+
+```powershell
+uv run python -m scripts.init_db --reindex-embeddings
+```
+
+#### Common local setups
+
+**Minimal — no AI, keyword search only:**
+
+```env
+EVENTTRACKER_HOST=127.0.0.1
+EVENTTRACKER_PORT=35231
+```
+
+**OpenAI draft generation with semantic search:**
+
+```env
+EVENTTRACKER_HOST=127.0.0.1
+EVENTTRACKER_PORT=35231
+EVENTTRACKER_AI_PROVIDER=openai
+OPENAI_API_KEY=sk-...
+OPENAI_CHAT_MODEL_ID=gpt-5-mini
+OPENAI_EMBEDDING_MODEL_ID=text-embedding-3-small
+```
+
+**Copilot draft generation and group web search (no embeddings):**
+
+```env
+EVENTTRACKER_HOST=127.0.0.1
+EVENTTRACKER_PORT=35231
+EVENTTRACKER_AI_PROVIDER=copilot
+COPILOT_CHAT_MODEL_ID=gpt-5.4
+```
+
+#### Degraded and fallback behavior
+
+- **AI provider missing or misconfigured** — entry draft generation, Event Chat, and Story Mode return an error message. The rest of the app continues to work normally.
+- **Copilot SDK not installed** — if `EVENTTRACKER_AI_PROVIDER=copilot` is set but the `github-copilot-sdk` package is absent, AI requests fail at runtime. Switch to `openai` or install the SDK.
+- **Embeddings not configured** — ranked search and timeline filtering fall back to keyword-only FTS results. Entry saves still succeed without embedding sync. No data is lost.
+- **sqlite-vec extension unavailable** — the app logs a warning at startup and disables semantic search silently. All other features remain unaffected.
+- **Group web search not configured** — the **On the web** sidebar is only shown when `EVENTTRACKER_AI_PROVIDER=copilot` and the selected group has a stored `web_search_query`. Both conditions must be true; missing either suppresses the panel silently.
+
 ### Core settings
 
 ```env
