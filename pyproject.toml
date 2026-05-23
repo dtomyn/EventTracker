@@ -106,4 +106,3 @@ include = [
     "tests/e2e/test_story_mode.py",
 ]
 reportMissingTypeStubs = false
-

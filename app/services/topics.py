@@ -487,4 +487,3 @@ async def compute_topic_clusters(connection: sqlite3.Connection, group_id: int) 
     graph = build_tag_graph(connection, group_id)
     logger.info(f"Tag graph has {len(graph.nodes)} nodes and {len(graph.edges)} edges.")
     return graph
-
