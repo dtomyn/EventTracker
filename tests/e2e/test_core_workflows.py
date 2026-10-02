@@ -457,10 +457,21 @@ def test_timeline_views_and_drill_down_cover_details_summaries_months_and_years(
     detail_panel.locator("[data-entry-card]", has_text=march_primary_title).get_by_role(
         "link", name="View"
     ).click()
+    # On desktop, "View" opens the entry in the split preview pane.
+    preview_pane = page.get_by_role("complementary", name="Entry preview")
+    expect(page).to_have_url(
+        re.compile(rf".*/\?group_id={group_id}&preview={march_primary_id}$")
+    )
+    expect(preview_pane.get_by_role("heading", name=march_primary_title)).to_be_visible()
+
+    preview_pane.get_by_role("link", name="Full page →").click()
     expect(page).to_have_url(re.compile(rf".*/entries/{march_primary_id}/view$"))
     expect(page.get_by_role("heading", name=march_primary_title)).to_be_visible()
 
     page.go_back()
+    expect(preview_pane.get_by_role("heading", name=march_primary_title)).to_be_visible()
+    preview_pane.get_by_role("button", name="Close preview").click()
+    expect(preview_pane).to_be_hidden()
     expect(page).to_have_url(re.compile(rf".*/\?group_id={group_id}$"))
     expect(current_view).to_have_text("Details")
 

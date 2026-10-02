@@ -25,6 +25,7 @@ SERVER_START_TIMEOUT_SECONDS = 30.0
 SCREENSHOTS_DIR = REPO_ROOT / "test-screenshots"
 TEMP_DIR_CLEANUP_TIMEOUT_SECONDS = 5.0
 TEMP_DIR_CLEANUP_RETRY_INTERVAL_SECONDS = 0.2
+STALE_TEMP_DIR_AGE_SECONDS = 60 * 60
 
 # Module-level cache so each external stylesheet URL is fetched only once per
 # test session rather than on every request interception.
@@ -157,10 +158,20 @@ def _remove_temp_dir(temp_dir: Path) -> bool:
 
 
 def _cleanup_stale_temp_dirs() -> None:
-    """Best-effort cleanup for leftover Playwright temp directories from prior runs."""
+    """Best-effort cleanup for leftover Playwright temp directories from prior runs.
+
+    Only directories older than STALE_TEMP_DIR_AGE_SECONDS are removed: the glob
+    also matches the TypeScript harness prefix, and a younger directory may hold
+    the live database of a run still in progress.
+    """
     temp_root = Path(tempfile.gettempdir())
+    cutoff = time.time() - STALE_TEMP_DIR_AGE_SECONDS
     for temp_dir in temp_root.glob("eventtracker-playwright-*"):
-        if temp_dir.is_dir():
+        try:
+            is_stale = temp_dir.is_dir() and temp_dir.stat().st_mtime < cutoff
+        except OSError:
+            continue
+        if is_stale:
             _remove_temp_dir(temp_dir)
 
 

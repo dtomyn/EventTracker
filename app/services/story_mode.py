@@ -42,13 +42,13 @@ def resolve_story_scope(
         if default_group is not None:
             selected_group_id = default_group.id
 
-    resolved_year = _parse_optional_int(
+    resolved_year = parse_optional_int(
         year,
         field_name="year",
         minimum=1900,
         maximum=2100,
     )
-    resolved_month = _parse_optional_int(
+    resolved_month = parse_optional_int(
         month,
         field_name="month",
         minimum=1,
@@ -353,7 +353,7 @@ def _parse_story_group_id(raw_group_id: str) -> int | None:
     return value
 
 
-def _parse_optional_int(
+def parse_optional_int(
     raw_value: int | str | None,
     *,
     field_name: str,

@@ -69,13 +69,28 @@ def paginate_search_results(
 
 
 def search_entries(
-    connection: sqlite3.Connection, raw_query: str, group_id: int | None = None
+    connection: sqlite3.Connection,
+    raw_query: str,
+    group_id: int | None = None,
+    *,
+    any_term_ignoring: frozenset[str] | None = None,
 ) -> list[SearchResult]:
+    """Hybrid keyword + semantic search.
+
+    By default every keyword must appear. When ``any_term_ignoring`` is given,
+    those words are dropped and an entry matching any remaining term
+    qualifies, with bm25 ranking multi-term matches first.
+    """
     normalized_query = raw_query.strip()
     if not normalized_query:
         return []
 
-    fts_rows = _search_fts_rows(connection, normalized_query, group_id=group_id)
+    fts_query = (
+        build_fts_any_term_query(normalized_query, any_term_ignoring)
+        if any_term_ignoring is not None
+        else build_fts_query(normalized_query)
+    )
+    fts_rows = _search_fts_rows(connection, fts_query, group_id=group_id)
     semantic_matches = _filter_semantic_matches_by_group(
         connection,
         search_semantic_matches(connection, normalized_query),
@@ -169,10 +184,18 @@ def build_fts_query(raw_query: str) -> str:
     return " ".join(f'"{token}"' for token in tokens)
 
 
+def build_fts_any_term_query(raw_query: str, ignored: frozenset[str]) -> str:
+    tokens = TOKEN_RE.findall(raw_query)
+    terms = list(dict.fromkeys(token for token in tokens if token.lower() not in ignored))
+    if not terms:
+        # A query made only of ignored words still deserves a literal match.
+        return build_fts_query(raw_query)
+    return " OR ".join(f'"{term}"' for term in terms)
+
+
 def _search_fts_rows(
-    connection: sqlite3.Connection, raw_query: str, group_id: int | None = None
+    connection: sqlite3.Connection, query: str, group_id: int | None = None
 ) -> list[sqlite3.Row]:
-    query = build_fts_query(raw_query)
     if not query:
         return []
 
