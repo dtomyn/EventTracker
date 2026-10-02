@@ -23,5 +23,6 @@
 ## Acceptance Notes
 
 - Entry text shown on the board is sanitized server-side with the same allow-list as entry detail pages before it is embedded.
+- Sanitized entry bodies are rendered into inert HTML templates and cloned into detail sheets, in both the live board and offline export. The browser never interprets the JSON payload's `body_html` as HTML.
 - The board data is embedded as JSON with HTML-significant characters escaped, so entry content cannot break out of its script block.
 - On narrow or short viewports the board falls back to a scrolling single-column list.
