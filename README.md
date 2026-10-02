@@ -151,6 +151,7 @@ uv run --with pillow python .\scripts\generate_demo_assets.py --also-no-search-a
 - Supports timeline filtering on `/` with the `q` query string. This keeps matches in timeline order instead of ranked order.
 - Supports ranked search at `/search`, combining FTS matches with semantic matches when embeddings are available.
 - Supports `Story Mode` for the current scope, turning matching entries into a narrative arc with sections, linked citations, optional executive presentation previews, standalone HTML deck download, and saved Narrative or Presentation views.
+- Supports a `Poster Board` at `/timeline/board` for the current scope: the most important entries packed onto one screen as a corkboard, sized by importance, filterable by category and search, with a detail sheet per entry and an `Export HTML` button that downloads a self-contained file you can hand to someone.
 - Supports `Event Chat` at `/chat`, a conversational Q&A interface that retrieves relevant entries via search, grounds answers in stored event context, and streams responses with inline citations linking back to entry detail pages.
 - Organizes entries into timeline groups, seeded with a default `Agentic Coding` group.
 - Lets users create, rename, delete, and mark the default group at `/admin/groups`, and store an optional per-group web search query.
