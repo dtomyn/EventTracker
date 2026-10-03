@@ -4,10 +4,10 @@ from collections.abc import Awaitable, Iterable
 from contextlib import AbstractAsyncContextManager, AsyncExitStack
 from dataclasses import dataclass
 from functools import lru_cache
-from inspect import Parameter, isawaitable, signature
+from inspect import isawaitable
 import logging
 import re
-from typing import Any, Callable, Protocol, TypeVar, cast
+from typing import Callable, Protocol, TypeVar, cast
 
 
 COPILOT_SDK_REQUIRED_MESSAGE = (
@@ -33,9 +33,7 @@ class CopilotClientSettings(Protocol):
 
 
 class CopilotSession(Protocol):
-    async def send_and_wait(
-        self, payload: dict[str, str], timeout: float
-    ) -> object: ...
+    async def send_and_wait(self, prompt: str, *, timeout: float) -> object: ...
 
     def on(self, handler: Callable[[object], None]) -> Callable[[], None] | None: ...
 
@@ -49,20 +47,27 @@ class CopilotClient(Protocol):
 
     async def stop(self) -> None: ...
 
-    async def create_session(self, config: dict[str, object]) -> CopilotSession: ...
+    async def create_session(self, **config: object) -> CopilotSession: ...
 
 
 class CopilotClientConstructor(Protocol):
-    def __call__(self, options: dict[str, str] | None = None) -> CopilotClient: ...
+    def __call__(self, *, connection: object | None = None) -> CopilotClient: ...
 
 
 class CopilotPermissionHandler(Protocol):
     approve_all: object
 
 
+class CopilotRuntimeConnectionFactory(Protocol):
+    def for_stdio(self, *, path: str | None = None) -> object: ...
+
+    def for_uri(self, url: str) -> object: ...
+
+
 class CopilotSdkModule(Protocol):
     CopilotClient: CopilotClientConstructor
     PermissionHandler: CopilotPermissionHandler
+    RuntimeConnection: CopilotRuntimeConnectionFactory
 
 
 class SupportsAsyncStartStop(Protocol):
@@ -105,22 +110,26 @@ def instantiate_copilot_client(
     invalid_settings_message: str,
 ) -> CopilotClient:
     try:
-        client_class = load_copilot_sdk().CopilotClient
+        sdk = load_copilot_sdk()
     except ModuleNotFoundError as exc:
-        if exc.name not in {"github_copilot_sdk", "copilot"}:
+        if exc.name != "copilot":
             raise
         raise configuration_error_type(missing_sdk_message) from exc
 
-    options = {
-        "cli_path": settings.cli_path,
-        "cli_url": settings.cli_url,
-    }
-    filtered_options = {
-        key: value for key, value in options.items() if value is not None
-    }
+    # COPILOT_CLI_URL connects to an already-running runtime, while
+    # COPILOT_CLI_PATH spawns a specific CLI binary, so they are exclusive.
+    # With neither set, the SDK spawns the CLI bundled with the package.
+    if settings.cli_url is not None and settings.cli_path is not None:
+        raise configuration_error_type(invalid_settings_message)
+    connection: object | None = None
+    if settings.cli_url is not None:
+        connection = sdk.RuntimeConnection.for_uri(settings.cli_url)
+    elif settings.cli_path is not None:
+        connection = sdk.RuntimeConnection.for_stdio(path=settings.cli_path)
+
     try:
-        return client_class(filtered_options or None)
-    except (TypeError, ValueError) as exc:
+        return sdk.CopilotClient(connection=connection)
+    except (TypeError, ValueError, RuntimeError) as exc:
         raise configuration_error_type(invalid_settings_message) from exc
 
 
@@ -275,19 +284,7 @@ async def create_copilot_session(
     if streaming:
         config["streaming"] = True
 
-    create_session = cast(Any, client).create_session
-    try:
-        parameters = tuple(signature(create_session).parameters.values())
-    except (TypeError, ValueError):
-        parameters = ()
-
-    supports_keyword_config = any(
-        parameter.kind in (Parameter.KEYWORD_ONLY, Parameter.VAR_KEYWORD)
-        for parameter in parameters
-    )
-    if supports_keyword_config:
-        return await create_session(**config)
-    return await create_session(config)
+    return await client.create_session(**config)
 
 
 async def prepare_copilot_client(
@@ -337,21 +334,7 @@ async def prepare_copilot_resource(
 async def send_copilot_prompt(
     session: CopilotSession, prompt: str, *, timeout: float
 ) -> object:
-    send_and_wait = cast(Any, session).send_and_wait
-    try:
-        parameters = tuple(signature(send_and_wait).parameters.values())
-    except (TypeError, ValueError):
-        parameters = ()
-
-    if parameters:
-        if parameters[0].name == "prompt":
-            return await send_and_wait(prompt, timeout=timeout)
-        return await send_and_wait({"prompt": prompt}, timeout)
-
-    try:
-        return await send_and_wait(prompt, timeout=timeout)
-    except TypeError:
-        return await send_and_wait({"prompt": prompt}, timeout)
+    return await session.send_and_wait(prompt, timeout=timeout)
 
 
 def extract_copilot_message_content(response: object) -> str:

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "eventtracker-dev",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "python", "-m", "scripts.run_dev"],
+      "port": 35231
+    }
+  ]
+}

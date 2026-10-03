@@ -173,9 +173,9 @@ class CopilotChatDraftGenerator:
         except Exception as exc:
             raise DraftGenerationConfigurationError(
                 "GitHub Copilot draft generation is not configured correctly. "
-                "Install the GitHub Copilot SDK and ensure the Copilot CLI is available. "
-                "If `copilot --version` already works, leave COPILOT_CLI_PATH and "
-                "COPILOT_CLI_URL blank unless you intentionally need an override."
+                "Ensure you are signed in to GitHub Copilot, and leave COPILOT_CLI_PATH "
+                "and COPILOT_CLI_URL blank to use the CLI bundled with the SDK unless "
+                "you intentionally need an override."
             ) from exc
 
         content = copilot_runtime.extract_copilot_message_content(response)

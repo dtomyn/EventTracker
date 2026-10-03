@@ -60,12 +60,10 @@ class _FakeCopilotSession:
         self.response = response
         self.send_calls: list[dict[str, object]] = []
         self.closed = False
-        self.timeouts: list[float | None] = []
+        self.timeouts: list[float] = []
 
-    async def send_and_wait(
-        self, options: dict[str, object], timeout: float | None = None
-    ) -> object:
-        self.send_calls.append(options)
+    async def send_and_wait(self, prompt: str, *, timeout: float = 60.0) -> object:
+        self.send_calls.append({"prompt": prompt})
         self.timeouts.append(timeout)
         return self.response
 
@@ -109,7 +107,7 @@ class _FakeCopilotClient:
     async def __aexit__(self, exc_type, exc, tb) -> None:
         self.exited = True
 
-    async def create_session(self, config: dict[str, object]) -> _FakeCopilotSession:
+    async def create_session(self, **config: object) -> _FakeCopilotSession:
         self.config = config
         return self.session
 
@@ -125,7 +123,7 @@ class _FakeStartStopClient:
     async def stop(self) -> None:
         self.stopped = True
 
-    async def create_session(self, config: dict[str, object]) -> _FakeCopilotSession:
+    async def create_session(self, **config: object) -> _FakeCopilotSession:
         return _FakeCopilotSession(response=config)
 
 
@@ -334,6 +332,62 @@ class TestCopilotSdkWrapper(unittest.TestCase):
             {"copilot.session", "copilot.types"},
         )
 
+    def _instantiate(
+        self, *, cli_path: str | None = None, cli_url: str | None = None
+    ) -> Any:
+        return copilot_runtime.instantiate_copilot_client(
+            CopilotSettings(model_id="gpt-5", cli_path=cli_path, cli_url=cli_url),
+            configuration_error_type=DraftGenerationConfigurationError,
+            missing_sdk_message="missing sdk",
+            invalid_settings_message="invalid settings",
+        )
+
+    def test_instantiate_copilot_client_defaults_to_bundled_stdio_runtime(
+        self,
+    ) -> None:
+        from copilot import CopilotClient, StdioRuntimeConnection
+
+        with patch.dict(os.environ, {"COPILOT_CLI_PATH": ""}):
+            client = self._instantiate()
+
+        self.assertIsInstance(client, CopilotClient)
+        connection = client._connection
+        self.assertIsInstance(connection, StdioRuntimeConnection)
+        self.assertTrue(connection.path)
+
+    def test_instantiate_copilot_client_maps_cli_path_to_stdio_connection(
+        self,
+    ) -> None:
+        from copilot import StdioRuntimeConnection
+
+        client = self._instantiate(cli_path="C:/tools/copilot.exe")
+
+        connection = client._connection
+        self.assertIsInstance(connection, StdioRuntimeConnection)
+        self.assertEqual(connection.path, "C:/tools/copilot.exe")
+
+    def test_instantiate_copilot_client_maps_cli_url_to_uri_connection(self) -> None:
+        from copilot import UriRuntimeConnection
+
+        client = self._instantiate(cli_url="localhost:4321")
+
+        connection = client._connection
+        self.assertIsInstance(connection, UriRuntimeConnection)
+        self.assertEqual(connection.url, "localhost:4321")
+        self.assertEqual(client.runtime_port, 4321)
+
+    def test_instantiate_copilot_client_rejects_invalid_cli_url(self) -> None:
+        with self.assertRaisesRegex(
+            DraftGenerationConfigurationError, "invalid settings"
+        ):
+            self._instantiate(cli_url="not a url:port")
+
+    def test_instantiate_copilot_client_rejects_cli_path_with_cli_url(self) -> None:
+        with self.assertRaisesRegex(
+            DraftGenerationConfigurationError, "invalid settings"
+        ):
+            self._instantiate(cli_path="copilot", cli_url="localhost:4321")
+
     def test_create_copilot_session_supports_keyword_config(self) -> None:
         client = SimpleNamespace(create_session=AsyncMock(return_value="session"))
 
@@ -439,7 +493,7 @@ class TestCopilotSdkWrapper(unittest.TestCase):
 
         self.assertTrue(session.disconnected)
 
-    def test_send_copilot_prompt_supports_string_prompt_signature(self) -> None:
+    def test_send_copilot_prompt_passes_prompt_and_timeout(self) -> None:
         session = _FakeModernCopilotSession(response="ok")
 
         response = _run_async(

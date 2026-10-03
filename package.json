@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "codegen:e2e": "playwright codegen http://127.0.0.1:35231/",
+    "demo:video": "node scripts/record_demo_video.mjs",
     "install:browsers": "playwright install chromium",
     "serve:e2e:ts": "uv run python -m scripts.run_dev --port 35231",
     "test:e2e:ts": "playwright test --pass-with-no-tests",

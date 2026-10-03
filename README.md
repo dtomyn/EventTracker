@@ -6,33 +6,33 @@ If you want a simpler version of what this app does, see [README_EXPLAIN_IT_TO_M
 
 ## Demo
 
-### Video walkthrough
-
-A 73-second tour of the main features, using a real timeline:
-
-- Browsing the timeline and switching between the `Details`, `Summaries`, `Months`, `Years`, and `Heatmap` views.
-- Running a full-text search.
-- Creating a new entry from a reference URL, with AI drafting the summary, title, date, and tags.
-- Saving the entry and seeing it appear on the timeline.
-- Opening the `Poster Board`.
-
-<!--
-  VIDEO PLACEHOLDER: replace this comment with the GitHub-hosted video URL.
-  On github.com, edit README.md, drag eventtracker-demo.mp4 into the editor,
-  and GitHub inserts a line like:
-  https://github.com/user-attachments/assets/<id>
-  Keep that URL on its own line so GitHub renders it as an inline video player.
--->
-
-### Animated walkthrough
 https://github.com/user-attachments/assets/119cce3c-b74f-4735-8195-f6ad4e78e532
 
-This demo shows the main AI-assisted workflow in EventTracker, from live web discovery to source-backed entry generation.
+A 73-second tour of the main features, recorded against a real `Agentic Coding` timeline:
 
-- Expanding the `Recent Developments` panel and loading Copilot-backed web results.
-- Browsing the rendered results grid for recent, source-linked updates.
-- Entering a source URL in `New Entry` and generating a suggested summary, title, and date.
-- Reviewing the rendered preview before saving the entry.
+1. Browsing the timeline in the `Details` view.
+2. Switching between the `Summaries`, `Months`, `Years`, and `Heatmap` views.
+3. Running a full-text search for `Copilot`.
+4. Creating a brand new entry by pasting the [Gemini 4 Argon announcement](https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-4-argon/) into `Source URL` and clicking `Generate`.
+   The AI provider fetches the article and drafts the summary, title, date, and tags.
+5. Saving the entry, reviewing its detail page, and seeing it appear on the timeline.
+6. Opening the `Poster Board`, where the new entry is pinned alongside the existing ones.
+
+### How the video was made
+
+The video was recorded with a scripted browser session rather than by hand, so every click and keystroke is real app behavior.
+The script is [`scripts/record_demo_video.mjs`](scripts/record_demo_video.mjs); see [Recording the demo video](#recording-the-demo-video) to re-record it.
+
+- The dev server ran against the live `data/EventTracker.db` with the Copilot AI provider configured.
+  The database was backed up first because the run saves a real entry.
+- The script drove headless Chromium through Playwright (`@playwright/test` from this repo's `node_modules`) at a 1440x900 viewport, using Playwright's built-in `recordVideo` option.
+- An init script injected a visible cursor dot and a caption banner into every page, so viewers can follow the pointer and see what each step demonstrates.
+- Mouse movements were eased across the screen and URLs and search terms were typed character by character to keep the pace watchable.
+- AI generation took about 95 seconds.
+  The script waited until the `Title` and `Event Summary` fields were filled before continuing, and recorded when generation started and finished.
+- The raw WebM recording was post-processed with ffmpeg (from the `imageio-ffmpeg` package, because Playwright's bundled ffmpeg only encodes VP8 and lacks the trim and concat filters).
+  Using those timestamps, the wait during generation was cut, a "~90 seconds later" label was added at the cut point, and the result was encoded as H.264 MP4.
+- The MP4 was uploaded to GitHub as a README attachment instead of being committed, so it does not add to the repository history.
 
 Event Chat is also available in the current app. It lets you ask natural-language questions about your stored events and receive grounded answers that cite specific entries.
 
@@ -144,23 +144,42 @@ The harness will:
 - give the suite a unique run id and dedicated Playwright group name
 - discard the temporary database when the run completes
 
-## Refreshing Demo Assets
+## Recording the demo video
 
-With the app running locally, regenerate the screenshot set and the main demo GIF with:
+The README video is produced by [`scripts/record_demo_video.mjs`](scripts/record_demo_video.mjs).
+It needs a running server with an AI provider configured, plus the TypeScript Playwright tooling from [Playwright end-to-end tests](#playwright-end-to-end-tests).
 
-```powershell
-uv run --with pillow python .\scripts\generate_demo_assets.py
-```
+The run saves a real entry in the server's database, so back up `data/EventTracker.db` first or point the server at a copy with `EVENTTRACKER_DB_PATH`.
 
-This writes refreshed PNG screenshots into `docs/demo-assets/screenshots/` and rebuilds `docs/demo-assets/EventTracker-demo-web-generate.gif`.
-
-**Note:** The script drives a real browser session and waits up to 180 seconds for the Story Mode generation step to complete, so the full run can take two to three minutes. Let it finish without interruption.
-
-To also build the alternate GIF that omits the filter and search action frames:
+Start the app in one terminal:
 
 ```powershell
-uv run --with pillow python .\scripts\generate_demo_assets.py --also-no-search-actions
+uv run python -m scripts.run_dev
 ```
+
+Record the video in another:
+
+```powershell
+npm run demo:video
+```
+
+The MP4 is written to `demo-output/eventtracker-demo.mp4`, which is git-ignored.
+Upload it to GitHub by dragging it into the README editor on github.com rather than committing it.
+
+Useful options (run `npm run demo:video -- --help` for the full list):
+
+- `--source-url <url>` picks the reference URL for the new entry.
+  The app rejects a second entry with the same source URL in a group, so the script checks this before recording and stops early if the URL is already used.
+- `--group-id <id>` and `--search <text>` change the timeline group and the search term shown.
+- `--base-url <url>` targets a server on another host or port.
+- `--keep-raw` keeps the unedited WebM recording next to the MP4.
+- `--headed` shows the browser while recording.
+
+ffmpeg is taken from `FFMPEG_PATH` when set, otherwise from the `imageio-ffmpeg` package via `uv`.
+The script finds ffmpeg before recording, so a missing encoder fails before any entry is saved.
+If AI generation or saving fails, the script stops and prints the app's error message.
+
+The older screenshot and GIF generator, `scripts/generate_demo_assets.py`, still refreshes the assets under `docs/demo-assets/`, but the README no longer shows them.
 
 ## What the application does today
 
@@ -766,7 +785,8 @@ Copilot mode:
 - Requires `EVENTTRACKER_AI_PROVIDER=copilot`.
 - Uses `COPILOT_CHAT_MODEL_ID`, defaulting to `gpt-5.4`.
 - Falls back to the newest compatible model in the same family if the configured model id is stale.
-- Supports optional `COPILOT_CLI_PATH` and `COPILOT_CLI_URL` overrides.
+- Spawns the Copilot CLI bundled with `github-copilot-sdk` by default.
+- Supports optional, mutually exclusive `COPILOT_CLI_PATH` (spawn a different CLI binary) and `COPILOT_CLI_URL` (connect to an already running CLI server) overrides.
 - Also powers the optional group web search panel.
 
 Both providers are asked to return strict JSON with this shape:
@@ -872,7 +892,7 @@ OPENAI_BASE_URL=https://your-compatible-endpoint/v1   # for non-OpenAI-hosted pr
 
 #### Mode C — Copilot draft generation and group web search
 
-Setting `EVENTTRACKER_AI_PROVIDER=copilot` routes all AI generation through the GitHub Copilot SDK. This is the only mode that enables the **On the web** group web search sidebar. Requires a GitHub Copilot subscription and the Copilot CLI installed and authenticated on the local machine.
+Setting `EVENTTRACKER_AI_PROVIDER=copilot` routes all AI generation through the GitHub Copilot SDK. This is the only mode that enables the **On the web** group web search sidebar. Requires a GitHub Copilot subscription and a signed-in Copilot CLI user on the local machine; the CLI binary itself ships with `github-copilot-sdk`.
 
 Required variables:
 
@@ -884,8 +904,8 @@ COPILOT_CHAT_MODEL_ID=gpt-5.4
 Optional variables:
 
 ```env
-COPILOT_CLI_PATH=                                         # leave blank if `copilot` is already on PATH
-COPILOT_CLI_URL=                                          # leave blank for normal local usage
+COPILOT_CLI_PATH=                                         # leave blank to use the CLI bundled with github-copilot-sdk
+COPILOT_CLI_URL=                                          # leave blank for normal local usage; exclusive with COPILOT_CLI_PATH
 EVENTTRACKER_GROUP_WEB_SEARCH_TIMEOUT_SECONDS=60
 EVENTTRACKER_GROUP_WEB_SEARCH_BROADENED_TIMEOUT_SECONDS=45
 EVENTTRACKER_GROUP_WEB_SEARCH_REQUEST_TIMEOUT_MS=65000
@@ -1185,6 +1205,7 @@ scripts/  # Developer and maintenance entry points
   init_db.py
   merge_and_shrink_pdf.py
   merge_pdfs.py
+  record_demo_video.mjs
   refresh_source_snapshots.py
   run_dev.py
   test_cluster.py

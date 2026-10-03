@@ -61,12 +61,10 @@ class _FakeCopilotSession:
         self.response = response
         self.send_calls: list[dict[str, object]] = []
         self.closed = False
-        self.timeouts: list[float | None] = []
+        self.timeouts: list[float] = []
 
-    async def send_and_wait(
-        self, options: dict[str, object], timeout: float | None = None
-    ) -> object:
-        self.send_calls.append(options)
+    async def send_and_wait(self, prompt: str, *, timeout: float = 60.0) -> object:
+        self.send_calls.append({"prompt": prompt})
         self.timeouts.append(timeout)
         return self.response
 
@@ -90,7 +88,7 @@ class _FakeCopilotClient:
     async def __aexit__(self, exc_type, exc, tb) -> None:
         self.exited = True
 
-    async def create_session(self, config: dict[str, object]) -> _FakeCopilotSession:
+    async def create_session(self, **config: object) -> _FakeCopilotSession:
         self.config = config
         return self.session
 
