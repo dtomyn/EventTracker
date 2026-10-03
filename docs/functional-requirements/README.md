@@ -27,3 +27,4 @@
 - `FR-012-heatmap-visualization.md`: calendar-based heatmap visualization of entry density and day-scoped entry filtering.
 - `FR-013-suggested-entry-connections.md`: AI-assisted relationship discovery between entries and suggestion acceptance workflow.
 - `FR-014-connection-graph-visualization.md`: visual graph display of entry-to-entry connections using D3.js.
+- `FR-015-poster-board.md`: one-screen poster board of the most important entries in scope and its self-contained HTML export.

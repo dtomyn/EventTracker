@@ -353,38 +353,38 @@ class TestParseStoryGroupId(unittest.TestCase):
 
 class TestParseOptionalInt(unittest.TestCase):
     def test_none_returns_none(self) -> None:
-        from app.services.story_mode import _parse_optional_int
+        from app.services.story_mode import parse_optional_int
 
         self.assertIsNone(
-            _parse_optional_int(None, field_name="year", minimum=1900, maximum=2100)
+            parse_optional_int(None, field_name="year", minimum=1900, maximum=2100)
         )
 
     def test_empty_string_returns_none(self) -> None:
-        from app.services.story_mode import _parse_optional_int
+        from app.services.story_mode import parse_optional_int
 
         self.assertIsNone(
-            _parse_optional_int("", field_name="year", minimum=1900, maximum=2100)
+            parse_optional_int("", field_name="year", minimum=1900, maximum=2100)
         )
 
     def test_valid_string(self) -> None:
-        from app.services.story_mode import _parse_optional_int
+        from app.services.story_mode import parse_optional_int
 
         self.assertEqual(
-            _parse_optional_int("2025", field_name="year", minimum=1900, maximum=2100),
+            parse_optional_int("2025", field_name="year", minimum=1900, maximum=2100),
             2025,
         )
 
     def test_out_of_range_raises_value_error(self) -> None:
-        from app.services.story_mode import _parse_optional_int
+        from app.services.story_mode import parse_optional_int
 
         with self.assertRaises(ValueError):
-            _parse_optional_int("3000", field_name="year", minimum=1900, maximum=2100)
+            parse_optional_int("3000", field_name="year", minimum=1900, maximum=2100)
 
     def test_non_numeric_raises_value_error(self) -> None:
-        from app.services.story_mode import _parse_optional_int
+        from app.services.story_mode import parse_optional_int
 
         with self.assertRaises(ValueError):
-            _parse_optional_int("abc", field_name="year", minimum=1900, maximum=2100)
+            parse_optional_int("abc", field_name="year", minimum=1900, maximum=2100)
 
 
 class TestOrderStoryEntries(unittest.TestCase):
