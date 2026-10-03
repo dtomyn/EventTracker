@@ -6,6 +6,26 @@ If you want a simpler version of what this app does, see [README_EXPLAIN_IT_TO_M
 
 ## Demo
 
+### Video walkthrough
+
+A 73-second tour of the main features, using a real timeline:
+
+- Browsing the timeline and switching between the `Details`, `Summaries`, `Months`, `Years`, and `Heatmap` views.
+- Running a full-text search.
+- Creating a new entry from a reference URL, with AI drafting the summary, title, date, and tags.
+- Saving the entry and seeing it appear on the timeline.
+- Opening the `Poster Board`.
+
+<!--
+  VIDEO PLACEHOLDER: replace this comment with the GitHub-hosted video URL.
+  On github.com, edit README.md, drag eventtracker-demo.mp4 into the editor,
+  and GitHub inserts a line like:
+  https://github.com/user-attachments/assets/<id>
+  Keep that URL on its own line so GitHub renders it as an inline video player.
+-->
+
+### Animated walkthrough
+
 ![EventTracker demo](docs/demo-assets/EventTracker-demo-web-generate.gif)
 
 This demo shows the main AI-assisted workflow in EventTracker, from live web discovery to source-backed entry generation.
@@ -104,7 +124,7 @@ Future TypeScript specs should import `test` and `expect` from `tstests/e2e/help
 
 `npm run serve:e2e:ts` still starts a shared local server on `http://127.0.0.1:35231/` for manual debugging and `npm run codegen:e2e`, but the automated TypeScript suite is configured around the isolated harness instead of a shared web server.
 
-The TypeScript suite currently includes specs for smoke tests, entry lifecycle (create/read/edit), timeline view switching, search result navigation, and heatmap visualization. Page Object Models in `tstests/e2e/poms/` cover the timeline, entry form, entry detail, search, and admin groups pages.
+The TypeScript suite currently includes specs for smoke tests, entry lifecycle (create/read/edit), timeline view switching, search result navigation, heatmap visualization, and the poster board. Page Object Models in `tstests/e2e/poms/` cover the timeline, entry form, entry detail, search, admin groups, and poster board pages.
 
 Useful TypeScript Playwright commands:
 
@@ -1123,6 +1143,7 @@ app/  # FastAPI application package
     event_chat.py
     extraction.py
     group_web_search.py
+    poster_board.py
     search.py
     story_mode.py
     topics.py
@@ -1131,11 +1152,17 @@ app/  # FastAPI application package
   templates/  # Server-rendered Jinja templates
     admin_groups.html
     base.html
+    chat.html
+    connection_graph.html
     entry_detail.html
     entry_form.html
-    chat.html
+    poster_board.html
+    poster_board/  # Inlined poster board CSS and JS
+      board.css
+      board.js
     search.html
     story.html
+    story_presentation.html
     timeline.html
     topic_graph.html
     partials/  # Reusable template fragments
@@ -1196,6 +1223,7 @@ tstests/  # TypeScript Playwright E2E tests
   e2e/
     entry-lifecycle-create-read-edit.spec.ts
     heatmap.spec.ts
+    poster-board.spec.ts
     search-result-navigation.spec.ts
     smoke.spec.ts
     timeline-view-switching.spec.ts
@@ -1206,6 +1234,7 @@ tstests/  # TypeScript Playwright E2E tests
       admin-groups-page.ts
       entry-detail-page.ts
       entry-form-page.ts
+      poster-board-page.ts
       search-page.ts
       timeline-page.ts
 ```
