@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "partials/story_links.html" import story_href %}
+{% from "partials/story_links.html" import board_href, story_href %}
 
 {% block content %}
     <div class="timeline-hero mb-4">
@@ -32,6 +32,7 @@
 
         <div class="timeline-hero-actions mt-3">
             <a class="btn btn-primary" href="{{ story_href(selected_group_query_value, query) }}">Story Mode</a>
+            <a class="btn btn-outline-primary ms-2" href="{{ board_href(selected_group_query_value, query) }}" data-poster-board-link>Poster Board</a>
             {% if selected_group_id and embeddings_enabled %}
                 <a class="btn btn-outline-primary ms-2" href="/groups/{{ selected_group_id }}/topics/graph">Tag Clusters</a>
             {% endif %}

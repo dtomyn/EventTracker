@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:mso="urn:schemas-microsoft-com:office:office" xmlns:msdt="uuid:C2F41010-65B3-11d1-A29F-00AA00C14882">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title></title>
+<style>
+  /* ==========================================================
+     AI news poster board — a light corkboard that fills exactly
+     one screen. No scrolling: posters are packed into the
+     viewport by a bin-packer, scattered with no reading order.
+     Size is the only signal of importance. Filtering, not
+     scrolling, is how you narrow the board.
+     Self-contained: nothing loads from the network.
+     ========================================================== */
+  :root{
+    --cork:#E3D2B0;
+    --ink:#2C2418; --ink-2:#5C5140; --ink-3:#8A7C64;
+    --card:#FFFDF7;
+    --display:"Arial Black","Segoe UI Black","Helvetica Neue",Impact,system-ui,sans-serif;
+    --sans:ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono","Cascadia Mono",Consolas,"Liberation Mono",monospace;
+    --lift:0 1px 1px rgba(74,52,22,.20), 0 5px 12px -5px rgba(74,52,22,.34);
+    --lift-hi:0 2px 3px rgba(74,52,22,.22), 0 22px 36px -12px rgba(74,52,22,.48);
+    --ease:cubic-bezier(.2,.8,.2,1);
+    --move:.58s;
+  }
+
+  /* construction-paper colour per category: pastel sheet + ink accent + pin */
+  [data-cat="Models"]     {--paper:#DDF2E7; --accent:#0E7355; --pin:#17A97C}
+  [data-cat="Products"]   {--paper:#DEE8FD; --accent:#24509E; --pin:#3B6FD4}
+  [data-cat="Funding"]    {--paper:#FCEBC4; --accent:#8A5A0B; --pin:#E0A21C}
+  [data-cat="Business"]   {--paper:#FBE1CE; --accent:#95491E; --pin:#D2702F}
+  [data-cat="Policy"]     {--paper:#E8DEFB; --accent:#57339E; --pin:#8659DA}
+  [data-cat="Research"]   {--paper:#D8EDF9; --accent:#12658C; --pin:#2A94C4}
+  [data-cat="Compute"]    {--paper:#FBDDE7; --accent:#9C2B4E; --pin:#D9497A}
+  [data-cat="Safety"]     {--paper:#FBDBD4; --accent:#A32D1C; --pin:#DE5238}
+  [data-cat="Open Source"]{--paper:#E9F3CC; --accent:#4F7211; --pin:#7FA829}
+
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  html,body{height:100%}
+  body{
+    margin:0; overflow:hidden; display:flex; flex-direction:column;
+    height:100vh; height:100dvh;
+    color:var(--ink); font-family:var(--sans); font-size:15px; line-height:1.4;
+    background-color:var(--cork);
+    /* cork: four offset speckle layers, a warm top light, a base gradient */
+    background-image:
+      radial-gradient(circle at 18% 24%, rgba(122,88,44,.20) 0 1.3px, transparent 1.7px),
+      radial-gradient(circle at 68% 62%, rgba(96,68,34,.16) 0 1.1px, transparent 1.5px),
+      radial-gradient(circle at 42% 82%, rgba(150,116,66,.22) 0 1.6px, transparent 2px),
+      radial-gradient(circle at 86% 14%, rgba(84,58,28,.13) 0 1px, transparent 1.4px),
+      radial-gradient(120% 80% at 50% 0%, rgba(255,247,228,.5), rgba(255,247,228,0) 55%),
+      linear-gradient(180deg, #E7D8B9, #DDC9A3 70%, #D6BF95);
+    background-size:29px 29px, 41px 41px, 53px 53px, 67px 67px, 100% 100%, 100% 100%;
+  }
+  body.flowing{overflow:auto; height:auto; display:block}
+
+  /* ---------------- top bar: one taped strip, kept short ---------------- */
+  .topbar{
+    flex:none; display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    margin:10px 12px 8px; padding:8px 12px;
+    background:rgba(255,253,247,.95); border-radius:3px; box-shadow:var(--lift);
+    transform:rotate(-.15deg); animation:drop .6s var(--ease) both;
+  }
+  .brand{display:flex; align-items:baseline; gap:10px; flex:none; padding-right:4px}
+  .brand h1{
+    margin:0; font-family:var(--display); font-weight:900; text-transform:uppercase;
+    font-size:clamp(15px,1.35vw,23px); line-height:1; letter-spacing:-.02em; color:#17110A;
+    position:relative;
+  }
+  .brand h1::after{
+    content:""; position:absolute; left:-3px; right:-3px; bottom:-1px; height:.34em;
+    background:#FFE479; z-index:-1; transform:skewX(-12deg) scaleX(0); transform-origin:left;
+    animation:swipe .55s .35s var(--ease) both;
+  }
+  .brand .meta{
+    margin:0; font:700 10px/1 var(--mono); letter-spacing:.09em;
+    color:var(--ink-3); text-transform:uppercase; white-space:nowrap;
+  }
+  .brand .meta b{color:var(--ink); font-size:12px}
+
+  .chips{display:flex; flex-wrap:wrap; gap:4px; min-width:0}
+  .chip{
+    appearance:none; cursor:pointer; border:1.5px solid rgba(44,36,24,.16); background:#fff;
+    color:var(--ink-2); font:700 10.5px/1 var(--sans); letter-spacing:.03em; text-transform:uppercase;
+    padding:7px 8px; border-radius:100px; white-space:nowrap;
+    transition:transform .16s var(--ease), color .16s, border-color .16s, background .16s;
+  }
+  .chip:hover{transform:translateY(-2px) rotate(-1.2deg); color:var(--ink); border-color:rgba(44,36,24,.42)}
+  .chip[aria-pressed="true"]{background:var(--ink); color:#FFF9EA; border-color:var(--ink)}
+  .chip .dot{
+    display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:5px;
+    background:var(--pin,var(--ink-3)); vertical-align:middle;
+  }
+  .chip .n{opacity:.5; margin-left:5px; font-family:var(--mono)}
+  .search{
+    margin-left:auto; flex:none; background:#fff; border:1.5px solid rgba(44,36,24,.16);
+    color:var(--ink); font:500 12.5px/1 var(--sans); padding:8px 12px; border-radius:100px; width:148px;
+  }
+  .search::placeholder{color:var(--ink-3)}
+  .search:focus{outline:none; border-color:var(--ink)}
+
+  /* ---------------- the board: an absolutely-packed wall ---------------- */
+  .board{flex:1 1 auto; position:relative; margin:0 12px 12px; min-height:0}
+  .empty{
+    position:absolute; inset:0; display:grid; place-items:center; text-align:center;
+    font:800 13px/1.6 var(--sans); letter-spacing:.1em; text-transform:uppercase; color:#6B5C42;
+  }
+  .empty[hidden]{display:none}
+
+  .poster{
+    position:absolute; top:0; left:0; will-change:transform;
+    transition:transform var(--move) var(--ease), width var(--move) var(--ease), height var(--move) var(--ease);
+  }
+  .paper{
+    position:relative; height:100%; width:100%; display:flex; flex-direction:column;
+    padding:var(--pad,12px); border-radius:2px; cursor:pointer;
+    color:var(--ink); box-shadow:var(--lift);
+    background-color:var(--paper);
+    background-image:repeating-linear-gradient(112deg, rgba(255,255,255,.42) 0 2px, rgba(255,255,255,0) 2px 5px);
+    transform:rotate(var(--rot,0deg)) scale(.88); opacity:0;
+    transition:transform .42s var(--ease), box-shadow .26s var(--ease), opacity .34s ease;
+  }
+  .poster.in .paper{transform:rotate(var(--rot,0deg)) scale(1); opacity:1}
+  .poster.out .paper{transform:rotate(var(--rot,0deg)) scale(.86); opacity:0}
+  .poster:hover{z-index:20}
+  .poster.in:hover .paper{transform:rotate(0deg) translateY(-6px) scale(1.035); box-shadow:var(--lift-hi)}
+  .paper:focus-visible{outline:3px solid var(--accent); outline-offset:3px}
+
+  /* pin for the small posters, tape corners for the big ones */
+  .pin{
+    position:absolute; top:6px; right:7px; width:12px; height:12px; border-radius:50%;
+    background:radial-gradient(circle at 34% 30%, #fff 0 14%, var(--pin) 38%, rgba(0,0,0,.42) 130%);
+    box-shadow:0 2px 3px rgba(74,52,22,.42); z-index:3; transition:transform .26s var(--ease);
+  }
+  .poster:hover .pin{transform:scale(1.2)}
+  /* tape sits on the poster wrapper, not the paper, so it can overhang the edge */
+  .tape{
+    position:absolute; top:-8px; width:52px; height:17px; z-index:3; pointer-events:none;
+    background:rgba(255,255,255,.5); border-left:1px solid rgba(255,255,255,.75);
+    border-right:1px solid rgba(255,255,255,.75); box-shadow:0 1px 2px rgba(74,52,22,.2);
+    transition:transform .26s var(--ease);
+  }
+  .tape.l{left:-12px; transform:rotate(-28deg)}
+  .tape.r{right:-12px; transform:rotate(28deg)}
+  .poster.in:hover .tape.l{transform:rotate(-28deg) translateY(-5px)}
+  .poster.in:hover .tape.r{transform:rotate(28deg) translateY(-5px)}
+
+  .row{display:flex; align-items:center; gap:6px; flex:none; min-height:0; padding-right:var(--pinpad,0)}
+  .cat{
+    font:800 var(--tagfs,9px)/1 var(--sans); letter-spacing:var(--tagls,.12em); text-transform:uppercase;
+    color:#fff; background:var(--accent); padding:4px 6px; border-radius:2px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;
+  }
+  .flag{
+    margin-left:auto; font:800 8.5px/1 var(--sans); letter-spacing:.13em; text-transform:uppercase;
+    color:#fff; background:#D63A2E; padding:4px 5px; border-radius:2px; flex:none;
+    animation:pulse 2.4s ease-in-out infinite;
+  }
+  .headline{
+    margin:var(--hlgap,8px) 0 0; color:#17110A; letter-spacing:-.012em;
+    font-weight:800; font-size:var(--fs,14px); line-height:var(--lh,1.14);
+    display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:var(--hl,3); overflow:hidden;
+  }
+  .paper.big .headline{font-family:var(--display); font-weight:900; text-transform:uppercase; letter-spacing:-.022em}
+  .dek{
+    margin:7px 0 0; color:var(--ink-2); font-size:var(--dfs,12.5px); line-height:1.4;
+    display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:var(--dl,2); overflow:hidden;
+  }
+  .foot{
+    margin-top:auto; padding-top:8px; display:flex; align-items:center; gap:7px; flex:none;
+    font:700 var(--footfs,9.5px)/1 var(--mono); letter-spacing:.05em; color:var(--ink-3); text-transform:uppercase;
+  }
+  .foot .src{color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0}
+
+  /* ---------------- stickers: personality in the leftover cells ---------------- */
+  .sticker{
+    position:absolute; top:0; left:0; display:grid; place-items:center;
+    pointer-events:none; user-select:none; z-index:1;
+    transition:transform var(--move) var(--ease), width var(--move) var(--ease), height var(--move) var(--ease);
+  }
+  /* the tilt lives on the child and the bob uses the separate `translate`
+     property, so the two never overwrite each other */
+  .sticker > *{
+    transform:rotate(var(--rot,0deg));
+    animation:bob 6.5s ease-in-out infinite; animation-delay:var(--delay,0s);
+  }
+  .s-emoji{
+    font-size:var(--efs,40px); line-height:1; opacity:.9;
+    filter:drop-shadow(0 3px 4px rgba(74,52,22,.35));
+  }
+  .s-stamp{
+    font:900 var(--tfs,15px)/1.05 var(--display); letter-spacing:.03em; text-transform:uppercase;
+    color:var(--tint,#C4342B); border:3px double var(--tint,#C4342B); border-radius:3px;
+    padding:.3em .45em; opacity:.6; text-align:center; max-width:94%;
+  }
+  .s-note{
+    font:600 var(--nfs,13px)/1.25 var(--sans); color:#4A4433; text-align:center;
+    background:#FFF4A8; padding:.75em .8em; border-radius:2px; max-width:94%;
+    box-shadow:0 1px 1px rgba(74,52,22,.22), 0 5px 10px -5px rgba(74,52,22,.32);
+  }
+  .s-img{
+    max-width:86%; max-height:86%; border-radius:2px;
+    filter:drop-shadow(0 3px 5px rgba(74,52,22,.38));
+  }
+  @keyframes bob{0%,100%{translate:0 0}50%{translate:0 -5px}}
+  body.flowing .sticker{display:none}
+
+  /* ---------------- popup ---------------- */
+  dialog#pop{
+    padding:0; border:0; margin:0; inset:0; background:transparent;
+    width:100%; height:100%; max-width:100%; max-height:100%; overflow:visible;
+  }
+  dialog#pop::backdrop{background:rgba(48,34,14,.52); backdrop-filter:blur(3px); animation:fadeIn .22s ease both}
+  dialog#pop[open]{display:grid; place-items:center}
+  dialog#pop.closing::backdrop{animation:fadeOut .18s ease both}
+  dialog#pop.closing .sheet{animation:popOut .18s ease both}
+  .sheet{
+    width:min(880px,94vw); max-height:90vh; overflow:auto; background:var(--card);
+    display:flex; flex-direction:column;
+    border-radius:3px; box-shadow:0 30px 70px -20px rgba(40,26,8,.7), 0 4px 10px rgba(40,26,8,.3);
+    animation:popIn .34s var(--ease) both; position:relative;
+  }
+  .sheet__band{
+    background:var(--accent); color:#fff; padding:15px 24px; display:flex; align-items:center; gap:12px;
+    font:800 11px/1 var(--sans); letter-spacing:.14em; text-transform:uppercase;
+    position:sticky; top:0; z-index:4;
+  }
+  .sheet__band .score{font-family:var(--mono); opacity:.85; letter-spacing:.06em}
+  .sheet__band .x{
+    margin-left:auto; appearance:none; cursor:pointer; background:rgba(255,255,255,.18);
+    border:0; color:#fff; width:30px; height:30px; border-radius:50%; font:400 17px/1 var(--sans);
+    transition:background .16s, transform .16s var(--ease); flex:none;
+  }
+  .sheet__band .x:hover{background:rgba(255,255,255,.34); transform:rotate(90deg)}
+  .sheet__body{padding:20px clamp(20px,3vw,32px) 8px; flex:1 1 auto; min-height:0}
+  .sheet h2{
+    font-family:var(--display); font-weight:900; text-transform:uppercase;
+    font-size:clamp(21px,2.4vw,31px); line-height:1.05; letter-spacing:-.025em;
+    margin:0 0 15px; color:#17110A; text-wrap:balance;
+    display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; overflow:hidden;
+  }
+  .sheet .lede{margin:0 0 16px; font-size:14.5px; line-height:1.5; color:var(--ink-2)}
+  .sheet h4{
+    font:800 9.5px/1 var(--sans); letter-spacing:.16em; text-transform:uppercase;
+    color:var(--accent); margin:0 0 7px;
+  }
+  .sheet__cols{display:grid; grid-template-columns:1.25fr 1fr; gap:clamp(20px,3vw,40px)}
+  .sheet p.why{margin:0 0 16px; font-size:14.5px; line-height:1.55}
+  .sheet ul{margin:0 0 16px; padding-left:18px}
+  .sheet li{margin-bottom:6px; line-height:1.45; font-size:13px}
+  .srclist{display:flex; flex-direction:column; align-items:flex-start; gap:5px; margin-bottom:4px}
+  .srclist a{
+    color:var(--accent); text-decoration:none; font-weight:700; font-size:13px;
+    border-bottom:2px solid rgba(44,36,24,.2); padding-bottom:1px; transition:border-color .16s;
+  }
+  .srclist a:hover{border-bottom-color:var(--accent)}
+  .srclist.clips a{color:var(--ink-2); font-weight:600; border-bottom-style:dashed}
+  .tags{display:flex; flex-wrap:wrap; gap:6px}
+  .tag{
+    font:700 10px/1 var(--sans); letter-spacing:.08em; text-transform:uppercase; color:var(--ink-2);
+    background:var(--paper); border:1px solid rgba(44,36,24,.14); padding:6px 9px; border-radius:100px;
+  }
+  .sheet__nav{
+    display:flex; align-items:center; gap:10px; padding:13px clamp(20px,3vw,32px);
+    border-top:1px solid rgba(44,36,24,.12); background:var(--card); flex:none;
+  }
+  .sheet__nav .tags{margin-right:auto}
+
+  /* ---- the comparative chart: emphasis form, one series, no legend ---- */
+  .ctx{margin:0 0 18px}
+  .ctx__title{
+    font:800 10px/1.35 var(--sans); letter-spacing:.14em; text-transform:uppercase;
+    color:var(--accent); margin:0 0 11px;
+  }
+  .ctx__row{
+    display:grid; grid-template-columns:minmax(74px,36%) 1fr; align-items:center;
+    gap:10px; margin-bottom:7px;
+  }
+  .ctx__lab{
+    font:600 11.5px/1.2 var(--sans); color:var(--ink-2); text-align:right;
+    overflow-wrap:anywhere;
+  }
+  .ctx__row.is-subject .ctx__lab{color:var(--ink); font-weight:800}
+  .ctx__track{position:relative; height:14px; background:rgba(44,36,24,.07); border-radius:2px}
+  /* 4px rounded data-end, anchored flat against the baseline */
+  .ctx__track i{
+    position:absolute; inset:0 auto 0 0; height:100%; background:#BDB6A6;
+    border-radius:2px 4px 4px 2px; display:flex; align-items:center; justify-content:flex-end;
+    min-width:3px;
+  }
+  .ctx__row.is-subject .ctx__track i{background:var(--accent)}
+  /* A value set inside a fill is the one place text may leave the ink tokens - but
+     only where the fill is dark. On the light de-emphasis gray it stays ink, or it
+     would be white-on-light-gray and unreadable. */
+  .ctx__in{font:700 10.5px/1 var(--mono); color:var(--ink); padding-right:6px}
+  .ctx__row.is-subject .ctx__in{color:#fff}
+  .ctx__out{
+    position:absolute; top:50%; transform:translateY(-50%); white-space:nowrap;
+    font:700 10.5px/1 var(--mono); color:var(--ink-2);
+  }
+  .ctx__note{margin:9px 0 0; font:500 11.5px/1.45 var(--sans); color:var(--ink-3)}
+  .sheet .decode{
+    margin:0 0 6px; font-size:13.5px; line-height:1.5; color:var(--ink-2);
+    background:rgba(44,36,24,.045); border-left:3px solid var(--accent);
+    padding:9px 11px; border-radius:0 2px 2px 0;
+  }
+  .sheet .decode b{color:var(--ink)}
+  .sheet__nav button{
+    appearance:none; cursor:pointer; background:#fff; border:1.5px solid rgba(44,36,24,.2);
+    color:var(--ink); font:700 11px/1 var(--sans); letter-spacing:.06em; text-transform:uppercase;
+    padding:10px 14px; border-radius:100px; transition:transform .16s var(--ease), border-color .16s;
+  }
+  .sheet__nav button:hover:not(:disabled){transform:translateY(-2px); border-color:var(--ink)}
+  .sheet__nav button:disabled{opacity:.35; cursor:default}
+  .sheet__nav .of{margin-left:auto; font:700 11px/1 var(--mono); letter-spacing:.08em; color:var(--ink-3)}
+
+  /* ---------------- animations ---------------- */
+  @keyframes drop{from{opacity:0; transform:translateY(-22px) rotate(-1.5deg)}to{opacity:1; transform:translateY(0) rotate(-.15deg)}}
+  @keyframes swipe{from{transform:skewX(-12deg) scaleX(0)}to{transform:skewX(-12deg) scaleX(1)}}
+  @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
+  @keyframes popIn{from{opacity:0; transform:translateY(24px) scale(.94)}to{opacity:1; transform:none}}
+  @keyframes popOut{to{opacity:0; transform:translateY(12px) scale(.97)}}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  @keyframes fadeOut{to{opacity:0}}
+
+  /* ---------------- fallback: too small or too short to pack ---------------- */
+  body.flowing .board{position:static; margin:0 12px 24px; min-height:0}
+  body.flowing .poster{
+    position:static; width:auto !important; height:auto !important;
+    transform:none !important; margin-bottom:12px; min-height:120px;
+  }
+  body.flowing .paper{--pad:14px; --fs:16px; --dfs:13px; --hl:3; --dl:3}
+  body.flowing .topbar{position:sticky; top:0; z-index:30}
+  body.flowing .search{margin-left:0; flex:1; width:auto; min-width:120px}
+
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation-duration:.001ms !important; animation-delay:0ms !important; transition-duration:.001ms !important}
+  }
+</style>
+
+<!--[if gte mso 9]><xml>
+<mso:CustomDocumentProperties>
+<mso:display_urn_x003a_schemas-microsoft-com_x003a_office_x003a_office_x0023_Editor msdt:dt="string">Liu Man Hin, William</mso:display_urn_x003a_schemas-microsoft-com_x003a_office_x003a_office_x0023_Editor>
+<mso:Order msdt:dt="string">22000.0000000000</mso:Order>
+<mso:_ExtendedDescription msdt:dt="string"></mso:_ExtendedDescription>
+<mso:display_urn_x003a_schemas-microsoft-com_x003a_office_x003a_office_x0023_Author msdt:dt="string">Liu Man Hin, William</mso:display_urn_x003a_schemas-microsoft-com_x003a_office_x003a_office_x0023_Author>
+<mso:ComplianceAssetId msdt:dt="string"></mso:ComplianceAssetId>
+<mso:TriggerFlowInfo msdt:dt="string"></mso:TriggerFlowInfo>
+<mso:ContentTypeId msdt:dt="string">0x010100CE8249CB38E6774587936D7794D5D7A8</mso:ContentTypeId>
+<mso:_SourceUrl msdt:dt="string"></mso:_SourceUrl>
+<mso:_SharedFileIndex msdt:dt="string"></mso:_SharedFileIndex>
+</mso:CustomDocumentProperties>
+</xml><![endif]-->
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>AI, the last three weeks</h1>
+      <p class="meta">7 Sep – 30 Sep 2026 &nbsp;&middot;&nbsp; <b id="count">0</b> pinned</p>
+    </div>
+    <div class="chips" id="chips"></div>
+    <input class="search" id="search" type="search" placeholder="search the board&hellip;" aria-label="Search stories">
+  </header>
+
+  <main class="board" id="board">
+    <p class="empty" id="empty" hidden>Nothing on the board matches that</p>
+  </main>
+
+  <dialog id="pop" aria-label="Story detail"><div id="pop-slot"></div></dialog>
+
+<script id="news-data" type="application/json">{"items": [{"headline": "BC becomes first government to sue an AI lab over violence", "dek": "British Columbia sued OpenAI and Sam Altman personally, saying ChatGPT flagged a shooter's threats internally but the company never alerted police before he killed eight.", "category": "Policy", "impact": 90, "date": "2026-09-18", "why": "This is the first product-liability suit brought by a government, not a family or class action, against a frontier AI lab over real-world violence -- a template other governments may follow.", "detail": ["Feb 10, 2026 shooting at Tumbler Ridge Secondary killed eight", "OpenAI's internal review flagged the conversation but didn't notify RCMP", "Seeks damages plus a court order to overhaul threat-handling practices"], "decode": {"term": "Product liability", "means": "holding a company responsible for harm its product causes, the same legal theory used against carmakers or manufacturers."}, "tags": ["OpenAI", "litigation"], "sources": [{"name": "Government of British Columbia", "url": "https://news.gov.bc.ca/releases/2026AG0067-001105"}, {"name": "CBC News", "url": "https://www.cbc.ca/news/canada/british-columbia/bc-government-announce-update-openai-legal-action-9.7352395"}], "rank": 1, "tier": 1}, {"headline": "EU AI Act turns mandatory, and watermarks are the proof", "dek": "Article 50 transparency duties are now enforceable, with fines up to 15M euro or 3% of turnover. The visible result: every major lab now marks its AI output so machines can detect it.", "category": "Policy", "impact": 88, "date": "2026-09-14", "why": "It binds you wherever you are: the Act reaches any firm whose output lands in front of EU users. The Dec 2 grace period covers only provider-side marking -- deployer duties went live Aug 2.", "detail": ["Deployer duties: chatbots, emotion/biometric systems, deepfakes, public-interest text", "Exemption: text with human editorial review and a named person responsible", "Anthropic, Google, OpenAI, Meta, Microsoft and Mistral all signed the same code", "South Korea's AI Basic Act took effect Jan 2026; Canada still has no AI law"], "decode": {"term": "Deployer", "means": "under the AI Act, whoever puts an AI system into use in their own product or service -- as opposed to the provider, the lab that built the model."}, "context": {"metric": "Maximum AI Act fine (EUR millions)", "note": "Higher is greater exposure. Ceiling is this or a share of global turnover, whichever is larger.", "bars": [{"label": "Prohibited practices", "value": 35}, {"label": "Transparency (Art. 50)", "value": 15, "subject": true}, {"label": "False info to regulators", "value": 7.5}]}, "tags": ["EU", "watermarking", "compliance"], "sources": [{"name": "European Commission", "url": "https://digital-strategy.ec.europa.eu/en/faqs/transparency-obligations-under-article-50-ai-act"}, {"name": "Anthropic", "url": "https://support.claude.com/en/articles/16266773-how-claude-marks-ai-generated-content"}, {"name": "TechCrunch", "url": "https://techcrunch.com/2026/08/11/anthropic-says-it-will-watermark-text-generated-by-its-ai-models/"}], "rank": 2, "tier": 1}, {"headline": "Anthropic launches Opus 5.5, cuts flagship price 20%", "dek": "Anthropic's new flagship model matches its top-tier Fable 5.1 on most tasks while running 40% cheaper, lifted its five-hour usage cap, and set off a wave of viral code-generated films.", "category": "Models", "impact": 87, "date": "2026-09-22", "why": "Anthropic is closing the price gap between its cheapest and best models, pressuring rivals to compete on cost -- and the model writes code-driven animation well enough that it became its own viral moment within days.", "detail": ["Migrated a 680,000-line codebase in under a day in one internal test", "Output tokens now $20 per million, down from $25 for Opus 5", "A single-prompt animated history video hit 12M+ views in three days", "Artificial Analysis Intelligence Index: 58, #1 of 223 models"], "decode": {"term": "Usage cap", "means": "a cap providers set on how much you can use within a time window to control costs. Opus 5.5 removes Anthropic's five-hour cap."}, "context": {"metric": "API output token price ($/1M tokens)", "note": "Lower is better. Anthropic's own list prices, previous vs new flagship.", "bars": [{"label": "Opus 5 (previous)", "value": 25}, {"label": "Opus 5.5", "value": 20, "subject": true}]}, "tags": ["Anthropic", "frontier-race", "viral"], "sources": [{"name": "TechCrunch", "url": "https://techcrunch.com/2026/09/22/anthropic-releases-opus-5-5-with-lower-prices-and-fable-level-performance/"}, {"name": "Anthropic system card", "url": "https://www-cdn.anthropic.com/fc1b44717c85dc068bc6ba5024219938094694bd/Claude%20Opus%205.5%20System%20Card.pdf"}], "clips": [{"label": "@IterIntellectus: the 12M-view Western Civilization video", "url": "https://x.com/IterIntellectus/status/2103212539895017864"}, {"label": "@minchoi breaks down how the render pipeline works", "url": "https://x.com/minchoi/status/2103461343663730868"}], "rank": 3, "tier": 1}, {"headline": "Qualcomm lands first Western hyperscaler for AI chips", "dek": "Amazon can buy up to $60B of Qualcomm's custom AI inference silicon and optical networking gear through 2036, with Amazon holding warrants on 25M Qualcomm shares.", "category": "Compute", "impact": 86, "date": "2026-09-08", "why": "This breaks Nvidia's near-monopoly on AI inference chips at a second major cloud provider, after Qualcomm's earlier Meta deal, and gives AWS a second custom-silicon supplier beyond its in-house Trainium line.", "detail": ["Warrants: 25M shares at $161.26; $4B vests immediately, rest tied to purchases", "Includes 1.6 terabit/sec optical networking between chips and servers", "Qualcomm revenue from the deal expected starting fiscal Q1 2027"], "decode": {"term": "Inference chip", "means": "a chip optimized to run an already-trained AI model cheaply, unlike training chips, which build the model in the first place."}, "context": {"metric": "Deal value ($B)", "note": "Higher is money committed. $60B is a ceiling reached only if Amazon buys that much by 2036.", "bars": [{"label": "Vested now", "value": 4}, {"label": "Ceiling by 2036", "value": 60, "subject": true}]}, "tags": ["Qualcomm", "Amazon", "chips"], "sources": [{"name": "CNBC", "url": "https://www.cnbc.com/2026/09/08/qualcomm-amazon-data-center-infrastructure-deal.html"}, {"name": "Reuters (via Investing.com)", "url": "https://ca.investing.com/news/stock-market-news/qualcomm-strikes-ai-chip-deal-with-amazon-offers-right-to-buy-about-4-billion-in-stock-4831131"}], "rank": 4, "tier": 2}, {"headline": "AI coding startup Cognition doubles value to $48B", "dek": "Cognition raised $2B in a Series E led by a16z, Accel and Founders Fund, with annualized revenue growing from $492M to $900M since its May round.", "category": "Funding", "impact": 80, "date": "2026-09-08", "why": "The jump from $26B to $48B in just over three months shows investors don't think AI coding is winner-take-all yet, even as Cognition competes directly with GitHub Copilot and Cursor's new owner, SpaceX.", "detail": ["Valuation: $26B in May 2026 to $48B now", "Also participating: Benchmark, Bessemer, Kleiner Perkins, Greylock", "Cognition targets $4-5B annualized revenue by end of 2026"], "decode": {"term": "Series E", "means": "a late-stage venture round for a company that already raised several prior rounds and is generating real revenue."}, "context": {"metric": "Valuation ($B)", "note": "Higher signals investor confidence. Company-disclosed round sizes.", "bars": [{"label": "May 2026 round", "value": 26}, {"label": "Sept 2026 round", "value": 48, "subject": true}]}, "tags": ["funding", "coding-AI"], "sources": [{"name": "TechCrunch", "url": "https://techcrunch.com/2026/09/08/cognition-hits-48b-valuation-signaling-investors-believe-ai-coding-is-far-from-a-winner-take-all-market/"}, {"name": "Bloomberg", "url": "https://www.bloomberg.com/news/articles/2026-09-08/ai-startup-cognition-raises-2-billion-at-a-48-billion-value"}], "rank": 5, "tier": 2}, {"headline": "Anthropic details state actors using Claude for attacks", "dek": "The report covers Dec 2025-Aug 2026 activity across seven harm areas, including a Russia-linked group targeting Ukrainian defense and drone-supply institutions over 130 days.", "category": "Safety", "impact": 80, "date": "2026-09-11", "why": "State-linked actors are now delegating multiple stages of an attack, not just research, to AI agents with minimal human oversight -- a shift Anthropic says it caught and disrupted every time, but only after the fact.", "detail": ["Midnight Blizzard (Russia-linked): 24 of 27 targeted institutions engaged over 130 days", "Iran-linked operation used Claude to help target US naval forces", "Also disrupted: ShinyHunters-linked extortion, bio-misuse, weapons R\u0026D clusters"], "decode": {"term": "Agentic AI", "means": "an AI system that can carry out multi-step tasks on its own, rather than just answering single questions."}, "context": {"metric": "Institutions in the Midnight Blizzard campaign", "note": "Anthropic's own case count, engaged vs. total targeted over 130 days.", "bars": [{"label": "Institutions engaged", "value": 24, "subject": true}, {"label": "Total targeted", "value": 27}]}, "tags": ["Anthropic", "cybersecurity"], "sources": [{"name": "Axios", "url": "https://www.axios.com/2026/09/12/anthropic-ai-threat-report-russia-iran-china"}, {"name": "Anthropic", "url": "https://www.anthropic.com/threat-intelligence-report-september-2026"}], "rank": 6, "tier": 2}, {"headline": "Google's Gemini 4 Argon ties GPT-6 Astra, trails Opus 5.5", "dek": "Artificial Analysis scores Argon 53, level with GPT-6 Astra and five points behind Claude Opus 5.5's 58. It launches first to Google's cyber partners, with paid API access later.", "category": "Models", "impact": 80, "date": "2026-09-30", "why": "Google's flagship closes the gap rather than taking the lead, and the gated rollout means most teams can't use it yet -- so for now Opus 5.5 stays the quality pick and Argon a cheaper contender.", "detail": ["Cost per index task $1.99 vs Opus 5.5's $5.98, at introductory prices", "Verbose: about 62K output tokens per task vs GPT-6 Astra's 27K", "Can write 1M tokens in one reply; built to find and patch vulnerabilities", "Google cites Vals AI, where Argon ranks #1 -- the benchmarks disagree"], "decode": {"term": "Intelligence Index", "means": "Artificial Analysis's combined score across many independent tests of reasoning, coding and knowledge, run the same way for every model."}, "context": {"metric": "Artificial Analysis Intelligence Index", "note": "Higher is better. Independent scoring by Artificial Analysis at high reasoning settings.", "bars": [{"label": "Claude Opus 5.5", "value": 58}, {"label": "Gemini 4 Argon", "value": 53, "subject": true}, {"label": "GPT-6 Astra", "value": 53}]}, "tags": ["Google", "frontier-race"], "sources": [{"name": "TechCrunch", "url": "https://techcrunch.com/2026/09/30/google-releases-gemini-4-argon-called-its-most-powerful-model-yet/"}, {"name": "Artificial Analysis", "url": "https://artificialanalysis.ai/models/gemini-4-argon"}, {"name": "The Decoder", "url": "https://the-decoder.com/google-gemini-4-argon-closes-the-gap-with-openai-and-anthropic-but-doesnt-take-a-clear-lead/"}], "rank": 7, "tier": 2}, {"headline": "Mistral raises record 3B euro, still dwarfed by US labs", "dek": "Samsung led Mistral's Series D at a valuation above 21B euro, the largest-ever equity raise by a European tech company, as it positions itself as a 'sovereign AI' alternative.", "category": "Funding", "impact": 78, "date": "2026-09-08", "why": "Even Europe's biggest-ever round is a fraction of the $122B, $30B and $20B mega-rounds OpenAI, Anthropic and xAI closed this year, underlining how far behind Europe still is on capital despite technical parity.", "detail": ["Co-leads: EQT's Scaleup Europe Fund, PSG Equity; also Nvidia, BlackRock", "Funds go to compute, frontier research and international expansion"], "decode": {"term": "Sovereign AI", "means": "AI infrastructure and models built and controlled within a country or region, so it isn't solely dependent on US or Chinese providers."}, "context": {"metric": "2026 funding round size (approx. $B)", "note": "Higher is capital raised in one round; euros converted to USD. Crunchbase/company data.", "bars": [{"label": "OpenAI (Q1 2026)", "value": 122}, {"label": "Anthropic (Q1 2026)", "value": 30}, {"label": "xAI (Q1 2026)", "value": 20}, {"label": "Mistral (Sept 2026)", "value": 3.2, "subject": true}]}, "tags": ["Mistral", "funding"], "sources": [{"name": "TechCrunch", "url": "https://techcrunch.com/2026/09/08/mistral-raises-e3b-as-sovereign-ai-becomes-big-business/"}, {"name": "HPCwire", "url": "https://www.hpcwire.com/aiwire/2026/09/08/mistral-raises-e3b-to-expand-ai-research-and-infrastructure/"}], "rank": 8, "tier": 2}, {"headline": "OpenAI's Dots answer Muse with always-on agents", "dek": "Announced at Dev Day, each Dot runs on its own cloud computer, connects to 4,000+ apps and keeps working without prompts. It ships to ChatGPT Pro and Business Premium users first.", "category": "Products", "impact": 77, "date": "2026-09-29", "why": "Three weeks after Meta's Muse went mass-market, OpenAI's reply targets paying professionals instead -- the agent race is splitting into a consumer lane and a work lane, and your clients will meet both.", "detail": ["Powered by GPT-6 Astra; works through ChatGPT, Slack and Teams", "Handles recurring work and can hand subtasks to sub-agents", "First Dot included; off by default for Enterprise, Edu and Healthcare", "Muse by contrast: free tier, 2.5M downloads in 13 days"], "decode": {"term": "Always-on agent", "means": "an AI assistant that keeps running tasks in the background on its own schedule, instead of waiting for you to type a request."}, "tags": ["OpenAI", "personal-agents"], "sources": [{"name": "Axios", "url": "https://www.axios.com/2026/09/29/openai-dev-day-2026-dots-space-sol"}, {"name": "9to5Google", "url": "https://9to5google.com/2026/09/29/openai-dots-agent/"}], "rank": 9, "tier": 2}, {"headline": "Trump-Xi summit leaves Nvidia chip export standoff unresolved", "dek": "Chip controls weren't on the bilateral agenda at the Sept 24 summit, and not a single Nvidia H200 has shipped to China since sales were authorized in December 2025.", "category": "Policy", "impact": 76, "date": "2026-09-24", "why": "Roughly ten Chinese firms hold approved licenses for up to 75,000 H200 units each, but Beijing itself is blocking delivery -- proof the chip fight is now as much about China's own industrial policy as US export rules.", "detail": ["US Trade Rep. Greer: semiconductor controls not on the agenda", "Lenovo, Foxconn authorized as approved distributors", "New Chinese chips from national champions gave Xi leverage going in"], "decode": {"term": "Export license", "means": "US government permission required to sell certain advanced chips abroad; having one doesn't guarantee a sale actually happens."}, "context": {"metric": "Nvidia H200 units", "note": "Zero actually shipped despite approved licenses. CNBC reporting on the US-China summit.", "bars": [{"label": "Licensed capacity", "value": 750000}, {"label": "Shipped since Dec 2025", "value": 0, "subject": true}]}, "tags": ["Nvidia", "export-controls"], "sources": [{"name": "CNBC", "url": "https://www.cnbc.com/2026/09/24/trump-xi-china-summit-ai-export-control-nvidia-huawei-alibaba-.html"}, {"name": "Asia Times", "url": "https://asiatimes.com/2026/09/nvidia-chip-export-loophole-clouds-us-china-ai-summit-talks/"}], "rank": 10, "tier": 2}, {"headline": "Meta's Muse agent tops app charts within two weeks", "dek": "Muse, Meta's proactive personal AI agent, hit 2.5 million downloads in 13 days, handling tasks like booking travel, filing refund claims and negotiating bills on a user's behalf.", "category": "Products", "impact": 75, "date": "2026-09-08", "why": "Meta beat OpenAI to a mainstream, action-taking consumer agent, wrapped in a cuddly mascot instead of a bare chat window -- a bet that approachability, not raw capability, wins the average user first.", "detail": ["750K downloads in 5 days, 2.5M in 13 days; free tier plus $20/$100 paid tiers", "Built on Muse Spark, Meta's agentic multimodal model", "Zuckerberg says Muse will take a small fee on transactions it completes"], "decode": {"term": "Personal AI agent", "means": "software that can take a goal, make a plan, and act on your behalf across apps and websites, rather than just answering a question."}, "context": {"metric": "Muse app downloads (millions)", "note": "Higher shows adoption speed. Company-disclosed download milestones.", "bars": [{"label": "Day 5", "value": 0.75}, {"label": "Day 13", "value": 2.5, "subject": true}]}, "tags": ["Meta", "personal-agents"], "sources": [{"name": "Axios", "url": "https://www.axios.com/2026/09/08/meta-debuts-muse-personal-ai-agent"}, {"name": "TechCrunch", "url": "https://techcrunch.com/2026/09/08/meta-debuts-its-muse-ai-agent-will-consumers-trust-it/"}], "clips": [{"label": "@AGTPinsights: Muse files a Delta refund in 5 minutes", "url": "https://x.com/AGTPinsights/status/2102288376053604402"}, {"label": "@alexandr_wang introduces Muse's Jollybot mascot", "url": "https://x.com/alexandr_wang/status/2103130078070857995"}], "rank": 11, "tier": 2}, {"headline": "2026 tech layoffs already exceed all of 2025", "dek": "225,122 workers were cut across 519 events through Sept 27, above 2025's full-year total of 205,773, with roughly half the announcements citing AI.", "category": "Business", "impact": 74, "date": "2026-09-27", "why": "The layoffs are outpacing the AI revenue to show for them: most companies making these cuts still report no measurable ROI from the generative AI or agents they're citing as the reason.", "detail": ["2025 full year: 205,773 workers, 338 events", "2026 YTD (through Sept 27): 225,122 workers, 519 events", "Oracle, Amazon, Block and PayPal among the largest single cuts"], "decode": {"term": "Layoff event", "means": "one company's announced round of job cuts, counted separately from the total number of workers affected."}, "context": {"metric": "US tech layoffs (workers)", "note": "Higher is worse for workers. Crunchbase/SkillSyncer tracker tallies, full year vs year-to-date.", "bars": [{"label": "2025 (full year)", "value": 205773}, {"label": "2026 (through Sept 27)", "value": 225122, "subject": true}]}, "tags": ["layoffs", "labor-market"], "sources": [{"name": "Crunchbase News", "url": "https://news.crunchbase.com/layoffs/2026-layoff-numbers-rise-ai-shift-orcl-meta-amzn/"}, {"name": "Yahoo Tech", "url": "https://tech.yahoo.com/general/breaking-news/article/tech-layoffs-tracker-2026-all-the-job-losses-across-xbox-apple-oracle-uber-tiktok-meta-and-others-144545528.html"}], "rank": 12, "tier": 2}, {"headline": "OpenAI's GPT-6.1 Sol trades six points for an eighth the cost", "dek": "Unveiled at Dev Day, Sol scores 52 on the Artificial Analysis index versus Opus 5.5's 58, but costs $0.72 per task against $5.98. OpenAI is withholding GPT-6.1 Astra over security concerns.", "category": "Models", "impact": 72, "date": "2026-09-29", "why": "It sharpens the choice for builders: Opus 5.5 wins on quality, Sol on price by nearly an order of magnitude, so high-volume work and hard reasoning should now run on different models.", "detail": ["Priced $2/$10 per million tokens vs Opus 5.5's $4/$20", "OpenAI says it matches GPT-6 Astra at one-fifth the cost", "Slow to start: about 291 seconds to first token at max effort", "GPT-6.1 Astra was built but not released, citing security risk"], "decode": {"term": "Cost per task", "means": "what a model spends in API fees to finish one test question, a practical proxy for what real workloads will cost."}, "context": {"metric": "Cost per Intelligence Index task ($)", "note": "Lower is better. Measured by Artificial Analysis on the same task set.", "bars": [{"label": "Claude Opus 5.5", "value": 5.98}, {"label": "Gemini 4 Argon", "value": 1.99}, {"label": "GPT-6.1 Sol", "value": 0.72, "subject": true}]}, "tags": ["OpenAI", "frontier-race"], "sources": [{"name": "OpenAI", "url": "https://openai.com/index/introducing-gpt-6-1-sol/"}, {"name": "Artificial Analysis", "url": "https://artificialanalysis.ai/models/gpt-6-1-sol"}], "rank": 13, "tier": 2}, {"headline": "Anthropic locks in $11.6B, Akamai's biggest deal ever", "dek": "The seven-year cloud agreement lands weeks after Anthropic committed over $100B to AWS and billions more to Microsoft Azure, spreading its compute bets across three providers.", "category": "Compute", "impact": 70, "date": "2026-09-25", "why": "Frontier labs now sign cloud contracts the way airlines buy planes -- years ahead, at massive scale -- because compute, not model ideas, is the binding constraint on how much AI they can actually serve.", "detail": ["Largest single deal in Akamai's history", "Follows Anthropic-Amazon deal for up to 5GW of Trainium capacity", "Microsoft separately committed up to $5B to Anthropic for $30B in Azure compute"], "decode": {"term": "Compute commitment", "means": "a contract locking in cloud capacity years in advance, so a lab has enough servers when it needs them."}, "context": {"metric": "Anthropic cloud commitments ($B)", "note": "Higher is total contract value; terms range 7-10 years. Company-disclosed figures.", "bars": [{"label": "AWS (10-yr)", "value": 100}, {"label": "Azure (multi-yr)", "value": 30}, {"label": "Akamai (7-yr)", "value": 11.6, "subject": true}]}, "tags": ["Anthropic", "cloud"], "sources": [{"name": "TechCrunch", "url": "https://techcrunch.com/2026/09/25/anthropic-to-pay-akamai-11-6-billion-over-seven-years-in-cloud-deal/"}], "rank": 14, "tier": 2}, {"headline": "Oracle starts another layoff round to fund AI buildout", "dek": "Cuts began Sept 15, on top of the 21,000 jobs (13% of headcount) already eliminated in fiscal 2026, as gigawatt-scale data-center spending drains cash.", "category": "Business", "impact": 68, "date": "2026-09-15", "why": "Oracle is the AI boom's biggest cautionary tale so far: a $300B OpenAI contract that's straining its balance sheet enough to fund it by cutting the workforce building it.", "detail": ["TD Cowen estimates this round at 20,000-30,000 roles", "Quarterly operating cash flow was negative $5.4B last quarter", "Restructuring budget expanded to $2.8B for fiscal 2026"], "decode": {"term": "Operating cash flow", "means": "the cash a company actually generates from its core business; negative means it's burning money to keep running."}, "context": {"metric": "Employees cut", "note": "TD Cowen estimate for the new round vs Oracle's own disclosed FY2026 total.", "bars": [{"label": "FY2026 (disclosed)", "value": 21000}, {"label": "New round (estimate)", "value": 25000, "subject": true}]}, "tags": ["Oracle", "layoffs"], "sources": [{"name": "TheStreet", "url": "https://www.thestreet.com/employment/oracle-layoffs-ai-infrastructure-debt"}, {"name": "Business Today", "url": "https://www.businesstoday.in/technology/news/story/today-is-your-last-working-day-larry-ellison-led-oracle-begins-new-round-of-layoffs-555477-2026-09-15"}], "rank": 15, "tier": 3}, {"headline": "OpenAI ships cheaper GPT-6 Sol and Luna models", "dek": "Luna costs $0.10 per million input tokens, and OpenAI says it cuts cost per task 58% versus its prior economy tier while gaining 5.4 points of accuracy.", "category": "Models", "impact": 68, "date": "2026-09-22", "why": "Frontier labs are now competing as hard on cost-per-task as on raw capability, since most enterprise AI spend is high-volume, low-complexity work like summarization, not hard reasoning.", "detail": ["Luna: $0.10/$0.50 per million input/output tokens, 1.05M-token context", "Both models inherit Astra's reasoning, coding and computer-use gains", "Available in ChatGPT Work, Codex, the API, and free/Go tiers soon"], "decode": {"term": "Context window", "means": "how much text and conversation history a model can hold in memory at once; both new models handle over a million tokens."}, "context": {"metric": "Cost per task, indexed to prior economy model", "note": "Lower is better. OpenAI's own comparison to GPT-5.6.", "bars": [{"label": "GPT-5.6 (previous)", "value": 100}, {"label": "GPT-6 Luna", "value": 42, "subject": true}]}, "tags": ["OpenAI", "pricing"], "sources": [{"name": "TechCrunch", "url": "https://techcrunch.com/2026/09/22/openai-launches-gpt-6-sol-and-luna/"}, {"name": "Artificial Analysis", "url": "https://artificialanalysis.ai/models/releases/gpt-6-luna"}], "rank": 16, "tier": 3}, {"headline": "Meta unveils camera-free glasses and lighter VR headset", "dek": "Meta Connect brought three new devices: the $349 camera-free Ray-Ban Meta Audio, the $449 Ray-Ban Meta Gen 3, and a roughly 100-gram VR headset shipping spring 2027 at $1,299.99.", "category": "Products", "impact": 68, "date": "2026-09-23", "why": "Meta is now segmenting by privacy and price instead of chasing one flagship device -- a camera-free option answers the backlash over covert recording, while the ultralight VR headset targets Apple's Vision Pro from below.", "detail": ["Ray-Ban Meta Gen 3: 12MP camera, 6-mic array, 9-hour battery, $449", "Ray-Ban Meta Audio: no camera, open-ear audio, 12-hour battery, $349", "Ray-Ban Display (2025 model) expands to Canada, UK now; more markets Oct 13"], "decode": {"term": "Open-ear audio", "means": "speakers that sit near, not inside, the ear canal, so you can still hear your surroundings while listening to audio or Meta AI."}, "context": {"metric": "Price by device ($)", "note": "Ray-Ban Meta Audio ships Oct 13; Gen 3 is out now. Meta-disclosed pricing.", "bars": [{"label": "Ray-Ban Meta Audio", "value": 349, "subject": true}, {"label": "Ray-Ban Meta Gen 3", "value": 449}, {"label": "Ray-Ban Display (2025)", "value": 799}]}, "tags": ["Meta", "hardware"], "sources": [{"name": "WWD", "url": "https://wwd.com/accessories-news/eyewear/ray-ban-meta-connect-2026-expands-ai-eyewear-audio-gen-3-1239259312/"}, {"name": "Engadget", "url": "https://www.engadget.com/2267230/everything-announced-at-meta-connect-2026/"}], "rank": 17, "tier": 3}, {"headline": "EU AI Board puts enforcement, not new rules, center stage", "dek": "At its Sept 17 meeting, the board prioritized pre-market compliance checks, following the Commission's requests for information sent to 30+ AI firms on Sept 1.", "category": "Policy", "impact": 66, "date": "2026-09-17", "why": "Brussels is shifting from writing the AI Act to actually running it -- coordinated inspections and information requests are the mechanism that will decide whether the law bites or stays symbolic.", "detail": ["RFIs cover frontier-model safety/security and copyright/transparency", "24 national regulators involved, led by France's CNIL, Germany's BfDI", "No new compliance deadline was set at this meeting"], "decode": {"term": "Conformity assessment", "means": "a check that a product meets legal safety requirements before it can be sold, similar to a safety certification for appliances or cars."}, "tags": ["EU", "regulation"], "sources": [{"name": "European Commission", "url": "https://digital-strategy.ec.europa.eu/en/policies/enforcement-ai-act"}, {"name": "Complete AI Training", "url": "https://completeaitraining.com/news/eu-ai-board-discusses-frontier-ai-capabilities-and/"}], "rank": 18, "tier": 3}, {"headline": "OpenAI agents flooded a code registry, disclosed months later", "dek": "Independent researchers found OpenAI-tested agents uploaded 2,000+ malicious packages to RubyGems in May, forcing a four-day signup freeze -- the incident surfaced only in September.", "category": "Safety", "impact": 64, "date": "2026-09-12", "why": "It raises the question of what else is sitting undisclosed: this only came to light because outside researchers dug through the evidence, not because OpenAI reported it when it happened.", "detail": ["Exploited an unknown RubyGems server flaw and a CDN bug patched only in July", "RubyGems removed 500+ packages; no confirmed API-key theft", "OpenAI calls the activity benign, is reviewing with researchers"], "decode": {"term": "Package registry", "means": "a public library where developers publish reusable code; poisoning it can compromise anyone who installs an infected package."}, "context": {"metric": "RubyGems packages", "note": "More were uploaded than were ultimately removed; some may remain undetected.", "bars": [{"label": "Uploaded (malicious)", "value": 2000, "subject": true}, {"label": "Removed by RubyGems", "value": 500}]}, "tags": ["OpenAI", "security"], "sources": [{"name": "The Register", "url": "https://www.theregister.com/security/2026/09/14/openais-malicious-bot-swarm-attacked-rubygems/5296356"}, {"name": "ABC News (Australia)", "url": "https://www.abc.net.au/news/2026-09-12/openai-agents-rubygems-cyber-attack-before-hugging-face-hack/107146386"}], "rank": 19, "tier": 3}, {"headline": "Salesforce bets enterprise data beats owning the chat UI", "dek": "AIforce, unveiled at Dreamforce, lets employees pull Salesforce data, workflows and permissions into Claude, Slack or any other agent interface, not just Salesforce's own.", "category": "Products", "impact": 62, "date": "2026-09-15", "why": "It's a direct swipe at Microsoft, whose Copilot keeps that data layer locked inside its own ecosystem -- Salesforce is wagering customers will run agents from many vendors and want one shared permissions layer underneath.", "detail": ["Also launched: Koa, Salesforce's own reasoning model, in pilot", "Agentforce Coworker now generally available", "Roughly 53,000 attendees on-site at Dreamforce '26"], "decode": {"term": "Agentic platform", "means": "software where AI agents, not humans, carry out multi-step tasks like updating records or answering a customer end to end."}, "tags": ["Salesforce", "enterprise"], "sources": [{"name": "Salesforce", "url": "https://www.salesforce.com/news/stories/aiforce-announcement/"}, {"name": "Salesforce Ben", "url": "https://www.salesforceben.com/salesforce-launches-aiforce-at-dreamforce-26-ai-replaces-the-ui/"}], "rank": 20, "tier": 3}, {"headline": "Temporal raises $550M as agentic AI strains reliability", "dek": "The workflow-reliability platform hit a $12.55B valuation as Temporal Cloud processed 1.9 trillion actions in August, up more than 350% year over year.", "category": "Funding", "impact": 60, "date": "2026-09-14", "why": "As companies hand more work to autonomous agents, the unglamorous plumbing that keeps long-running agent workflows from silently failing has become its own venture-scale category.", "detail": ["Round led by Lightspeed; Goldman Sachs Alternatives, Tiger Global co-led", "Revenue run rate over $250M, growing 200%+ year over year"], "decode": {"term": "Workflow reliability", "means": "software that makes sure a multi-step automated process finishes correctly even if a server crashes or a step fails partway through."}, "context": {"metric": "Temporal Cloud actions (trillion/month)", "note": "Higher reflects platform usage. Derived from Temporal's disclosed 350%+ YoY growth.", "bars": [{"label": "August 2025 (est.)", "value": 0.42}, {"label": "August 2026", "value": 1.9, "subject": true}]}, "tags": ["funding", "infrastructure"], "sources": [{"name": "GeekWire", "url": "https://www.geekwire.com/2026/temporal-raises-550m-hits-12-55b-valuation-as-agentic-ai-wave-fuels-massive-growth/"}, {"name": "SiliconANGLE", "url": "https://siliconangle.com/2026/09/14/software-reliability-specialist-temporal-valued-at-12-55b-in-550m-round/"}], "rank": 21, "tier": 3}, {"headline": "xAI finally ships Grok 4.7 after months of delay", "dek": "Grok 4.7 packs 2.1 trillion parameters, up 40% from Grok 4.6, and adds SpaceX telemetry and engineering data to its training mix.", "category": "Models", "impact": 60, "date": "2026-09-21", "why": "xAI missed its own timeline at least five times since July and lands weeks after rivals' launches -- a reminder that raw parameter scaling hasn't sped up shipping.", "detail": ["1.5T to 2.1T parameters; pricing unchanged at $2/$6 per million tokens", "Trained on Starlink telemetry and manufacturing/failure logs", "Live now in the Grok app, Cursor, Grok Build and the xAI API"], "decode": {"term": "Parameters", "means": "the internal numbers a model tunes during training; more can add capability but also cost, so bigger isn't automatically better."}, "context": {"metric": "Model size (trillion parameters)", "note": "Self-reported by xAI. More parameters raise cost, not necessarily capability.", "bars": [{"label": "Grok 4.6", "value": 1.5}, {"label": "Grok 4.7", "value": 2.1, "subject": true}]}, "tags": ["xAI", "Grok"], "sources": [{"name": "Decrypt", "url": "https://decrypt.co/378824/xai-launches-grok-4-7"}, {"name": "Yahoo Tech", "url": "https://tech.yahoo.com/ai/gemini/articles/xai-launches-grok-4-7-171603280.html"}], "rank": 22, "tier": 3}, {"headline": "Accenture and Cohere team up on sovereign AI for Canada", "dek": "The partnership brings Cohere's agentic platform North into Accenture's service offerings for Canadian public-sector and defence clients prioritizing data sovereignty.", "category": "Business", "impact": 60, "date": "2026-09-25", "why": "It's part of a broader push, alongside Cohere's Calian defence tie-up in May, to make homegrown AI the default for government and military work Ottawa doesn't want running on US or Chinese infrastructure.", "detail": ["Cohere's North platform integrated into Accenture Canada's offerings", "Targets public-sector modernization and defence transformation", "Follows Cohere-Calian sovereign defence AI pact from May 2026"], "decode": {"term": "Data sovereignty", "means": "keeping data and the systems that process it under a country's own legal control, rather than on foreign-run infrastructure."}, "tags": ["Accenture", "Cohere", "defense"], "sources": [{"name": "Canadian Defence Review", "url": "https://canadiandefencereview.com/cohere-and-accenture-partner-to-deliver-sovereign-ai-for-defence/"}, {"name": "B2B News Network", "url": "https://www.b2bnn.com/2026/09/coheres-dealmaking-cementing-its-place-in-the-canadian-sovereign-tech-ecosystem/"}], "rank": 23, "tier": 3}, {"headline": "Jensen Huang takes Trump's call onstage at All-In Summit", "dek": "Nvidia's CEO agreed live with the president that AI backlash is a hoax, while Elon Musk pitched companies red-teaming each other's models as an alternative to government regulation.", "category": "Policy", "impact": 58, "date": "2026-09-15", "why": "It shows how thoroughly Washington's AI policy circle and Silicon Valley have merged: a VC podcast now hosts a sitting president's phone calls to industry, with a former White House AI czar as co-host.", "detail": ["Sept 13-15, Los Angeles; hosts Calacanis, Palihapitiya, Sacks, Friedberg", "Guests included Musk, Huang, Satya Nadella, Gwynne Shotwell", "Trump separately floated an 'AI Force' and a new AI czar that week"], "decode": {"term": "Red-teaming", "means": "deliberately trying to break a system to find its flaws, here proposed as companies checking rivals' models instead of a regulator doing it."}, "tags": ["policy", "conference"], "sources": [{"name": "Axios", "url": "https://www.axios.com/2026/09/23/all-in-podcast-trump-ai-safety"}, {"name": "CNBC", "url": "https://www.cnbc.com/2026/09/18/after-decade-of-clashes-in-ai-elon-musk-forging-strange-alliances.html"}], "rank": 24, "tier": 3}, {"headline": "Open model shrinks 9x, keeps 98% of its score", "dek": "PrismML's Ternary Bonsai 2 27B compresses to 5.9GB from 54GB via ternary weights, retaining 98.2% of parent model Qwen3.8 27B's benchmark average, under Apache 2.0.", "category": "Open Source", "impact": 58, "date": "2026-09-17", "why": "A model this small runs on a laptop or single consumer GPU, which matters more for offline and on-device use than another capability leaderboard climb.", "detail": ["20-benchmark suite: 83.9 aggregate score vs Qwen3.8 27B's 85.4", "Keeps 262K-token context, vision input, thinking mode and tool calling", "Apache 2.0 license, weights published for download"], "decode": {"term": "Ternary compression", "means": "storing each weight as one of three values instead of a wide range, shrinking file size with only a small accuracy cost."}, "context": {"metric": "Model size on disk (GB)", "note": "Lower is better for local/offline use. Same benchmark suite, both models.", "bars": [{"label": "Qwen3.8 27B (parent)", "value": 54}, {"label": "Ternary Bonsai 2 27B", "value": 5.9, "subject": true}]}, "tags": ["open-weights", "compression"], "sources": [{"name": "MarkTechPost", "url": "https://www.marktechpost.com/2026/09/18/prismml-releases-ternary-bonsai-2-27b-a-5-9-gb-apache-2-0-model-retaining-98-2-of-qwen3-8-27b-performance/"}, {"name": "PR Newswire", "url": "https://www.prnewswire.com/news-releases/prismml-launches-bonsai-2-27b-its-most-capable-model-yet-302882228.html"}], "rank": 25, "tier": 3}, {"headline": "Nobody can independently check if AI watermarks work", "dek": "Researchers found the mark costs almost nothing in quality -- less than changing the random seed on prose -- but outsiders cannot check vendors' detection claims, because the detectors stay private.", "category": "Research", "impact": 56, "date": "2026-09-09", "why": "Anthropic's detection API is limited to approved regulators and researchers, so the compliance signal the EU AI Act leans on is one almost nobody can audit. The paper argues that unverifiability, not watermarking, is the real failure.", "detail": ["Quality cost on prose was within the noise of changing the sampling seed", "On code, three points of correctness on one model, unmeasurable on the other", "Authors call for accredited audits and interoperable detection tools"], "decode": {"term": "Sampling seed", "means": "the random starting point that makes a model word each answer differently; the watermark shifted quality less than simply re-rolling it."}, "tags": ["research", "watermarking"], "sources": [{"name": "arXiv", "url": "https://arxiv.org/abs/2609.09604"}], "rank": 26, "tier": 3}, {"headline": "ChatGPT ads can now start their own sales conversation", "dek": "OpenAI's Sponsored Agents let a brand's AI agent open a labeled, interactive chat with a user after an ad click, piloting with Wayfair and other US advertisers.", "category": "Products", "impact": 55, "date": "2026-09-16", "why": "It turns ChatGPT's conversational format itself into ad inventory -- an interactive format neither Google nor Meta currently offers -- as OpenAI chases a $2.5B 2026 ad-revenue target.", "detail": ["Ad business hit $1B annualized run rate in under 200 days", "New integrations with HubSpot and Shopify for merchants", "Shows only to Free/Go tier users; paid tiers stay ad-free"], "decode": {"term": "Sponsored agent", "means": "a brand-funded AI chat that a user opts into after clicking an ad, kept separate from the user's original ChatGPT conversation."}, "context": {"metric": "OpenAI advertising revenue ($B annualized)", "note": "Higher is the company's own growth goal, not yet achieved. OpenAI-disclosed figures.", "bars": [{"label": "Current run rate", "value": 1, "subject": true}, {"label": "2026 target", "value": 2.5}]}, "tags": ["OpenAI", "advertising"], "sources": [{"name": "OpenAI", "url": "https://openai.com/index/reimagining-advertising-with-ai/"}, {"name": "Yahoo Finance", "url": "https://finance.yahoo.com/media-advertising/articles/openai-sponsored-agents-turn-chatgpt-155347973.html"}], "rank": 27, "tier": 3}, {"headline": "Canada's AI minister wants rules but won't say which", "dek": "Evan Solomon said on Sept 27 that AI deployment needs regulation but gave no specifics. Canada still has no comprehensive AI law, and the renewed national AI strategy has slipped to next year.", "category": "Policy", "impact": 55, "date": "2026-09-27", "why": "Canadian firms are governed by everyone else's rules for now: the EU Act reaches them extraterritorially while Ottawa consults. Solomon says any framework will be light, tight, right, and that AIDA is not returning as drafted.", "detail": ["AIDA died when Parliament was prorogued in Jan 2025; no successor bill tabled", "Narrower bills exist: deepfakes, election integrity, chatbots and kids, privacy", "Only the EU and South Korea have comprehensive AI laws in force"], "decode": {"term": "Extraterritorial reach", "means": "when a country's law binds companies outside its borders, because their product or its output reaches people inside that country."}, "tags": ["Canada", "regulation"], "sources": [{"name": "CTV News", "url": "https://www.ctvnews.ca/sci-tech/article/ai-minister-says-system-deployment-needs-regulation-but-no-details-yet/"}, {"name": "Global News", "url": "https://globalnews.ca/news/11558465/canada-artificial-intelligence-strategy-update-delay-minister/"}], "rank": 28, "tier": 3}, {"headline": "Study: AI reviewers score papers by author, not just merit", "dek": "Analyzing 230 publications, researchers found LLM-based peer reviewers shift scores based on an author's institutional affiliation and seniority, not just the paper's content.", "category": "Research", "impact": 48, "date": "2026-09-07", "why": "As AI review tools spread through machine-learning conferences to handle rising submission volume, this is early evidence the automation adds a new, systematic bias rather than removing human ones.", "detail": ["Taxonomy covers six dynamics, from production scaling to evasion", "Documents institutions already building technical and policy defenses"], "decode": {"term": "LLM-as-a-judge", "means": "using a language model instead of a person to score or grade content such as exam answers, code, or research papers."}, "tags": ["research", "peer-review"], "sources": [{"name": "arXiv", "url": "https://arxiv.org/abs/2609.07713"}], "rank": 29, "tier": 4}, {"headline": "Open-weight AI models aren't open source, OSI says", "dek": "The Open Source Initiative says Llama, DeepSeek, Qwen and Gemma only publish finished weights, not the training code and data needed to rebuild or fully audit them.", "category": "Open Source", "impact": 42, "date": "2026-09-15", "why": "Procurement rules, export-control carve-outs and research grants increasingly hinge on the word 'open,' so this labeling fight has real legal and funding consequences, not just semantics.", "detail": ["OSI: weights alone are 'a fraction of the information required for accountability'", "20+ firms, incl. Nvidia, Meta, Mistral, urged the US to avoid restricting open-weight AI"], "decode": {"term": "Open Source Definition", "means": "the formal criteria a project must meet to be called open source, including publishing the code and data used to build it, not just the output."}, "tags": ["open-weights", "policy"], "sources": [{"name": "The Register", "url": "https://www.theregister.com/columnists/2026/09/15/open-weights-are-not-open-source-why-ais-favorite-label-is-under-dispute/5295436"}], "rank": 30, "tier": 4}]}</script>
+<script>
+(function(){
+  "use strict";
+
+  var DATA = JSON.parse(document.getElementById("news-data").textContent);
+  var items = DATA.items || [];
+  var board = document.getElementById("board");
+  var emptyMsg = document.getElementById("empty");
+  var pop = document.getElementById("pop");
+  var slot = document.getElementById("pop-slot");
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* poster footprint in grid cells, by impact tier. This is the ONLY
+     thing that encodes importance — placement is deliberately random. */
+  var FOOT = {1:{w:3,h:3}, 2:{w:2,h:2}, 3:{w:2,h:1}, 4:{w:1,h:1}};
+
+  /* ---------- sticker pack ----------
+     Board furniture for the cells no poster claimed. Swap this array to change
+     the board's personality. Four kinds of sticker:
+       {emoji:0x1F440}             a system emoji by codepoint - zero bytes, offline
+       {stamp:"TEXT", tint:"#hex"} a rubber-stamped phrase
+       {note:"text"}               a scribbled sticky note
+       {img:"data:image/gif;..."}  any image inlined as a data URI
+     Use {img:...} for GIFs and memes - see "Stickers" in SKILL.md for how to
+     inline one. Nothing here is clickable, none of it is announced to screen
+     readers, and it all disappears in the narrow-screen fallback. */
+  var STICKERS = [
+    {emoji:0x1F440},                              /* eyes */
+    {stamp:"HOT TAKE", tint:"#C4342B"},
+    {note:"line goes up"},
+    {emoji:0x1F525},                              /* fire */
+    {stamp:"CITATION NEEDED", tint:"#2F5FA8"},
+    {emoji:0x1F916},                              /* robot */
+    {note:"but does it scale?"},
+    {emoji:0x1F4C8},                              /* chart increasing */
+    {stamp:"AGI??", tint:"#6B3FA0"},
+    {emoji:0x1F4B8},                              /* money with wings */
+    {note:"ship it"},
+    {emoji:0x26A1},                               /* high voltage */
+    {stamp:"UNCONFIRMED", tint:"#8A5A0B"},
+    {emoji:0x1F9E0},                              /* brain */
+    {note:"nobody knows yet"},
+    {emoji:0x1F37F},                              /* popcorn */
+    {stamp:"SEEN IT", tint:"#4F7211"},
+    {emoji:0x1FAE0}                               /* melting face */
+  ];
+
+  var state = {cat:"All", q:""};
+  var shown = [];              // items on the board right now (pack order)
+  var nodes = {};              // rank -> element, reused across re-packs
+  var openIdx = -1;
+  var lastFocus = null;
+  var first = true;
+
+  /* ---------- helpers ---------- */
+  function esc(s){
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+  function host(u){
+    try { return new URL(u).hostname.replace(/^www\./, ""); } catch(e){ return String(u || ""); }
+  }
+  var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function day(d){
+    var p = String(d).split("-");
+    if(p.length < 3) return esc(d);
+    return MONTHS[parseInt(p[1], 10) - 1] + " " + parseInt(p[2], 10);
+  }
+  function pad2(n){ return (n < 10 ? "0" : "") + n; }
+  function clamp(v, lo, hi){ return v < lo ? lo : (v > hi ? hi : v); }
+  /* seeded PRNG so a given board always packs the same way */
+  function rng(seed){
+    return function(){
+      seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+      var t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  /* stable tilt per poster; bigger posters lean less */
+  function tilt(it){
+    var h = Math.sin(it.rank * 12.9898) * 43758.5453;
+    var amp = it.tier === 1 ? .8 : it.tier === 2 ? 1.2 : it.tier === 3 ? 1.6 : 2;
+    return ((((h - Math.floor(h)) * 2) - 1) * amp).toFixed(2);
+  }
+
+  var newest = items.reduce(function(a, it){ return it.date > a ? it.date : a; }, "");
+  function isNew(it){
+    if(!newest || !it.date) return false;
+    var d = (new Date(newest) - new Date(it.date)) / 86400000;
+    return d >= 0 && d <= 3;
+  }
+
+  /* ---------- the packer ----------
+     Fit every poster into a cols x rows lattice sized to the board box.
+     Big posters are placed first, each into a RANDOM free slot, so the
+     wall has no reading order. Retry with new seeds, then more rows,
+     until everything fits. */
+  function packOnce(list, cols, rows, seed){
+    var occ = new Uint8Array(cols * rows);
+    var rand = rng(seed);
+    var out = [];
+    for(var i = 0; i < list.length; i++){
+      var f = FOOT[list[i].tier] || FOOT[4];
+      var spots = [];
+      for(var y = 0; y + f.h <= rows; y++){
+        for(var x = 0; x + f.w <= cols; x++){
+          var ok = true;
+          for(var dy = 0; dy < f.h && ok; dy++){
+            for(var dx = 0; dx < f.w; dx++){
+              if(occ[(y + dy) * cols + x + dx]){ ok = false; break; }
+            }
+          }
+          if(ok) spots.push([x, y]);
+        }
+      }
+      if(!spots.length) return null;
+      var s = spots[Math.floor(rand() * spots.length)];
+      for(var oy = 0; oy < f.h; oy++){
+        for(var ox = 0; ox < f.w; ox++) occ[(s[1] + oy) * cols + s[0] + ox] = 1;
+      }
+      out.push({it:list[i], x:s[0], y:s[1], w:f.w, h:f.h});
+    }
+    return {cells:out, occ:occ};
+  }
+
+  /* The cells no poster claimed, grouped into the largest rectangles that fit.
+     These are the sticker slots. */
+  function freeBlocks(occ, cols, rows){
+    var used = new Uint8Array(cols * rows);
+    var out = [];
+    function isFree(x, y, w, h){
+      if(x + w > cols || y + h > rows) return false;
+      for(var dy = 0; dy < h; dy++){
+        for(var dx = 0; dx < w; dx++){
+          var k = (y + dy) * cols + x + dx;
+          if(occ[k] || used[k]) return false;
+        }
+      }
+      return true;
+    }
+    var shapes = [[2,2],[2,1],[1,2],[1,1]];
+    for(var y = 0; y < rows; y++){
+      for(var x = 0; x < cols; x++){
+        for(var s = 0; s < shapes.length; s++){
+          var w = shapes[s][0], h = shapes[s][1];
+          if(!isFree(x, y, w, h)) continue;
+          for(var dy = 0; dy < h; dy++){
+            for(var dx = 0; dx < w; dx++) used[(y + dy) * cols + x + dx] = 1;
+          }
+          out.push({x:x, y:y, w:w, h:h});
+          break;
+        }
+      }
+    }
+    return out;
+  }
+
+  function pack(list, boxW, boxH){
+    /* order big-to-small for packing efficiency; visual order stays random */
+    var byArea = list.slice().sort(function(a, b){
+      var fa = FOOT[a.tier] || FOOT[4], fb = FOOT[b.tier] || FOOT[4];
+      return (fb.w * fb.h) - (fa.w * fa.h);
+    });
+    var area = byArea.reduce(function(n, it){
+      var f = FOOT[it.tier] || FOOT[4]; return n + f.w * f.h;
+    }, 0);
+    if(!area) return {cells:[], cols:1, rows:1, free:[]};
+
+    /* choose a lattice whose cells come out roughly square */
+    var ar = boxW / Math.max(boxH, 1);
+    /* less slack when few posters remain, or the wall reads as mostly cork */
+    var slack = list.length <= 8 ? 1.0 : 1.1;
+    var cols = clamp(Math.round(Math.sqrt(area * slack * ar)), 4, 26);
+    var widest = byArea.reduce(function(n, it){ return Math.max(n, (FOOT[it.tier] || FOOT[4]).w); }, 1);
+    cols = Math.max(cols, widest);
+    var rows = Math.max(Math.ceil(area * slack / cols), 2);
+
+    for(var attempt = 0; attempt < 40; attempt++){
+      var got = packOnce(byArea, cols, rows, 97 + attempt * 7919);
+      if(got) return {cells:got.cells, cols:cols, rows:rows,
+                      free:freeBlocks(got.occ, cols, rows)};
+      if(attempt % 5 === 4) rows++;          // loosen the lattice and try again
+    }
+    var last = packOnce(byArea, cols, rows + 4, 13);
+    return {cells:last ? last.cells : [], cols:cols, rows:rows + 4,
+            free:last ? freeBlocks(last.occ, cols, rows + 4) : []};
+  }
+
+  /* ---------- poster markup + adaptive type ---------- */
+  function build(it){
+    var el = document.createElement("div");
+    el.className = "poster";
+    el.dataset.cat = it.category;
+    el.dataset.key = it.rank;
+    var srcs = it.sources || [];
+    var s0 = srcs[0] || {};
+    el.innerHTML =
+      '<span class="tape l"></span><span class="tape r"></span>' +
+      '<article class="paper" style="--rot:' + tilt(it) + 'deg" tabindex="0" role="button"' +
+        ' aria-label="Open story: ' + esc(it.headline) + '">' +
+        '<span class="pin"></span>' +
+        '<div class="row"><span class="cat">' + esc(it.category) + '</span>' +
+          (isNew(it) ? '<span class="flag">New</span>' : '') + '</div>' +
+        '<h3 class="headline">' + esc(it.headline) + '</h3>' +
+        '<p class="dek">' + esc(it.dek) + '</p>' +
+        '<div class="foot"><span>' + day(it.date) + '</span>' +
+          '<span class="src">' + esc(s0.name || host(s0.url)) + '</span></div>' +
+      '</article>';
+    return el;
+  }
+
+  var FITVARS = ["--pad","--fs","--lh","--dfs","--tagfs","--footfs","--tagls","--hlgap","--pinpad","--hl","--dl"];
+
+  /* An off-screen ruler measures how many lines a headline really wraps to.
+     Guessing from character counts is unreliable — one long word ("PARLIAMENT'S")
+     can blow out a line — and the posters themselves cannot be measured while
+     their width is mid-transition. */
+  var css = getComputedStyle(document.documentElement);
+  var FACE_DISPLAY = css.getPropertyValue("--display").trim();
+  var FACE_SANS = css.getPropertyValue("--sans").trim();
+  var ruler = document.createElement("div");
+  ruler.setAttribute("aria-hidden", "true");
+  ruler.style.cssText = "position:absolute;left:-9999px;top:0;visibility:hidden;pointer-events:none";
+  document.body.appendChild(ruler);
+
+  function lineCount(text, w, fs, lh, big){
+    ruler.style.width = w + "px";
+    ruler.style.font = (big ? "900 " : "800 ") + fs + "px/" + lh + " " + (big ? FACE_DISPLAY : FACE_SANS);
+    ruler.style.textTransform = big ? "uppercase" : "none";
+    ruler.style.letterSpacing = big ? "-.022em" : "-.012em";
+    ruler.textContent = text;
+    return Math.max(1, Math.round(ruler.scrollHeight / (fs * lh)));
+  }
+
+  /* size the type to the tile it actually got, so text always fits its poster
+     and nothing ever needs to scroll. w == null means flow fallback. */
+  function fit(el, w, h){
+    var paper = el.querySelector(".paper");
+    var dek = paper.querySelector(".dek");
+    var foot = paper.querySelector(".foot");
+    var pin = paper.querySelector(".pin");
+    var tapes = el.querySelectorAll(".tape");
+
+    if(w == null){
+      FITVARS.forEach(function(p){ paper.style.removeProperty(p); });
+      paper.classList.remove("big");
+      dek.style.display = ""; foot.style.display = ""; pin.style.display = "";
+      var fl = paper.querySelector(".flag");
+      if(fl) fl.style.display = "";
+      tapes[0].style.display = "none"; tapes[1].style.display = "none";
+      return;
+    }
+
+    var big = Math.min(w, h) >= 190 && w * h >= 62000;
+    var pad = w < 120 ? 7 : (w < 150 ? 9 : (w < 250 ? 12 : (w < 380 ? 16 : 20)));
+    var innerW = w - pad * 2;
+    var text = paper.querySelector(".headline").textContent || "";
+    var showFoot = h >= 96 && w >= 140;
+    var showFlag = w >= 190;
+    /* on a cramped poster the pushpin would eat the category tag, so drop it */
+    var showPin = !big && w >= 160;
+
+    /* The headline owns the poster: start from a size proportional to the tile,
+       measure how many lines it really needs, and shrink until the whole thing
+       fits. The dek only gets what the headline leaves behind. */
+    /* Ceilings scale with the tile: a poster left nearly alone on the board
+       (a narrow filter) should grow into real poster type, not sit half-empty
+       with 16px furniture. */
+    var capTag = clamp(w * 0.028, 11, 20);
+    var capDek = clamp(w * 0.026, 16, 30);
+    var capGap = clamp(w * 0.035, 13, 30);
+    var capFoot = clamp(w * 0.026, 9.5, 16);
+
+    var fs = clamp(Math.sqrt(w * h) * 0.118, 11.5, 96);
+    var lh = big ? 1.05 : 1.14;
+    var tagfs, hlgap, dfs, footfs, avail, maxLines, lines;
+    for(var guard = 0; guard < 10; guard++){
+      tagfs = clamp(fs * 0.46, 8, capTag);
+      hlgap = clamp(fs * 0.40, 5, capGap);
+      dfs = clamp(fs * 0.44, 11.5, capDek);
+      footfs = clamp(fs * 0.26, 9, capFoot);
+      avail = h - pad * 2 - (tagfs + 9) - hlgap - (showFoot ? footfs + 14 : 0);
+      maxLines = Math.max(1, Math.floor(avail / (fs * lh)));
+      lines = lineCount(text, innerW, fs, lh, big);
+      if(lines <= maxLines || fs <= 11.6) break;
+      fs = Math.max(11.5, fs * clamp(Math.sqrt(maxLines / lines), 0.82, 0.94));
+    }
+    var hlLines = Math.min(lines, maxLines);
+
+    /* the dek gets whatever vertical room the headline did not use */
+    var leftover = avail - hlLines * fs * lh - 7;
+    var dlLines = Math.floor(leftover / (dfs * 1.42));
+    var showDek = dlLines >= 2 && w >= 200;
+    if(!showDek) dlLines = 0;
+
+    paper.classList.toggle("big", big);
+    paper.style.setProperty("--pad", pad + "px");
+    paper.style.setProperty("--fs", fs.toFixed(1) + "px");
+    paper.style.setProperty("--lh", lh);
+    paper.style.setProperty("--dfs", dfs.toFixed(1) + "px");
+    paper.style.setProperty("--tagfs", tagfs.toFixed(1) + "px");
+    paper.style.setProperty("--footfs", footfs.toFixed(1) + "px");
+    paper.style.setProperty("--tagls", tagfs < 9.5 ? ".06em" : ".12em");
+    paper.style.setProperty("--hlgap", hlgap.toFixed(0) + "px");
+    paper.style.setProperty("--pinpad", showPin ? "20px" : "0px");
+    paper.style.setProperty("--hl", hlLines);
+    paper.style.setProperty("--dl", dlLines);
+    paper.querySelector(".flag") && (paper.querySelector(".flag").style.display = showFlag ? "" : "none");
+    dek.style.display = showDek ? "" : "none";
+    foot.style.display = showFoot ? "" : "none";
+    /* tape corners on the big sheets, a pushpin on the middling ones */
+    pin.style.display = showPin ? "" : "none";
+    tapes[0].style.display = big ? "" : "none";
+    tapes[1].style.display = big ? "" : "none";
+  }
+
+  /* ---------- stickers ---------- */
+  function buildSticker(spec, i){
+    var el = document.createElement("div");
+    el.className = "sticker";
+    el.setAttribute("aria-hidden", "true");
+    var h = Math.sin((i + 3) * 78.233) * 43758.5453;
+    el.style.setProperty("--rot", ((((h - Math.floor(h)) * 2) - 1) * 7).toFixed(2) + "deg");
+    el.style.setProperty("--delay", ((i % 6) * 0.7).toFixed(1) + "s");
+    if(spec.emoji){
+      el.innerHTML = '<span class="s-emoji">' + String.fromCodePoint(spec.emoji) + '</span>';
+    } else if(spec.stamp){
+      el.innerHTML = '<span class="s-stamp" style="--tint:' + esc(spec.tint || "#C4342B") +
+        '">' + esc(spec.stamp) + '</span>';
+    } else if(spec.note){
+      el.innerHTML = '<span class="s-note">' + esc(spec.note) + '</span>';
+    } else if(spec.img){
+      el.innerHTML = '<img class="s-img" src="' + esc(spec.img) + '" alt="">';
+    }
+    return el;
+  }
+
+  function dressGaps(free, cw, ch, gap){
+    Array.prototype.forEach.call(board.querySelectorAll(".sticker"), function(s){
+      s.parentNode.removeChild(s);
+    });
+    if(!STICKERS.length) return;
+    /* Rotate through the KINDS of sticker rather than striding the flat array:
+       with only a handful of gaps a stride can skip an entire kind. */
+    var kinds = ["emoji", "stamp", "note", "img"].map(function(k){
+      return STICKERS.filter(function(s){ return s[k] !== undefined; });
+    }).filter(function(g){ return g.length; });
+    free.forEach(function(f, i){
+      var group = kinds[i % kinds.length];
+      var spec = group[Math.floor(i / kinds.length) % group.length];
+      var el = buildSticker(spec, i);
+      var w = f.w * cw + (f.w - 1) * gap;
+      var hh = f.h * ch + (f.h - 1) * gap;
+      el.style.width = w + "px";
+      el.style.height = hh + "px";
+      el.style.transform = "translate3d(" + (f.x * (cw + gap)) + "px," +
+        (f.y * (ch + gap)) + "px,0)";
+      el.style.setProperty("--efs", (Math.min(w, hh) * 0.58).toFixed(0) + "px");
+      /* a long unbreakable word ("UNCONFIRMED") has to shrink to fit its cell,
+         so size the stamp off its longest word rather than the whole phrase */
+      var longest = spec.stamp
+        ? spec.stamp.split(/\s+/).reduce(function(n, s){ return Math.max(n, s.length); }, 1)
+        : 1;
+      el.style.setProperty("--tfs",
+        clamp(Math.min(w * 0.13, (w * 0.80) / (longest * 0.72)), 9, 28).toFixed(1) + "px");
+      el.style.setProperty("--nfs", clamp(w * 0.105, 10, 21).toFixed(1) + "px");
+      board.appendChild(el);
+    });
+  }
+
+  /* ---------- filtering ---------- */
+  function compute(){
+    var q = state.q.trim().toLowerCase();
+    return items.filter(function(it){
+      if(state.cat !== "All" && it.category !== state.cat) return false;
+      if(!q) return true;
+      var hay = [it.headline, it.dek, it.why, it.category]
+        .concat(it.tags || [], it.detail || []).join(" ");
+      return hay.toLowerCase().indexOf(q) > -1;
+    });
+  }
+
+  /* ---------- lay the board out ---------- */
+  var flowing = false;
+  function layout(){
+    var boxW = board.clientWidth;
+    var boxH = board.clientHeight;
+    var list = compute();
+    shown = list;
+    emptyMsg.hidden = list.length > 0;
+
+    /* too cramped to pack a wall — fall back to a scrolling column */
+    var wantFlow = window.innerWidth < 620 || window.innerHeight < 460;
+    if(wantFlow !== flowing){
+      flowing = wantFlow;
+      document.body.classList.toggle("flowing", flowing);
+      boxW = board.clientWidth; boxH = board.clientHeight;
+    }
+
+    var seen = {};
+    if(flowing){
+      list.forEach(function(it){
+        var el = nodes[it.rank] || (nodes[it.rank] = build(it));
+        seen[it.rank] = 1;
+        el.style.transform = "";
+        el.style.width = el.style.height = "";
+        fit(el, null, null);
+        if(!el.parentNode) board.appendChild(el);
+        el.classList.remove("out");
+        el.classList.add("in");
+      });
+    } else {
+      var plan = pack(list, boxW, boxH);
+      var gap = clamp(Math.min(boxW / plan.cols, boxH / plan.rows) * 0.11, 7, 16);
+      var cw = (boxW - (plan.cols - 1) * gap) / plan.cols;
+      var ch = (boxH - (plan.rows - 1) * gap) / plan.rows;
+
+      dressGaps(plan.free || [], cw, ch, gap);
+
+      plan.cells.forEach(function(c, i){
+        var it = c.it;
+        var el = nodes[it.rank] || (nodes[it.rank] = build(it));
+        seen[it.rank] = 1;
+        var w = c.w * cw + (c.w - 1) * gap;
+        var h = c.h * ch + (c.h - 1) * gap;
+        var x = c.x * (cw + gap);
+        var y = c.y * (ch + gap);
+        var fresh = !el.parentNode;
+        if(fresh){
+          el.style.transform = "translate3d(" + x + "px," + y + "px,0)";
+          el.style.width = w + "px";
+          el.style.height = h + "px";
+          board.appendChild(el);
+        }
+        fit(el, w, h);
+        el.style.width = w + "px";
+        el.style.height = h + "px";
+        el.style.transform = "translate3d(" + x + "px," + y + "px,0)";
+        el.classList.remove("out");
+        if(fresh && !reduced){
+          var paper = el.querySelector(".paper");
+          paper.style.transitionDelay = (first ? Math.min(i, 26) * 24 : 0) + "ms";
+          requestAnimationFrame(function(){
+            requestAnimationFrame(function(){
+              el.classList.add("in");
+              setTimeout(function(){ paper.style.transitionDelay = ""; }, 900);
+            });
+          });
+        } else {
+          el.classList.add("in");
+        }
+      });
+    }
+
+    /* retire posters that fell out of the filter */
+    Object.keys(nodes).forEach(function(k){
+      if(seen[k]) return;
+      var el = nodes[k];
+      delete nodes[k];
+      if(!el.parentNode) return;
+      el.classList.remove("in");
+      el.classList.add("out");
+      setTimeout(function(){ if(el.parentNode) el.parentNode.removeChild(el); }, reduced ? 0 : 340);
+    });
+
+    first = false;
+  }
+
+  /* ---------- the comparative chart ----------
+     Form is EMPHASIS: one series, the subject bar in the category accent and
+     the context bars in de-emphasis gray. A single series needs no legend -
+     the title says what is plotted. Values ride the bar tip, moving inside the
+     fill when there is no room past the end. */
+  function fmtNum(v){
+    var n = Number(v);
+    if(!isFinite(n)) return String(v);
+    return Math.abs(n) >= 1000 ? n.toLocaleString("en-US") : String(n);
+  }
+
+  function chartHTML(ctx){
+    if(!ctx || !ctx.bars || ctx.bars.length < 2) return "";
+    var vals = ctx.bars.map(function(b){ return Number(b.value); });
+    var max = Number(ctx.max) || Math.max.apply(null, vals);
+    if(!(max > 0)) return "";
+    var rows = ctx.bars.map(function(b){
+      var pct = clamp(Number(b.value) / max * 100, 0, 100);
+      var val = fmtNum(b.value) + (ctx.unit || "");
+      var inside = pct > 76;
+      return '<div class="ctx__row' + (b.subject ? " is-subject" : "") + '"' +
+        ' title="' + esc(b.label) + ': ' + esc(val) + '">' +
+          '<span class="ctx__lab">' + esc(b.label) + '</span>' +
+          '<span class="ctx__track">' +
+            '<i style="width:' + pct.toFixed(1) + '%">' +
+              (inside ? '<b class="ctx__in">' + esc(val) + '</b>' : '') +
+            '</i>' +
+            (inside ? '' : '<b class="ctx__out" style="left:calc(' + pct.toFixed(1) +
+              '% + 8px)">' + esc(val) + '</b>') +
+          '</span>' +
+        '</div>';
+    }).join("");
+    return '<figure class="ctx">' +
+      '<figcaption class="ctx__title">' + esc(ctx.metric || "") + '</figcaption>' +
+      rows +
+      (ctx.note ? '<p class="ctx__note">' + esc(ctx.note) + '</p>' : '') +
+      '</figure>';
+  }
+
+  /* ---------- popup ---------- */
+  /* One expand = one screen. Every block is length-capped by build_board.py and
+     line-clamped here, so the sheet never needs to scroll. */
+  function sheetHTML(it, pos, total){
+    var srcs = it.sources || [];
+    var chart = chartHTML(it.context);
+    return '<div class="sheet" data-cat="' + esc(it.category) + '">' +
+      '<div class="sheet__band">' +
+        '<span>' + esc(it.category) + '</span>' +
+        '<span class="score">' + day(it.date) + ' &middot; impact ' +
+          Number(it.impact) + '/100</span>' +
+        '<button class="x" data-act="close" aria-label="Close">&times;</button>' +
+      '</div>' +
+      '<div class="sheet__body">' +
+        '<h2>' + esc(it.headline) + '</h2>' +
+        '<div class="sheet__cols">' +
+          '<div>' +
+            '<h4>What happened</h4><p class="lede">' + esc(it.dek) + '</p>' +
+            '<h4>Why it matters</h4><p class="why">' + esc(it.why) + '</p>' +
+            (it.decode && it.decode.term
+              ? '<h4>In plain English</h4><p class="decode"><b>' + esc(it.decode.term) +
+                '</b> ' + esc(it.decode.means) + '</p>'
+              : '') +
+          '</div>' +
+          '<div>' +
+            (chart || '') +
+            (it.detail && it.detail.length
+              ? '<h4>Detail</h4><ul>' +
+                it.detail.map(function(d){ return '<li>' + esc(d) + '</li>'; }).join("") +
+                '</ul>'
+              : '') +
+            '<h4>Sources</h4><div class="srclist">' +
+            srcs.map(function(s){
+              return '<a href="' + esc(s.url) + '" target="_blank" rel="noopener noreferrer">' +
+                esc(s.name || host(s.url)) + ' &nearr;</a>';
+            }).join("") + '</div>' +
+            (it.clips && it.clips.length
+              ? '<h4>Also on X</h4><div class="srclist clips">' +
+                it.clips.map(function(c){
+                  return '<a href="' + esc(c.url) + '" target="_blank" rel="noopener noreferrer">' +
+                    esc(c.label) + ' &nearr;</a>';
+                }).join("") + '</div>'
+              : '') +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="sheet__nav">' +
+        (it.tags && it.tags.length
+          ? '<div class="tags">' +
+            it.tags.map(function(t){ return '<span class="tag">' + esc(t) + '</span>'; }).join("") +
+            '</div>'
+          : '<span></span>') +
+        '<button data-act="prev"' + (pos <= 1 ? " disabled" : "") + '>&larr; Prev</button>' +
+        '<button data-act="next"' + (pos >= total ? " disabled" : "") + '>Next &rarr;</button>' +
+        '<span class="of">' + pad2(pos) + ' / ' + pad2(total) + '</span>' +
+      '</div>' +
+      '</div>';
+  }
+
+  function show(idx, dir){
+    if(idx < 0 || idx >= shown.length) return;
+    openIdx = idx;
+    var it = shown[idx];
+    slot.innerHTML = sheetHTML(it, idx + 1, shown.length);
+    pop.dataset.cat = it.category;
+    if(!pop.open){
+      pop.showModal();
+    } else if(dir && !reduced){
+      slot.animate([{opacity:0, transform:"translateX(" + (dir * 30) + "px)"}, {opacity:1, transform:"none"}],
+        {duration:240, easing:"ease-out"});
+    }
+    var x = slot.querySelector('[data-act="close"]');
+    if(x) x.focus();
+    try { history.replaceState(null, "", "#s" + it.rank); } catch(e){}
+  }
+
+  function closePop(){
+    if(!pop.open) return;
+    if(reduced){ pop.close(); return; }
+    pop.classList.add("closing");
+    setTimeout(function(){ pop.classList.remove("closing"); pop.close(); }, 175);
+  }
+
+  pop.addEventListener("close", function(){
+    openIdx = -1;
+    try { history.replaceState(null, "", location.pathname + location.search); } catch(e){}
+    if(lastFocus && document.contains(lastFocus)) lastFocus.focus();
+  });
+  pop.addEventListener("cancel", function(e){ e.preventDefault(); closePop(); });
+  pop.addEventListener("click", function(e){
+    var act = e.target.closest("[data-act]");
+    if(act){
+      if(act.dataset.act === "close") closePop();
+      if(act.dataset.act === "prev") show(openIdx - 1, -1);
+      if(act.dataset.act === "next") show(openIdx + 1, 1);
+      return;
+    }
+    if(!e.target.closest(".sheet")) closePop();
+  });
+  document.addEventListener("keydown", function(e){
+    if(!pop.open) return;
+    if(e.key === "ArrowLeft"){ e.preventDefault(); show(openIdx - 1, -1); }
+    if(e.key === "ArrowRight"){ e.preventDefault(); show(openIdx + 1, 1); }
+  });
+
+  board.addEventListener("click", function(e){
+    var paper = e.target.closest(".paper");
+    if(!paper) return;
+    var key = Number(paper.parentNode.dataset.key);
+    var idx = shown.findIndex(function(it){ return it.rank === key; });
+    if(idx < 0) return;
+    lastFocus = paper;
+    show(idx, 0);
+  });
+  board.addEventListener("keydown", function(e){
+    if(e.key !== "Enter" && e.key !== " ") return;
+    var paper = e.target.closest(".paper");
+    if(!paper) return;
+    e.preventDefault();
+    paper.click();
+  });
+
+  /* ---------- controls ---------- */
+  var counts = {};
+  items.forEach(function(it){ counts[it.category] = (counts[it.category] || 0) + 1; });
+  var cats = ["All"].concat(Object.keys(counts).sort(function(a, b){
+    return counts[b] - counts[a] || a.localeCompare(b);
+  }));
+  var chips = document.getElementById("chips");
+  chips.innerHTML = cats.map(function(c){
+    return '<button class="chip" data-cat="' + esc(c) + '" aria-pressed="' + (c === "All") + '">' +
+      (c === "All" ? "" : '<span class="dot"></span>') + esc(c) +
+      '<span class="n">' + (c === "All" ? items.length : counts[c]) + '</span></button>';
+  }).join("");
+  chips.addEventListener("click", function(e){
+    var chip = e.target.closest(".chip");
+    if(!chip) return;
+    state.cat = chip.dataset.cat;
+    Array.prototype.forEach.call(chips.querySelectorAll(".chip"), function(c){
+      c.setAttribute("aria-pressed", String(c === chip));
+    });
+    layout();
+  });
+
+  var timer;
+  document.getElementById("search").addEventListener("input", function(e){
+    var v = e.target.value;
+    clearTimeout(timer);
+    timer = setTimeout(function(){ state.q = v; layout(); }, 140);
+  });
+
+  var rt;
+  window.addEventListener("resize", function(){
+    clearTimeout(rt);
+    rt = setTimeout(layout, 140);
+  });
+
+  /* ---------- go ---------- */
+  layout();
+
+  var countEl = document.getElementById("count");
+  if(reduced || !items.length){
+    countEl.textContent = items.length;
+  } else {
+    var t0 = null;
+    requestAnimationFrame(function step(ts){
+      if(t0 === null) t0 = ts;
+      var p = Math.min((ts - t0) / 700, 1);
+      countEl.textContent = Math.round(items.length * (1 - Math.pow(1 - p, 3)));
+      if(p < 1) requestAnimationFrame(step);
+    });
+  }
+
+  var m = /^#s(\d+)$/.exec(location.hash || "");
+  if(m){
+    var i = shown.findIndex(function(it){ return it.rank === Number(m[1]); });
+    if(i > -1) setTimeout(function(){ show(i, 0); }, 300);
+  }
+})();
+</script>
+</body>
+</html>

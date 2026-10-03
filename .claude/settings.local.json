@@ -9,11 +9,12 @@
       "Read(//c/DevSource/cognitive-iq/cognitive_iq-main/extensions/claude/ciq-dev//**)",
       "Bash(xargs -I {} sh -c 'echo \"=== {} ===\" && head -30 \"{}\"')",
       "Bash(Get-ChildItem \"C:\\\\DevSource\\\\EventTracker\\\\app\\\\templates\\\\partials\" -Filter \"*.html\")",
-      "Bash(Select-Object Name)"
+      "Bash(Select-Object Name)",
+      "Bash(npx playwright *)"
     ]
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "codebase-search"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }
