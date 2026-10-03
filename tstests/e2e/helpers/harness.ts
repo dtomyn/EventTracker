@@ -3,7 +3,7 @@ import { test as base, expect, type BrowserContext } from '@playwright/test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { constants as fsConstants } from 'node:fs';
-import { access, copyFile, mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
+import { access, copyFile, mkdir, mkdtemp, readdir, rm, stat } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -19,6 +19,9 @@ const SQLITE_BRIDGE_PATH = resolve(__dirname, 'sqlite_bridge.py');
 const SERVER_HOST = '127.0.0.1';
 const SERVER_START_TIMEOUT_MS = 30_000;
 const TEMP_DIR_PREFIX = 'eventtracker-playwright-ts-';
+// Temp dirs younger than this may belong to a test still running in another
+// worker (or another Playwright run), so cleanup must leave them alone.
+const STALE_TEMP_DIR_AGE_MS = 60 * 60 * 1000;
 const TEMP_DIR_CLEANUP_TIMEOUT_MS = 5_000;
 const TEMP_DIR_CLEANUP_RETRY_INTERVAL_MS = 200;
 const CSS_CACHE = new Map<string, string>();
@@ -218,6 +221,12 @@ async function waitForExit(serverProcess: ChildProcess, timeoutMs: number): Prom
  * Stop an isolated EventTracker process without failing on already-closed handles.
  */
 async function stopServer(serverProcess: ChildProcess): Promise<void> {
+  if (serverProcess.exitCode === null && process.platform === 'win32' && serverProcess.pid !== undefined) {
+    // On Windows, killing `uv run` (or the venv python.exe launcher) leaves the real
+    // interpreter running as an orphan, so the whole process tree must be terminated.
+    await killWindowsProcessTree(serverProcess.pid);
+    await waitForExit(serverProcess, 10_000);
+  }
   if (serverProcess.exitCode === null) {
     serverProcess.kill('SIGTERM');
     const exited = await waitForExit(serverProcess, 10_000);
@@ -226,6 +235,20 @@ async function stopServer(serverProcess: ChildProcess): Promise<void> {
       await waitForExit(serverProcess, 10_000);
     }
   }
+}
+
+/**
+ * Terminate a Windows process and all of its descendants.
+ */
+async function killWindowsProcessTree(pid: number): Promise<void> {
+  await new Promise<void>((resolveKill) => {
+    const killer = spawn('taskkill', ['/PID', `${pid}`, '/T', '/F'], {
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    killer.once('error', () => resolveKill());
+    killer.once('exit', () => resolveKill());
+  });
 }
 
 /**
@@ -264,13 +287,25 @@ async function removeTempDir(tempDir: string): Promise<void> {
 
 /**
  * Best-effort cleanup for stale TypeScript Playwright temp directories from prior runs.
+ * Only directories older than STALE_TEMP_DIR_AGE_MS are removed so parallel workers
+ * never delete each other's live databases.
  */
 async function cleanupStaleTempDirs(): Promise<void> {
   const entries = await readdir(tmpdir(), { withFileTypes: true });
+  const cutoff = Date.now() - STALE_TEMP_DIR_AGE_MS;
   await Promise.all(
     entries
       .filter((entry) => entry.isDirectory() && entry.name.startsWith(TEMP_DIR_PREFIX))
-      .map((entry) => removeTempDir(join(tmpdir(), entry.name))),
+      .map(async (entry) => {
+        const tempDir = join(tmpdir(), entry.name);
+        try {
+          if ((await stat(tempDir)).mtimeMs < cutoff) {
+            await removeTempDir(tempDir);
+          }
+        } catch {
+          // Another worker removed it first.
+        }
+      }),
   );
 }
 

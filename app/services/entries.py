@@ -296,7 +296,7 @@ def validate_entry_form(
         errors["final_text"] = "Event summary is required."
 
     source_url = values["source_url"] or None
-    if source_url and not _is_valid_url(source_url):
+    if source_url and not is_valid_url(source_url):
         errors["source_url"] = "Provide a valid http or https URL."
 
     links = validate_link_rows(link_rows, errors)
@@ -339,7 +339,7 @@ def _build_source_snapshot_payload(
         return None
 
     final_url = values.get("source_snapshot_final_url", "") or source_url
-    if not _is_valid_url(final_url):
+    if not is_valid_url(final_url):
         final_url = source_url
 
     fetched_utc = values.get("source_snapshot_fetched_utc", "") or utc_now_iso()
@@ -408,7 +408,7 @@ def validate_link_rows(
         if not url:
             errors[f"link_url_{index}"] = "Provide a valid http or https URL."
             continue
-        if not _is_valid_url(url):
+        if not is_valid_url(url):
             errors[f"link_url_{index}"] = "Provide a valid http or https URL."
         if not note:
             errors[f"link_note_{index}"] = "Add a brief note for this URL."
@@ -980,6 +980,23 @@ def search_entries_for_connection(
     return results
 
 
+def list_connections_within(
+    connection: sqlite3.Connection, entry_ids: Iterable[int]
+) -> list[sqlite3.Row]:
+    """Explicit connections whose two ends are both in *entry_ids*, oldest first."""
+    ids_json = json.dumps(sorted(set(entry_ids)))
+    return connection.execute(
+        """
+        SELECT ec.source_entry_id, ec.target_entry_id, ec.note
+        FROM entry_connections ec
+        WHERE ec.source_entry_id IN (SELECT value FROM json_each(?))
+          AND ec.target_entry_id IN (SELECT value FROM json_each(?))
+        ORDER BY ec.id
+        """,
+        (ids_json, ids_json),
+    ).fetchall()
+
+
 def build_connection_graph(
     connection: sqlite3.Connection,
     group_id: int,
@@ -1005,17 +1022,7 @@ def build_connection_graph(
     if not entry_ids:
         return {"nodes": [], "edges": []}
 
-    conn_rows = connection.execute(
-        """
-        SELECT ec.source_entry_id, ec.target_entry_id, ec.note
-        FROM entry_connections ec
-        WHERE ec.source_entry_id IN ({placeholders})
-          AND ec.target_entry_id IN ({placeholders})
-        """.format(
-            placeholders=",".join("?" for _ in entry_ids)
-        ),
-        list(entry_ids) + list(entry_ids),
-    ).fetchall()
+    conn_rows = list_connections_within(connection, entry_ids)
 
     count_map: dict[int, int] = {}
     for cr in conn_rows:
@@ -1629,7 +1636,7 @@ def _parse_int(
     return value
 
 
-def _is_valid_url(value: str) -> bool:
+def is_valid_url(value: str) -> bool:
     parsed = urlparse(value)
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
