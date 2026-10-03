@@ -25,8 +25,7 @@ A 73-second tour of the main features, using a real timeline:
 -->
 
 ### Animated walkthrough
-
-![EventTracker demo](docs/demo-assets/EventTracker-demo-web-generate.gif)
+https://github.com/user-attachments/assets/119cce3c-b74f-4735-8195-f6ad4e78e532
 
 This demo shows the main AI-assisted workflow in EventTracker, from live web discovery to source-backed entry generation.
 
