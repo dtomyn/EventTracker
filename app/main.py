@@ -9,10 +9,11 @@ from html import escape
 import json
 import logging
 import os
+import re
 from pathlib import Path
 import sqlite3
 from typing import Any, TypedDict, cast
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request
 from fastapi.responses import (
@@ -22,7 +23,6 @@ from fastapi.responses import (
     StreamingResponse,
 )
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 
 from app.db import connection_context, init_db, is_sqlite_vec_enabled
@@ -69,7 +69,6 @@ from app.services.entries import (
     DEFAULT_TIMELINE_PAGE_SIZE,
     DuplicateEntrySourceUrlError,
     form_state_from_entry,
-    format_plain_text,
     get_default_timeline_group,
     get_entry,
     get_entry_connections,
@@ -91,8 +90,6 @@ from app.services.entries import (
     paginate_entries_in_memory,
     rename_timeline_group,
     sanitize_rich_text,
-    sanitize_search_snippet,
-    render_source_snapshot_markdown,
     save_entry,
     TimelineGroupValidationError,
     utc_now_iso,
@@ -135,10 +132,19 @@ from app.services.topics import (
     get_topic_clusters_from_cache,
     save_topic_clusters_to_cache,
 )
+from app.services.poster_board import (
+    BOARD_LIMIT_CHOICES,
+    BoardPayload,
+    build_poster_board,
+    filter_entries_by_year,
+    list_board_years,
+    normalize_board_limit,
+)
 from app.services.story_mode import (
     get_story,
     get_story_artifact,
     list_story_entries,
+    parse_optional_int,
     resolve_story_scope,
     save_story_artifact,
     save_story,
@@ -158,17 +164,13 @@ from app.route_helpers import (
     _render_partial,
     _sanitize_story_html,
 )
+from app.templating import templates
 
 
 load_app_env()
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 
 BASE_DIR = Path(__file__).resolve().parent
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-templates.env.filters["plain_text"] = format_plain_text
-templates.env.filters["render_entry_html"] = sanitize_rich_text
-templates.env.filters["render_search_snippet"] = sanitize_search_snippet
-templates.env.filters["render_source_markdown"] = render_source_snapshot_markdown
 
 _ALLOWED_STORY_HTML_TAGS = {"a", "h2", "p", "section"}
 _ALLOWED_STORY_HTML_ATTRIBUTES = {
@@ -564,6 +566,22 @@ class GeneratedPreviewContext(TypedDict, total=False):
     source_snapshot_http_last_modified: str
     source_snapshot_extractor_name: str
     source_snapshot_extractor_version: str
+
+
+class PosterBoardPageContext(TypedDict):
+    request: Request
+    board: BoardPayload
+    board_title: str
+    query: str
+    selected_group_query_value: str
+    selected_year: int | None
+    board_years: list[int]
+    board_limit: int
+    board_limit_choices: tuple[int, ...]
+    timeline_href: str
+    export_href: str
+    export_mode: bool
+    exported_on: str
 
 
 class HtmlPreviewContext(TypedDict):
@@ -2134,6 +2152,111 @@ def timeline_heatmap(
         "year": year,
     }
     return JSONResponse(payload)
+
+
+@app.get("/timeline/board", response_class=HTMLResponse)
+def timeline_poster_board(
+    request: Request,
+    q: str = "",
+    group_id: str = "",
+    year: str = "",
+    limit: str = "",
+) -> HTMLResponse:
+    context = _build_poster_board_context(
+        request, q=q, group_id=group_id, year=year, limit=limit, export_mode=False
+    )
+    return templates.TemplateResponse(
+        request,
+        "poster_board.html",
+        cast(dict[str, object], context),
+    )
+
+
+@app.get("/timeline/board/export", response_class=HTMLResponse)
+def export_timeline_poster_board(
+    request: Request,
+    q: str = "",
+    group_id: str = "",
+    year: str = "",
+    limit: str = "",
+) -> HTMLResponse:
+    context = _build_poster_board_context(
+        request, q=q, group_id=group_id, year=year, limit=limit, export_mode=True
+    )
+    file_name = _poster_board_export_file_name(context["board_title"])
+    return templates.TemplateResponse(
+        request,
+        "poster_board.html",
+        cast(dict[str, object], context),
+        headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
+    )
+
+
+def _build_poster_board_context(
+    request: Request,
+    *,
+    q: str,
+    group_id: str,
+    year: str,
+    limit: str,
+    export_mode: bool,
+) -> PosterBoardPageContext:
+    selected_year = _parse_board_year(year)
+    board_limit = normalize_board_limit(limit)
+    with connection_context() as connection:
+        scope = _load_group_scope(connection, q=q, group_id=group_id)
+        scoped_entries = _list_entries_for_scope(
+            connection,
+            normalized_query=scope["normalized_query"],
+            selected_group_id=scope["selected_group_id"],
+        )
+        board = build_poster_board(
+            connection,
+            filter_entries_by_year(scoped_entries, selected_year),
+            limit=board_limit,
+        )
+
+    group_name = (
+        scope["selected_group"].name if scope["selected_group"] else "All groups"
+    )
+    board_title = f"{group_name} \u00b7 {selected_year}" if selected_year else group_name
+    scope_params: dict[str, str] = {}
+    if scope["selected_group_query_value"]:
+        scope_params["group_id"] = scope["selected_group_query_value"]
+    if scope["normalized_query"]:
+        scope_params["q"] = scope["normalized_query"]
+    export_params = dict(scope_params)
+    if selected_year is not None:
+        export_params["year"] = str(selected_year)
+    export_params["limit"] = str(board_limit)
+
+    return {
+        "request": request,
+        "board": board,
+        "board_title": board_title,
+        "query": scope["normalized_query"],
+        "selected_group_query_value": scope["selected_group_query_value"],
+        "selected_year": selected_year,
+        "board_years": list_board_years(scoped_entries),
+        "board_limit": board_limit,
+        "board_limit_choices": BOARD_LIMIT_CHOICES,
+        "timeline_href": "/" + (f"?{urlencode(scope_params)}" if scope_params else ""),
+        "export_href": f"/timeline/board/export?{urlencode(export_params)}",
+        "export_mode": export_mode,
+        "exported_on": datetime.now().strftime("%b %d, %Y").replace(" 0", " "),
+    }
+
+
+def _parse_board_year(raw_year: str) -> int | None:
+    try:
+        return parse_optional_int(raw_year, field_name="year", minimum=1900, maximum=2100)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _poster_board_export_file_name(board_title: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", board_title.lower()).strip("-") or "board"
+    return f"EventTracker-board-{slug}-{datetime.now().strftime('%Y-%m-%d')}.html"
 
 
 @app.get("/timeline/heatmap/entries", response_class=HTMLResponse)

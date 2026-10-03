@@ -9,7 +9,7 @@ from app.db import connection_context, init_db
 from app.models import Entry, EntryLink
 from app.schemas import EntryLinkPayload, EntryPayload, EntrySourceSnapshotPayload
 from app.services.entries import (
-    _is_valid_url,
+    is_valid_url,
     _parse_int,
     blank_form_state,
     build_timeline_groups,
@@ -511,25 +511,25 @@ class TestNormalizeTags(unittest.TestCase):
 
 class TestIsValidUrl(unittest.TestCase):
     def test_http_valid(self) -> None:
-        self.assertTrue(_is_valid_url("http://example.com"))
+        self.assertTrue(is_valid_url("http://example.com"))
 
     def test_https_valid(self) -> None:
-        self.assertTrue(_is_valid_url("https://example.com/path"))
+        self.assertTrue(is_valid_url("https://example.com/path"))
 
     def test_ftp_invalid(self) -> None:
-        self.assertFalse(_is_valid_url("ftp://example.com"))
+        self.assertFalse(is_valid_url("ftp://example.com"))
 
     def test_no_scheme(self) -> None:
-        self.assertFalse(_is_valid_url("example.com"))
+        self.assertFalse(is_valid_url("example.com"))
 
     def test_no_netloc(self) -> None:
-        self.assertFalse(_is_valid_url("http://"))
+        self.assertFalse(is_valid_url("http://"))
 
     def test_empty_string(self) -> None:
-        self.assertFalse(_is_valid_url(""))
+        self.assertFalse(is_valid_url(""))
 
     def test_just_http_colon_slash_slash(self) -> None:
-        self.assertFalse(_is_valid_url("http://"))
+        self.assertFalse(is_valid_url("http://"))
 
 
 class TestParseInt(unittest.TestCase):
