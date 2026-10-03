@@ -8,9 +8,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.models import Entry, SearchResult
+from app.services.event_chat import QUESTION_STOPWORDS
 from app.services.search import (
     _find_exact_tag_entry_ids,
     _rrf_score,
+    build_fts_any_term_query,
     build_fts_query,
     decode_search_cursor,
     encode_search_cursor,
@@ -137,6 +139,29 @@ class TestBuildFtsQueryEdgeCases(unittest.TestCase):
     def test_single_character(self) -> None:
         self.assertEqual(build_fts_query("x"), '"x"')
         self.assertEqual(build_fts_query("5"), '"5"')
+
+
+class TestBuildFtsAnyTermQuery(unittest.TestCase):
+    def test_question_words_are_dropped_and_terms_or_joined(self) -> None:
+        self.assertEqual(
+            build_fts_any_term_query("What changed in security?", QUESTION_STOPWORDS),
+            '"changed" OR "security"',
+        )
+
+    def test_duplicate_terms_are_collapsed(self) -> None:
+        self.assertEqual(
+            build_fts_any_term_query("release notes and release dates", QUESTION_STOPWORDS),
+            '"release" OR "notes" OR "dates"',
+        )
+
+    def test_stopword_only_question_falls_back_to_literal_match(self) -> None:
+        self.assertEqual(build_fts_any_term_query("what is it", QUESTION_STOPWORDS), '"what" "is" "it"')
+
+    def test_fts5_operators_stay_quoted(self) -> None:
+        self.assertEqual(build_fts_any_term_query("NOT NEAR", QUESTION_STOPWORDS), '"NOT" OR "NEAR"')
+
+    def test_punctuation_only_returns_empty(self) -> None:
+        self.assertEqual(build_fts_any_term_query("???", QUESTION_STOPWORDS), "")
 
 
 class _DBTestCase(unittest.TestCase):

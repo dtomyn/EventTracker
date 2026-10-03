@@ -6,6 +6,7 @@ and scope pill rendering.
 """
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 from datetime import UTC, datetime
@@ -270,23 +271,30 @@ def test_story_generate_mocked_success_shows_title_and_narrative(
     generated_title = f"{e2e_session.run_id} Mocked Story Title"
     generated_narrative = "<p>The <strong>arc</strong> of events shows a clear pattern.</p>"
 
-    # The generate endpoint renders a full story.html page; mock it to return
-    # a simplified response that contains the key selectors we assert on.
+    # Generation streams SSE events; the "result" event carries the full
+    # rendered story page. Mock the stream with a simplified page that contains
+    # the key selectors we assert on.
     def handle_generate(route):
-        body = (
+        result_html = (
             f"<html><body>"
             f'<h2 class="h3 mb-1" id="story-result-title">{generated_title}</h2>'
             f'<div class="story-rich-text" data-story-result>{generated_narrative}</div>'
             f'<div class="alert alert-success" role="alert">Story generated for the current scope.</div>'
             f"</body></html>"
         )
-        route.fulfill(status=200, content_type="text/html", body=body)
+        result_payload = json.dumps({"kind": "result", "html": result_html})
+        complete_payload = json.dumps({"kind": "complete", "ok": True})
+        body = (
+            f"event: result\ndata: {result_payload}\n\n"
+            f"event: complete\ndata: {complete_payload}\n\n"
+        )
+        route.fulfill(status=200, content_type="text/event-stream", body=body)
 
-    page.route("**/story/generate", handle_generate)
+    page.route("**/story/generate/stream", handle_generate)
 
     page.goto(f"/story?group_id={group_id}")
     with page.expect_response(
-        lambda r: r.request.method == "POST" and "/story/generate" in r.url,
+        lambda r: r.request.method == "POST" and "/story/generate/stream" in r.url,
         timeout=8_000,
     ):
         page.get_by_role("button", name="Generate story").click()
@@ -325,23 +333,21 @@ def test_story_generate_mocked_error_shows_alert(
     )
 
     def handle_error(route):
-        body = (
-            "<html><body>"
-            f'<div class="alert alert-danger" role="alert">{expected_alert_text}</div>'
-            "</body></html>"
-        )
-        route.fulfill(status=status_code, content_type="text/html", body=body)
+        route.fulfill(status=status_code, content_type="text/plain", body="upstream failure")
 
-    page.route("**/story/generate", handle_error)
+    page.route("**/story/generate/stream", handle_error)
 
     page.goto(f"/story?group_id={group_id}")
     with page.expect_response(
-        lambda r: r.request.method == "POST" and "/story/generate" in r.url,
+        lambda r: r.request.method == "POST" and "/story/generate/stream" in r.url,
         timeout=8_000,
     ):
         page.get_by_role("button", name="Generate story").click()
 
-    expect(page.get_by_role("alert")).to_contain_text(expected_alert_text)
+    expect(page.locator("[data-story-trace] .story-trace-line.is-error")).to_contain_text(
+        f"{expected_alert_text} (HTTP {status_code})"
+    )
+    expect(page.get_by_role("button", name="Generate story")).to_be_enabled()
 
 
 # ---------------------------------------------------------------------------

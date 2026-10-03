@@ -645,6 +645,11 @@
                         },
                         body: formData,
                     }).then(function (response) {
+                        if (!response.ok) {
+                            var httpError = new Error("Story generation failed (HTTP " + response.status + "). Try again.");
+                            httpError.isUserFacing = true;
+                            throw httpError;
+                        }
                         return consumeSseStream(response, function (eventName, payload) {
                             if (eventName === "status" || eventName === "copilot_event") {
                                 if (traceCtrl) traceCtrl.appendEntry(payload);
@@ -666,9 +671,12 @@
                             button.disabled = false;
                             label.textContent = origLabel;
                         }
-                    }).catch(function () {
+                    }).catch(function (error) {
                         if (traceCtrl) {
-                            traceCtrl.appendEntry({ kind: "story_error", message: "Lost connection to the server. Try again." });
+                            var message = error && error.isUserFacing
+                                ? error.message
+                                : "Lost connection to the server. Try again.";
+                            traceCtrl.appendEntry({ kind: "story_error", message: message });
                             traceCtrl.finish(true);
                         }
                         button.disabled = false;

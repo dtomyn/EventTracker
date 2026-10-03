@@ -47,6 +47,22 @@ EVENT_CHAT_SYSTEM_PROMPT = (
     "If the retrieved entries do not contain enough evidence, say so plainly. "
     "When you reference evidence, cite the entry id inline using the format [Entry 123]."
 )
+
+# Question words and fillers dropped from natural-language questions before an
+# any-term keyword match, so "What changed in security?" searches "changed",
+# "security" rather than requiring every word to appear.
+QUESTION_STOPWORDS = frozenset(
+    {
+        "a", "about", "after", "all", "an", "and", "any", "are", "as", "at",
+        "be", "been", "before", "between", "but", "by", "can", "could", "did",
+        "do", "does", "during", "for", "from", "had", "has", "have", "how",
+        "i", "if", "in", "into", "is", "it", "its", "me", "my", "of", "on",
+        "or", "our", "over", "should", "since", "so", "tell", "than", "that",
+        "the", "their", "them", "there", "these", "they", "this", "those",
+        "to", "us", "was", "we", "were", "what", "when", "where", "which",
+        "who", "whom", "why", "will", "with", "would", "you", "your",
+    }
+)
 _COPILOT_ANSWER_DELTA_EVENT_RE = re.compile(r"assistant[._].*delta", re.IGNORECASE)
 _COPILOT_REASONING_EVENT_RE = re.compile(r"reason(?:ing)?", re.IGNORECASE)
 
@@ -166,7 +182,12 @@ def retrieve_event_chat_citations(
     limit: int = DEFAULT_EVENT_CHAT_RESULT_LIMIT,
 ) -> list[EventChatCitation]:
     normalized_question = normalize_event_chat_question(question)
-    results = search_entries(connection, normalized_question, group_id=group_id)
+    results = search_entries(
+        connection,
+        normalized_question,
+        group_id=group_id,
+        any_term_ignoring=QUESTION_STOPWORDS,
+    )
     return build_event_chat_citations(results, limit=limit)
 
 
