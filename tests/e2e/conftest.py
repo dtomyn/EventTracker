@@ -198,11 +198,11 @@ def _cleanup_stale_temp_dirs() -> None:
         except OSError:
             continue
         if is_stale:
-            # Every xdist worker (and any concurrent run) sweeps at session start,
-            # so another sweeper may delete the same directory mid-walk.
+            # Best effort: a concurrent run (another worktree, the TS suite) may be
+            # sweeping the same directory, which surfaces as ENOENT or EACCES.
             try:
                 _remove_temp_dir(temp_dir)
-            except FileNotFoundError:
+            except OSError:
                 continue
 
 
@@ -247,10 +247,23 @@ def _create_e2e_session(*, ai_provider: str) -> Iterator[E2ESession]:
 
 @pytest.fixture(scope="session")
 def playwright_instance() -> Iterator[Playwright]:
-    _cleanup_stale_temp_dirs()
     with sync_playwright() as playwright:
         yield playwright
-    _cleanup_stale_temp_dirs()
+
+
+def _is_xdist_worker(session: pytest.Session) -> bool:
+    return hasattr(session.config, "workerinput")
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    # Sweep once per run (in the xdist controller), not once per worker.
+    if not _is_xdist_worker(session):
+        _cleanup_stale_temp_dirs()
+
+
+def pytest_sessionfinish(session: pytest.Session) -> None:
+    if not _is_xdist_worker(session):
+        _cleanup_stale_temp_dirs()
 
 
 @pytest.fixture(scope="session")
