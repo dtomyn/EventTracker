@@ -63,6 +63,7 @@ from app.services.story_presentation import build_presentation_chapters
 from app.services.entries import (
     blank_form_state,
     build_connection_graph,
+    build_tag_tone_map,
     build_timeline_groups,
     create_timeline_group,
     decode_timeline_cursor,
@@ -658,6 +659,8 @@ def timeline(request: Request, q: str = "", group_id: str = "") -> HTMLResponse:
             has_more=has_more,
             next_cursor=next_cursor,
         )
+        tone_map = build_tag_tone_map(connection)
+        request.state.tag_tone_map = tone_map
         context: TimelinePageContext = {
             "request": request,
             "page_title": (
@@ -683,7 +686,9 @@ def timeline(request: Request, q: str = "", group_id: str = "") -> HTMLResponse:
             "timeline_scope": timeline_scope,
             "embeddings_enabled": is_sqlite_vec_enabled(connection),
             "timeline_stats": get_timeline_stats(
-                connection, group_id=scope["selected_group_id"]
+                connection,
+                group_id=scope["selected_group_id"],
+                tone_map=tone_map,
             ),
         }
     return templates.TemplateResponse(

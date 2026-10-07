@@ -50,7 +50,7 @@
                 </div>
                 <div class="tl-stat">
                     <div class="tl-stat-label">Date span</div>
-                    <div class="tl-stat-value"><span data-tl-count="{{ timeline_stats.span_value }}">{{ timeline_stats.span_value }}</span><span class="tl-stat-unit">{{ timeline_stats.span_unit }}</span></div>
+                    <div class="tl-stat-value"><span data-tl-count="{{ timeline_stats.span_value }}">{{ timeline_stats.span_value }}</span>{% set span_unit_base = 'year' if timeline_stats.span_unit.startswith('year') else 'month' %}<span class="tl-stat-unit" data-tl-unit-one="{{ span_unit_base }}" data-tl-unit-other="{{ span_unit_base }}s">{{ timeline_stats.span_unit }}</span></div>
                     <div class="tl-stat-meta">{% if timeline_stats.first_label == timeline_stats.last_label %}{{ timeline_stats.first_label }}{% else %}{{ timeline_stats.first_label }} - {{ timeline_stats.last_label }}{% endif %}</div>
                 </div>
                 <div class="tl-stat tl-stat-tags">

@@ -12,6 +12,7 @@ from app.main import app
 from app.schemas import EntryPayload
 from app.services.entries import (
     TAG_TONE_COUNT,
+    build_tag_tone_map,
     get_timeline_stats,
     save_entry,
     tag_tone,
@@ -51,6 +52,12 @@ class TagToneTests(unittest.TestCase):
 
     def test_tag_tone_ignores_case_and_surrounding_space(self) -> None:
         self.assertEqual(tag_tone("Security"), tag_tone("  security "))
+
+    def test_tag_tone_prefers_assigned_slot_from_map(self) -> None:
+        hashed = tag_tone("security")
+        assigned = (hashed + 1) % TAG_TONE_COUNT
+        self.assertEqual(tag_tone(" Security", {"security": assigned}), assigned)
+        self.assertEqual(tag_tone("other", {"security": assigned}), tag_tone("other"))
 
 
 class TimelineStatsTests(unittest.TestCase):
@@ -103,7 +110,10 @@ class TimelineStatsTests(unittest.TestCase):
             [(tag["name"], tag["count"]) for tag in stats["top_tags"]],
             [("release", 3), ("ai", 2)],
         )
-        self.assertEqual(stats["top_tags"][0]["tone"], tag_tone("release"))
+        tone_map = {"release": 7}
+        with connection_context() as connection:
+            mapped = get_timeline_stats(connection, group_id=1, tone_map=tone_map)
+        self.assertEqual(mapped["top_tags"][0]["tone"], 7)
 
         sparkline = stats["sparkline"]
         assert sparkline is not None
@@ -171,9 +181,100 @@ class TimelineStatsTests(unittest.TestCase):
         self.assertIn('data-tl-count="1"', html)
         self.assertIn('class="tl-sparkline"', html)
         self.assertIn("timeline-spine-item tag-tone-", html)
-        self.assertIn(f"tag-pill tag-tone-{tag_tone('release')}", html)
+        with connection_context() as connection:
+            release_tone = tag_tone("release", build_tag_tone_map(connection))
+        self.assertIn(f"tag-pill tag-tone-{release_tone}", html)
         self.assertIn("/static/timeline.css", html)
         self.assertIn("/static/timeline.js", html)
+
+
+class TagToneMapTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.previous_db_path = os.environ.get("EVENTTRACKER_DB_PATH")
+        os.environ["EVENTTRACKER_DB_PATH"] = str(
+            Path(self.temp_dir.name) / "EventTracker-test.db"
+        )
+        init_db()
+
+    def tearDown(self) -> None:
+        if self.previous_db_path is None:
+            os.environ.pop("EVENTTRACKER_DB_PATH", None)
+        else:
+            os.environ["EVENTTRACKER_DB_PATH"] = self.previous_db_path
+        self.temp_dir.cleanup()
+
+    @staticmethod
+    def _colliding_pair() -> tuple[str, str]:
+        first = "security"
+        for index in range(1000):
+            candidate = f"tag-{index}"
+            if tag_tone(candidate) == tag_tone(first):
+                return first, candidate
+        raise AssertionError("no hash collision found")
+
+    def test_empty_database_yields_empty_map(self) -> None:
+        with connection_context() as connection:
+            self.assertEqual(build_tag_tone_map(connection), {})
+
+    def test_frequent_tags_with_colliding_hashes_get_distinct_tones(self) -> None:
+        first, second = self._colliding_pair()
+        with connection_context() as connection:
+            save_entry(connection, _payload(year=2026, month=1, day=1, tags=[first, second]))
+            save_entry(connection, _payload(year=2026, month=1, day=2, tags=[first]))
+            tone_map = build_tag_tone_map(connection)
+
+        # The more frequent tag keeps its hashed slot; the other moves aside.
+        self.assertEqual(tone_map[first], tag_tone(first))
+        self.assertNotEqual(tone_map[first], tone_map[second])
+
+    def test_top_tags_fill_every_palette_slot_and_tail_uses_hash(self) -> None:
+        tags = [f"topic-{index:02d}" for index in range(TAG_TONE_COUNT + 4)]
+        with connection_context() as connection:
+            for rank, tag in enumerate(tags):
+                # Earlier tags are used more often.
+                for repeat in range(len(tags) - rank):
+                    save_entry(
+                        connection,
+                        _payload(year=2026, month=1, day=1 + repeat % 28, tags=[tag]),
+                    )
+            tone_map = build_tag_tone_map(connection)
+
+        top = tags[:TAG_TONE_COUNT]
+        self.assertEqual(sorted(tone_map), sorted(top))
+        self.assertEqual(sorted(tone_map.values()), list(range(TAG_TONE_COUNT)))
+        for tag in tags[TAG_TONE_COUNT:]:
+            self.assertEqual(tag_tone(tag, tone_map), tag_tone(tag))
+
+    def test_ties_break_by_name_and_map_is_deterministic(self) -> None:
+        with connection_context() as connection:
+            save_entry(connection, _payload(year=2026, month=1, day=1, tags=["beta", "Alpha"]))
+            first = build_tag_tone_map(connection)
+            second = build_tag_tone_map(connection)
+        self.assertEqual(first, second)
+        self.assertEqual(set(first), {"alpha", "beta"})
+
+    def test_each_group_hero_tags_get_distinct_tones(self) -> None:
+        with connection_context() as connection:
+            cursor = connection.execute(
+                "INSERT INTO timeline_groups(name, web_search_query, is_default) VALUES (?, NULL, 0)",
+                ("Small Group",),
+            )
+            assert cursor.lastrowid is not None
+            small_group = int(cursor.lastrowid)
+            busy_tags = [f"busy-{index:02d}" for index in range(TAG_TONE_COUNT + 2)]
+            for day in range(1, 6):
+                save_entry(connection, _payload(year=2026, month=1, day=day, tags=busy_tags))
+            save_entry(
+                connection,
+                _payload(year=2026, month=2, day=1, tags=["niche-a", "niche-b", "niche-c"], group_id=small_group),
+            )
+            tone_map = build_tag_tone_map(connection)
+            stats = get_timeline_stats(connection, group_id=small_group, tone_map=tone_map)
+
+        hero_tones = [tag["tone"] for tag in stats["top_tags"]]
+        self.assertEqual(len(hero_tones), 3)
+        self.assertEqual(len(set(hero_tones)), 3)
 
 
 if __name__ == "__main__":

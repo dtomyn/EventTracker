@@ -226,15 +226,26 @@
 
         // Grid
         const scroll = el("div", "hm-scroll");
+        // Weekday labels live in their own sticky column so they stay visible
+        // while the grid scrolls horizontally on narrow screens.
+        const daySvg = svgEl("svg", {
+            class: "hm-day-labels",
+            width: LABEL_WIDTH,
+            height: svgHeight,
+            viewBox: `0 0 ${LABEL_WIDTH} ${svgHeight}`,
+            "aria-hidden": "true",
+        });
+        const dayG = svgEl("g", { transform: `translate(${LABEL_WIDTH}, ${TOP_MARGIN})` });
+        daySvg.append(dayG);
         const svg = svgEl("svg", {
             class: "heatmap-svg",
-            width: svgWidth,
+            width: gridWidth,
             height: svgHeight,
-            viewBox: `0 0 ${svgWidth} ${svgHeight}`,
+            viewBox: `0 0 ${gridWidth} ${svgHeight}`,
             role: "group",
             "aria-label": `Entry activity heatmap for ${year}. Use arrow keys to move between days.`,
         });
-        const gridG = svgEl("g", { transform: `translate(${LABEL_WIDTH}, ${TOP_MARGIN})` });
+        const gridG = svgEl("g", { transform: `translate(0, ${TOP_MARGIN})` });
         svg.append(gridG);
 
         // Month labels sit above the first full week column of each month.
@@ -259,7 +270,7 @@
                 "dominant-baseline": "central",
             });
             text.textContent = label;
-            gridG.append(text);
+            dayG.append(text);
         });
 
         const radius = Math.max(2, Math.round(size * 0.24));
@@ -302,7 +313,7 @@
         if (total === 0) {
             const empty = svgEl("text", {
                 class: "hm-empty-label",
-                x: LABEL_WIDTH + gridWidth / 2,
+                x: gridWidth / 2,
                 y: TOP_MARGIN + 3.5 * step,
                 "text-anchor": "middle",
                 "dominant-baseline": "central",
@@ -310,7 +321,7 @@
             empty.textContent = `No events tracked in ${year}`;
             svg.append(empty);
         }
-        scroll.append(svg);
+        scroll.append(daySvg, svg);
 
         // Footer: playback controls + legend
         const footer = el("div", "hm-footer");

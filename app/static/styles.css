@@ -1,4 +1,5 @@
 .chat-answer-body {
+    background: var(--et-surface-bg-alt);
     min-height: 10rem;
     line-height: 1.6;
     white-space: pre-wrap;
@@ -24,8 +25,9 @@
     --et-border-dashed: rgba(15, 23, 42, 0.12);
     --et-border-input: rgba(15, 23, 42, 0.1);
 
-    /* Primary accent - cyan */
+    /* Primary accent - cyan. --et-accent-text is the AA-contrast text variant. */
     --et-primary: #0891b2;
+    --et-accent-text: #0e7490;
     --et-primary-bg: rgba(8, 145, 178, 0.08);
     --et-primary-border: rgba(8, 145, 178, 0.18);
     --et-primary-border-hover: rgba(8, 145, 178, 0.34);
@@ -90,8 +92,9 @@
     --et-border-dashed: rgba(6, 182, 212, 0.18);
     --et-border-input: rgba(6, 182, 212, 0.12);
 
-    /* Primary accent - cyan */
+    /* Primary accent - cyan. --et-accent-text is the AA-contrast text variant. */
     --et-primary: #06b6d4;
+    --et-accent-text: #22d3ee;
     --et-primary-bg: rgba(6, 182, 212, 0.1);
     --et-primary-border: rgba(6, 182, 212, 0.2);
     --et-primary-border-hover: rgba(6, 182, 212, 0.35);
@@ -156,8 +159,12 @@ body {
     --bs-body-color: #0f172a;
     --bs-primary: #0891b2;
     --bs-primary-rgb: 8, 145, 178;
-    --bs-link-color: #0891b2;
-    --bs-link-hover-color: #0e7490;
+    /* Links use a deeper teal than --bs-primary so body text links meet
+       WCAG AA (4.5:1). The -rgb variants are what Bootstrap 5.3 reads. */
+    --bs-link-color: #0e7490;
+    --bs-link-color-rgb: 14, 116, 144;
+    --bs-link-hover-color: #155e75;
+    --bs-link-hover-color-rgb: 21, 94, 117;
 }
 
 [data-bs-theme="dark"] {
@@ -166,7 +173,9 @@ body {
     --bs-primary: #06b6d4;
     --bs-primary-rgb: 6, 182, 212;
     --bs-link-color: #06b6d4;
+    --bs-link-color-rgb: 6, 182, 212;
     --bs-link-hover-color: #22d3ee;
+    --bs-link-hover-color-rgb: 34, 211, 238;
 }
 
 /* Monospace utility for dates, tags, badges */
@@ -178,6 +187,9 @@ body {
 h1, .h1 { font-size: clamp(1.3rem, 2vw, 1.5rem); font-weight: 700; line-height: 1.3; }
 h2, .h2 { font-size: 1.15rem; font-weight: 600; line-height: 1.3; }
 h3, .h3 { font-size: 1rem; font-weight: 600; line-height: 1.3; }
+/* Keep section headings below the page title (Bootstrap's h4/h5 are larger than our h1-h3). */
+h4, .h4 { font-size: 1rem; font-weight: 600; line-height: 1.3; }
+h5, .h5 { font-size: 0.9375rem; font-weight: 600; line-height: 1.3; }
 
 /* Navbar overrides */
 .navbar {
@@ -189,6 +201,110 @@ h3, .h3 { font-size: 1rem; font-weight: 600; line-height: 1.3; }
     font-weight: 700;
     color: var(--et-text) !important;
     letter-spacing: -0.01em;
+}
+
+.site-navbar-toggler {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: calc(1.5em + 0.75rem + 2px);
+    padding: 0;
+    font-size: 1rem;
+    border-color: var(--et-border);
+    border-radius: 6px;
+}
+
+.site-navbar-toggler .navbar-toggler-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
+.site-navbar-toggler:hover {
+    background: var(--et-surface-bg-subtle);
+    border-color: var(--et-primary-border);
+}
+
+.site-navbar-toggler:focus {
+    box-shadow: none;
+}
+
+.site-navbar-toggler:focus-visible {
+    box-shadow: 0 0 0 3px var(--et-primary-focus);
+}
+
+@media (max-width: 991.98px) {
+    .site-navbar-menu {
+        padding: 0.75rem 0 0.25rem;
+    }
+
+    .site-navbar-search .form-control {
+        flex: 1 1 100%;
+    }
+
+    .site-navbar-search .btn,
+    .site-navbar-links .btn {
+        flex: 1 1 0;
+    }
+}
+
+/* --- Tag palette ---------------------------------------------------------
+   Each tag maps to a tone (0-9) server-side via the `tag_tone` filter, which
+   gives the most used tags distinct tones (see build_tag_tone_map).
+   Tones only set a hue; light/dark recipes below derive WCAG AA colors. */
+.tag-tone-0 { --tag-h: 210; --tag-s: 85%; }
+.tag-tone-1 { --tag-h: 250; --tag-s: 70%; }
+.tag-tone-2 { --tag-h: 285; --tag-s: 60%; }
+.tag-tone-3 { --tag-h: 325; --tag-s: 70%; }
+.tag-tone-4 { --tag-h: 4;   --tag-s: 75%; }
+.tag-tone-5 { --tag-h: 26;  --tag-s: 88%; }
+.tag-tone-6 { --tag-h: 46;  --tag-s: 90%; }
+.tag-tone-7 { --tag-h: 88;  --tag-s: 60%; }
+.tag-tone-8 { --tag-h: 148; --tag-s: 60%; }
+.tag-tone-9 { --tag-h: 182; --tag-s: 72%; }
+.tag-tone-none { --tag-h: 215; --tag-s: 16%; }
+
+[class*="tag-tone-"] {
+    --tag-fg: hsl(var(--tag-h) var(--tag-s) 26%);
+    --tag-bg: hsl(var(--tag-h) var(--tag-s) 95%);
+    --tag-border: hsl(var(--tag-h) calc(var(--tag-s) * 0.7) 84%);
+    --tag-dot: hsl(var(--tag-h) calc(var(--tag-s) * 0.85) 47%);
+    --tag-glow: hsl(var(--tag-h) var(--tag-s) 50% / 0.22);
+}
+
+[data-bs-theme="dark"] [class*="tag-tone-"] {
+    --tag-fg: hsl(var(--tag-h) var(--tag-s) 82%);
+    --tag-bg: hsl(var(--tag-h) calc(var(--tag-s) * 0.55) 20%);
+    --tag-border: hsl(var(--tag-h) calc(var(--tag-s) * 0.5) 32%);
+    --tag-dot: hsl(var(--tag-h) calc(var(--tag-s) * 0.9) 62%);
+    --tag-glow: hsl(var(--tag-h) var(--tag-s) 60% / 0.28);
+}
+
+.tag-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    max-width: 100%;
+    padding: 0.25rem 0.625rem 0.25rem 0.5rem;
+    border: 1px solid var(--tag-border, var(--et-border));
+    border-radius: 999px;
+    background: var(--tag-bg, var(--et-surface-bg));
+    color: var(--tag-fg, var(--et-text-subtle));
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tag-pill::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 0.4375rem;
+    height: 0.4375rem;
+    border-radius: 999px;
+    background: var(--tag-dot, currentColor);
 }
 
 /* Card overrides - remove Bootstrap defaults, apply subtle-border style */
@@ -214,6 +330,10 @@ h3, .h3 { font-size: 1rem; font-weight: 600; line-height: 1.3; }
     --bs-btn-active-bg: var(--et-primary);
     --bs-btn-active-border-color: var(--et-primary);
     --bs-btn-active-color: #0f172a;
+    --bs-btn-disabled-bg: var(--et-primary);
+    --bs-btn-disabled-border-color: var(--et-primary);
+    --bs-btn-disabled-color: #0f172a;
+    --bs-btn-focus-shadow-rgb: var(--bs-primary-rgb);
     font-weight: 600;
     filter: brightness(1);
     transition: filter 0.15s ease, transform 0.15s ease;
@@ -234,6 +354,49 @@ h3, .h3 { font-size: 1rem; font-weight: 600; line-height: 1.3; }
     --bs-btn-active-border-color: var(--et-primary-border);
     --bs-btn-active-color: var(--et-primary);
     border-radius: 6px;
+}
+
+/* Outline accent buttons follow the app's teal instead of Bootstrap blue. */
+.btn-outline-primary {
+    --bs-btn-color: var(--et-accent-text);
+    --bs-btn-border-color: var(--et-primary-border-hover);
+    --bs-btn-hover-color: var(--et-accent-text);
+    --bs-btn-hover-bg: var(--et-primary-bg);
+    --bs-btn-hover-border-color: var(--et-primary);
+    --bs-btn-active-color: var(--et-accent-text);
+    --bs-btn-active-bg: var(--et-primary-bg);
+    --bs-btn-active-border-color: var(--et-primary);
+    --bs-btn-disabled-color: var(--et-text-muted);
+    --bs-btn-disabled-border-color: var(--et-border);
+    --bs-btn-focus-shadow-rgb: var(--bs-primary-rgb);
+}
+
+/* Text-style buttons (Cancel, Clear filter) read as links, underlined on hover. */
+.btn-link {
+    --bs-btn-color: var(--et-accent-text);
+    --bs-btn-hover-color: var(--et-accent-text);
+    --bs-btn-active-color: var(--et-accent-text);
+    --bs-btn-focus-shadow-rgb: var(--bs-primary-rgb);
+    text-decoration: none;
+}
+
+.btn-link:hover {
+    text-decoration: underline;
+}
+
+/* Switches and checkboxes use the accent instead of Bootstrap blue. */
+.form-check-input:checked {
+    background-color: var(--et-primary);
+    border-color: var(--et-primary);
+}
+
+.form-check-input:focus {
+    border-color: var(--et-primary);
+    box-shadow: 0 0 0 0.25rem var(--et-primary-focus);
+}
+
+.form-switch .form-check-input:focus:not(:checked) {
+    --bs-form-switch-bg: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%2306b6d4'/%3e%3c/svg%3e");
 }
 
 /* Form control overrides */

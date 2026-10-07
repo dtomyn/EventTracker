@@ -1702,11 +1702,92 @@ class TimelineStats(TypedDict):
     sparkline: TimelineSparkline | None
 
 
-def tag_tone(tag: str) -> int:
-    """Map a tag name to a stable palette slot (0..TAG_TONE_COUNT-1)."""
-    normalized = tag.strip().casefold()
+TAG_TONE_HERO_TAGS_PER_SCOPE = 3
+
+
+def _normalize_tag_key(tag: str) -> str:
+    return tag.strip().casefold()
+
+
+def tag_tone(tag: str, tone_map: Mapping[str, int] | None = None) -> int:
+    """Map a tag name to a palette slot (0..TAG_TONE_COUNT-1).
+
+    Tags present in ``tone_map`` (see :func:`build_tag_tone_map`) use their
+    assigned slot so that frequent tags never share a colour. Any other tag
+    falls back to a stable hash of its normalized name.
+    """
+    normalized = _normalize_tag_key(tag)
+    if tone_map is not None:
+        assigned = tone_map.get(normalized)
+        if assigned is not None:
+            return assigned
     digest = hashlib.sha1(normalized.encode("utf-8")).digest()
     return int.from_bytes(digest[:4], "big") % TAG_TONE_COUNT
+
+
+def build_tag_tone_map(connection: sqlite3.Connection) -> dict[str, int]:
+    """Assign distinct palette slots to the most prominent tags.
+
+    Priority order: the overall top tags, then the top tags of every timeline
+    group (the tags each hero header shows), then the rest by global usage.
+    Ties break by name. The first ``TAG_TONE_COUNT`` tags in that order each
+    get a different slot; every tag keeps its hashed slot when it is still
+    free, so colours stay stable as usage shifts. Remaining tags are left out
+    of the map and use the hash fallback in :func:`tag_tone`.
+    """
+    global_rows = connection.execute(
+        """
+        SELECT t.name, COUNT(*) AS cnt
+        FROM entry_tags et
+        JOIN tags t ON t.id = et.tag_id
+        GROUP BY t.id
+        ORDER BY cnt DESC, t.name COLLATE NOCASE ASC
+        """
+    ).fetchall()
+    group_rows = connection.execute(
+        """
+        SELECT name FROM (
+            SELECT t.name AS name, e.group_id AS group_id,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY e.group_id
+                       ORDER BY COUNT(*) DESC, t.name COLLATE NOCASE ASC
+                   ) AS rank_in_group
+            FROM entry_tags et
+            JOIN tags t ON t.id = et.tag_id
+            JOIN entries e ON e.id = et.entry_id
+            GROUP BY e.group_id, t.id
+        )
+        WHERE rank_in_group <= ?
+        ORDER BY group_id ASC, rank_in_group ASC
+        """,
+        (TAG_TONE_HERO_TAGS_PER_SCOPE,),
+    ).fetchall()
+
+    global_names = [str(row[0]) for row in global_rows]
+    priority: list[str] = []
+    seen: set[str] = set()
+    for name in (
+        global_names[:TAG_TONE_HERO_TAGS_PER_SCOPE]
+        + [str(row[0]) for row in group_rows]
+        + global_names
+    ):
+        key = _normalize_tag_key(name)
+        if key in seen:
+            continue
+        seen.add(key)
+        priority.append(key)
+        if len(priority) >= TAG_TONE_COUNT:
+            break
+
+    tone_map: dict[str, int] = {}
+    used: set[int] = set()
+    for key in priority:
+        tone = tag_tone(key)
+        while tone in used:
+            tone = (tone + 1) % TAG_TONE_COUNT
+        used.add(tone)
+        tone_map[key] = tone
+    return tone_map
 
 
 def _short_month_label(year: int, month: int) -> str:
@@ -1755,6 +1836,7 @@ def get_timeline_stats(
     connection: sqlite3.Connection,
     group_id: int | None = None,
     top_tag_limit: int = 3,
+    tone_map: Mapping[str, int] | None = None,
 ) -> TimelineStats:
     """Summarize a timeline scope for the hero header.
 
@@ -1790,9 +1872,11 @@ def get_timeline_stats(
         params,
     ).fetchall()
 
+    if tone_map is None:
+        tone_map = build_tag_tone_map(connection)
     total = sum(int(row[3]) for row in day_rows)
     top_tags: list[TimelineTagStat] = [
-        {"name": str(row[0]), "count": int(row[1]), "tone": tag_tone(str(row[0]))}
+        {"name": str(row[0]), "count": int(row[1]), "tone": tag_tone(str(row[0]), tone_map)}
         for row in tag_rows[: max(0, top_tag_limit)]
     ]
     empty: TimelineStats = {
