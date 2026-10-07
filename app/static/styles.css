@@ -24,7 +24,7 @@
     --et-border-dashed: rgba(15, 23, 42, 0.12);
     --et-border-input: rgba(15, 23, 42, 0.1);
 
-    /* Primary accent — cyan */
+    /* Primary accent - cyan */
     --et-primary: #0891b2;
     --et-primary-bg: rgba(8, 145, 178, 0.08);
     --et-primary-border: rgba(8, 145, 178, 0.18);
@@ -84,13 +84,13 @@
     --et-text-date: #06b6d4;
     --et-text-sep: #334155;
 
-    /* Borders — cyan-tinted */
+    /* Borders - cyan-tinted */
     --et-border: rgba(6, 182, 212, 0.15);
     --et-border-light: rgba(6, 182, 212, 0.1);
     --et-border-dashed: rgba(6, 182, 212, 0.18);
     --et-border-input: rgba(6, 182, 212, 0.12);
 
-    /* Primary accent — cyan */
+    /* Primary accent - cyan */
     --et-primary: #06b6d4;
     --et-primary-bg: rgba(6, 182, 212, 0.1);
     --et-primary-border: rgba(6, 182, 212, 0.2);
@@ -191,7 +191,7 @@ h3, .h3 { font-size: 1rem; font-weight: 600; line-height: 1.3; }
     letter-spacing: -0.01em;
 }
 
-/* Card overrides — remove Bootstrap defaults, apply subtle-border style */
+/* Card overrides - remove Bootstrap defaults, apply subtle-border style */
 .card {
     background: var(--et-card-bg);
     border: 1px solid var(--et-border);
@@ -257,7 +257,7 @@ h3, .h3 { font-size: 1rem; font-weight: 600; line-height: 1.3; }
     color: var(--et-text-muted);
 }
 
-/* Badge overrides — developer style with mono font */
+/* Badge overrides - developer style with mono font */
 .badge {
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 0.65rem;
@@ -293,7 +293,7 @@ h3, .h3 { font-size: 1rem; font-weight: 600; line-height: 1.3; }
     color: var(--et-text-muted);
 }
 
-/* Date elements — monospace accent */
+/* Date elements - monospace accent */
 .visualization-date,
 .text-body-secondary.small {
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -304,7 +304,7 @@ h3, .h3 { font-size: 1rem; font-weight: 600; line-height: 1.3; }
     color: var(--et-text-date);
 }
 
-/* Progress log — use JetBrains Mono */
+/* Progress log - use JetBrains Mono */
 .timeline-web-progress-log,
 .story-trace-log {
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -2029,7 +2029,7 @@ textarea {
     margin-bottom: 1rem;
 }
 
-/* Generate button — accent styling to stand out */
+/* Generate button - accent styling to stand out */
 .btn-generate {
     --bs-btn-color: var(--et-primary);
     --bs-btn-border-color: var(--et-primary-border);
