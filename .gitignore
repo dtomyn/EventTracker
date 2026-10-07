@@ -86,6 +86,7 @@ node_modules/
 playwright-report/
 test-results/playwright/
 test-results/playwright-artifacts/
+test-results/e2e-screenshots/
 
 # Ignore all runtime data files
 data/
