@@ -132,7 +132,9 @@
   .search:focus{outline:none; border-color:var(--ink)}
 
   /* ---------------- the board: an absolutely-packed wall ---------------- */
-  .board{flex:1 1 auto; position:relative; margin:0 12px 12px; min-height:0}
+  /* clip sideways at the viewport edge (the 12px margin), so a tape on the
+     rightmost poster can never make the page scroll horizontally */
+  .board{flex:1 1 auto; position:relative; margin:0 12px 12px; min-height:0; overflow-x:clip; overflow-clip-margin:12px}
   .empty{
     position:absolute; inset:0; display:grid; place-items:center; text-align:center;
     font:800 13px/1.6 var(--sans); letter-spacing:.1em; text-transform:uppercase; color:#6B5C42;
@@ -300,9 +302,11 @@
   /* a pinned poster cannot float off the board: it brightens instead of lifting */
   body.strings-on .poster.in.linked:hover .paper{transform:rotate(var(--rot,0deg)) scale(1); box-shadow:var(--lift-hi)}
   body.strings-on .poster.in.linked:hover .pin{transform:none}
-  /* while one poster is hot, everything not tied to it fades back */
+  /* while one poster is hot, everything not tied to it fades back. Again a
+     filter, not opacity: a see-through sheet would let the yarn running
+     behind it (including the hot, glowing strings) show across its text. */
   body.board-focus .poster.in:not(.kin) .paper,
-  body.board-focus.strings-on .poster.in:not(.linked):not(.kin) .paper{opacity:.34; filter:saturate(.55)}
+  body.board-focus.strings-on .poster.in:not(.linked):not(.kin) .paper{opacity:1; filter:sepia(.7) contrast(.4) brightness(1.32) saturate(1.15)}
   body.board-focus .sticker{opacity:.4}
   @keyframes yarnDraw{to{stroke-dashoffset:0}}
   @keyframes tackIn{from{opacity:0; scale:1.8}to{opacity:1; scale:1}}

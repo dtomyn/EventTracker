@@ -110,13 +110,30 @@
 }
 
 .hm-scroll {
+    display: flex;
     overflow-x: auto;
     overflow-y: hidden;
     padding: 0.25rem 0;
     scrollbar-width: thin;
+    /* Keep keyboard-focused cells clear of the sticky weekday column. */
+    scroll-padding-left: var(--hm-label-width);
+}
+
+.hm-day-labels {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    flex: none;
+    display: block;
+    /* Same translucent surface as the panel, so the column blends in while
+       frosting any cells that scroll underneath it. */
+    background: var(--et-card-bg-subtle);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
 }
 
 .heatmap-svg {
+    flex: none;
     display: block;
     overflow: visible;
 }

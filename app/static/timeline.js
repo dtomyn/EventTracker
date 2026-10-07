@@ -32,6 +32,17 @@
         const decimals = raw.includes(".") ? raw.split(".")[1].length : 0;
         const duration = Math.min(1400, 600 + target * 4);
         const finalText = node.textContent;
+        const unit = node.parentElement ? node.parentElement.querySelector("[data-tl-unit-one]") : null;
+        const finalUnit = unit ? unit.textContent : "";
+        // Keep the unit label in agreement with the number shown on every frame.
+        const render = (text, isFinal) => {
+            node.textContent = text;
+            if (unit) {
+                unit.textContent = isFinal
+                    ? finalUnit
+                    : unit.getAttribute(text === "1" ? "data-tl-unit-one" : "data-tl-unit-other");
+            }
+        };
         let startTime = 0;
         const step = (now) => {
             if (!startTime) {
@@ -39,12 +50,14 @@
             }
             const progress = Math.min(1, (now - startTime) / duration);
             const eased = 1 - Math.pow(1 - progress, 3);
-            node.textContent = progress < 1 ? (target * eased).toFixed(decimals) : finalText;
             if (progress < 1) {
+                render((target * eased).toFixed(decimals), false);
                 window.requestAnimationFrame(step);
+            } else {
+                render(finalText, true);
             }
         };
-        node.textContent = (0).toFixed(decimals);
+        render((0).toFixed(decimals), false);
         window.requestAnimationFrame(step);
     };
 

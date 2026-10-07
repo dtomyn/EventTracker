@@ -360,27 +360,32 @@ test('red string waits for posters to land, keeps decorations clear, and spotlig
   expect(overlaps.hits).toBe(0);
 
   const paper = (id: number) => page.locator(`.poster[data-key="${id}"] .paper`);
-  const opacity = (id: number) => paper(id).evaluate((el) => Number(getComputedStyle(el).opacity));
+  // A faded poster steps back with a filter but stays fully opaque, so the
+  // yarn running behind it never shows through its text.
+  const look = (id: number) => paper(id).evaluate((el) => {
+    const style = getComputedStyle(el);
+    return { opacity: Number(style.opacity), faded: style.filter !== 'none' };
+  });
 
   // Hovering the hub lights its strings and fades the poster it has no tie to.
   await paper(hub).hover();
   await expect(board.string(hub, spoke)).toHaveClass(/\bhot\b/);
   await expect(board.string(hub, rim)).toHaveClass(/\bhot\b/);
-  await expect.poll(() => opacity(loner)).toBeLessThan(0.5);
-  expect(await opacity(spoke)).toBe(1);
-  expect(await opacity(hub)).toBe(1);
+  await expect.poll(() => look(loner)).toEqual({ opacity: 1, faded: true });
+  expect(await look(spoke)).toEqual({ opacity: 1, faded: false });
+  expect(await look(hub)).toEqual({ opacity: 1, faded: false });
 
   // Hovering a spoke: the rim is unrelated to it, so it fades too.
   await paper(spoke).hover();
   await expect(board.string(hub, rim)).not.toHaveClass(/\bhot\b/);
-  await expect.poll(() => opacity(rim)).toBeLessThan(0.5);
+  await expect.poll(() => look(rim)).toEqual({ opacity: 1, faded: true });
 
   await page.mouse.move(2, 2);
-  await expect.poll(() => opacity(rim)).toBe(1);
+  await expect.poll(() => look(rim)).toEqual({ opacity: 1, faded: false });
   await expect(page.locator('body')).not.toHaveClass(/\bboard-focus\b/);
 
   // Keyboard focus spotlights exactly like hover.
   await paper(rim).focus();
   await expect(board.string(hub, rim)).toHaveClass(/\bhot\b/);
-  await expect.poll(() => opacity(spoke)).toBeLessThan(0.5);
+  await expect.poll(() => look(spoke)).toEqual({ opacity: 1, faded: true });
 });

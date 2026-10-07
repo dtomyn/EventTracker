@@ -1,22 +1,8 @@
 /* ==========================================================================
-   Timeline page: hero header, stat tiles, tag palette and timeline spine.
+   Timeline page: hero header, stat tiles and timeline spine.
+   The shared tag palette (.tag-tone-*, .tag-pill) lives in styles.css.
    Loaded only by timeline.html via {% block head %}.
    ========================================================================== */
-
-/* --- Tag palette ---------------------------------------------------------
-   Each tag maps to a stable tone (0-9) server-side via the `tag_tone` filter.
-   Tones only set a hue; light/dark recipes below derive WCAG AA colors. */
-.tag-tone-0 { --tag-h: 210; --tag-s: 85%; }
-.tag-tone-1 { --tag-h: 250; --tag-s: 70%; }
-.tag-tone-2 { --tag-h: 285; --tag-s: 60%; }
-.tag-tone-3 { --tag-h: 325; --tag-s: 70%; }
-.tag-tone-4 { --tag-h: 4;   --tag-s: 75%; }
-.tag-tone-5 { --tag-h: 26;  --tag-s: 88%; }
-.tag-tone-6 { --tag-h: 46;  --tag-s: 90%; }
-.tag-tone-7 { --tag-h: 88;  --tag-s: 60%; }
-.tag-tone-8 { --tag-h: 148; --tag-s: 60%; }
-.tag-tone-9 { --tag-h: 182; --tag-s: 72%; }
-.tag-tone-none { --tag-h: 215; --tag-s: 16%; }
 
 :root {
     --tl-sticky-top: 4.25rem;
@@ -30,49 +16,6 @@
 
 [data-bs-theme="dark"] {
     --tl-accent-text: #22d3ee;
-}
-
-[class*="tag-tone-"] {
-    --tag-fg: hsl(var(--tag-h) var(--tag-s) 26%);
-    --tag-bg: hsl(var(--tag-h) var(--tag-s) 95%);
-    --tag-border: hsl(var(--tag-h) calc(var(--tag-s) * 0.7) 84%);
-    --tag-dot: hsl(var(--tag-h) calc(var(--tag-s) * 0.85) 47%);
-    --tag-glow: hsl(var(--tag-h) var(--tag-s) 50% / 0.22);
-}
-
-[data-bs-theme="dark"] [class*="tag-tone-"] {
-    --tag-fg: hsl(var(--tag-h) var(--tag-s) 82%);
-    --tag-bg: hsl(var(--tag-h) calc(var(--tag-s) * 0.55) 20%);
-    --tag-border: hsl(var(--tag-h) calc(var(--tag-s) * 0.5) 32%);
-    --tag-dot: hsl(var(--tag-h) calc(var(--tag-s) * 0.9) 62%);
-    --tag-glow: hsl(var(--tag-h) var(--tag-s) 60% / 0.28);
-}
-
-.tag-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.375rem;
-    max-width: 100%;
-    padding: 0.25rem 0.625rem 0.25rem 0.5rem;
-    border: 1px solid var(--tag-border, var(--et-border));
-    border-radius: 999px;
-    background: var(--tag-bg, var(--et-surface-bg));
-    color: var(--tag-fg, var(--et-text-subtle));
-    font-size: 0.75rem;
-    font-weight: 600;
-    line-height: 1.2;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.tag-pill::before {
-    content: "";
-    flex: 0 0 auto;
-    width: 0.4375rem;
-    height: 0.4375rem;
-    border-radius: 999px;
-    background: var(--tag-dot, currentColor);
 }
 
 /* --- Hero header ---------------------------------------------------------- */
@@ -116,19 +59,6 @@
 
 .tl-hero .timeline-hero-actions .ms-2 {
     margin-left: 0 !important;
-}
-
-/* Align hero outline buttons with the app accent instead of Bootstrap blue. */
-.tl-hero .btn-outline-primary {
-    --bs-btn-color: var(--tl-accent-text);
-    --bs-btn-border-color: var(--et-primary-border-hover);
-    --bs-btn-hover-color: var(--tl-accent-text);
-    --bs-btn-hover-bg: var(--et-primary-bg);
-    --bs-btn-hover-border-color: var(--et-primary);
-    --bs-btn-active-color: var(--tl-accent-text);
-    --bs-btn-active-bg: var(--et-primary-bg);
-    --bs-btn-active-border-color: var(--et-primary);
-    --bs-btn-focus-shadow-rgb: 8, 145, 178;
 }
 
 /* --- Stat tiles ----------------------------------------------------------- */
