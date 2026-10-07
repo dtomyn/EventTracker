@@ -29,7 +29,7 @@
             <div class="d-flex flex-column flex-lg-row align-items-stretch align-items-lg-center gap-2 ms-lg-auto w-100 justify-content-lg-end">
                 <form class="d-flex gap-2" method="get" action="/">
                     {% if selected_group_query_value %}<input type="hidden" name="group_id" value="{{ selected_group_query_value }}">{% endif %}
-                    <input class="form-control" type="search" name="q" value="{{ query | default('', true) }}" placeholder="Filter timeline in plain English">
+                    <input class="form-control" type="search" name="q" value="{{ query | default('', true) }}" placeholder="Filter timeline in plain English" size="30">
                     <button class="btn btn-outline-secondary" type="submit">Filter</button>
                     <button class="btn btn-outline-secondary" type="submit" formaction="/search">Search</button>
                 </form>

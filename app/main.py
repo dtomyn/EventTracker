@@ -97,6 +97,8 @@ from app.services.entries import (
     update_entry,
     validate_entry_form,
     get_heatmap_counts,
+    get_timeline_stats,
+    TimelineStats,
 )
 from app.services.extraction import extract_url_text
 from app.services.group_web_search import (
@@ -296,6 +298,7 @@ class TimelinePageContext(TypedDict):
     timeline_web_search: TimelineWebSearchState
     timeline_scope: TimelineClientScope
     embeddings_enabled: bool
+    timeline_stats: TimelineStats
 
 
 class SearchClientScope(TypedDict):
@@ -678,6 +681,9 @@ def timeline(request: Request, q: str = "", group_id: str = "") -> HTMLResponse:
             "timeline_web_search": scope["timeline_web_search"],
             "timeline_scope": timeline_scope,
             "embeddings_enabled": is_sqlite_vec_enabled(connection),
+            "timeline_stats": get_timeline_stats(
+                connection, group_id=scope["selected_group_id"]
+            ),
         }
     return templates.TemplateResponse(
         request,

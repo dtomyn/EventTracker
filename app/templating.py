@@ -16,6 +16,7 @@ from app.services.entries import (
     render_source_snapshot_markdown,
     sanitize_rich_text,
     sanitize_search_snippet,
+    tag_tone,
 )
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -25,3 +26,4 @@ templates.env.filters["plain_text"] = format_plain_text
 templates.env.filters["render_entry_html"] = sanitize_rich_text
 templates.env.filters["render_search_snippet"] = sanitize_search_snippet
 templates.env.filters["render_source_markdown"] = render_source_snapshot_markdown
+templates.env.filters["tag_tone"] = tag_tone
