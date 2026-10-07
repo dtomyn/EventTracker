@@ -9,7 +9,6 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Protocol, cast
 
-from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam
 from openai.types.chat import ChatCompletionSystemMessageParam
 from openai.types.chat import ChatCompletionUserMessageParam
@@ -35,6 +34,11 @@ from app.services.ai_generate import (
 from app.services.copilot_runtime import COPILOT_CLIENT_SETTINGS_MESSAGE
 from app.services.copilot_runtime import COPILOT_SDK_REQUIRED_MESSAGE
 from app.services.entries import preview_text
+from app.services.openai_client import (
+    OpenAIClientConfigurationError,
+    create_async_openai_client,
+    load_api_key_header,
+)
 from .story_mode import order_story_entries
 
 
@@ -197,9 +201,8 @@ class OpenAIChatStoryGenerator:
 
     def __init__(self, settings: OpenAISettings) -> None:
         self._settings = settings
-        self._client = AsyncOpenAI(
-            api_key=settings.api_key,
-            base_url=settings.base_url or None,
+        self._client = create_async_openai_client(
+            settings.api_key, settings.base_url, settings.api_key_header
         )
 
     async def generate_story(
@@ -515,8 +518,17 @@ def load_story_openai_settings() -> OpenAISettings:
         raise StoryGenerationConfigurationError(
             f"Story generation is not configured. Set {names} in your environment."
         )
+    try:
+        api_key_header = load_api_key_header()
+    except OpenAIClientConfigurationError as exc:
+        raise StoryGenerationConfigurationError(str(exc)) from exc
 
-    return OpenAISettings(api_key=api_key, model_id=model_id, base_url=base_url)
+    return OpenAISettings(
+        api_key=api_key,
+        model_id=model_id,
+        base_url=base_url,
+        api_key_header=api_key_header,
+    )
 
 
 def load_story_copilot_settings() -> CopilotSettings:

@@ -994,6 +994,16 @@ OPENAI_BASE_URL=https://your-provider-compatible-endpoint/v1
 
 `OPENAI_BASE_URL` is optional.
 
+If your endpoint is a gateway that expects the key in a custom header instead of `Authorization: Bearer`, set `OPENAI_API_KEY_HEADER`.
+For example, Azure API Management in front of Azure OpenAI typically uses:
+
+```env
+OPENAI_BASE_URL=https://your-gateway.azure-api.net/your-api-suffix/openai/v1
+OPENAI_API_KEY_HEADER=api-key
+```
+
+When set, the key is sent only in that header and applies to chat, story, topic, and embedding calls.
+
 ### Draft generation and group web search with GitHub Copilot SDK
 
 ```env

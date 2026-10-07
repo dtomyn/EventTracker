@@ -22,6 +22,7 @@
 - NFR-003-13 The application shall accept `EVENTTRACKER_GROUP_WEB_SEARCH_TIMEOUT_SECONDS`, `EVENTTRACKER_GROUP_WEB_SEARCH_BROADENED_TIMEOUT_SECONDS`, and `EVENTTRACKER_GROUP_WEB_SEARCH_REQUEST_TIMEOUT_MS` as optional environment variables to tune group web-search timeouts.
 - NFR-003-14 The application shall skip CSRF validation when the `TESTING` environment variable is set, to support automated test harnesses.
 - NFR-003-15 The application shall treat Node.js plus the installed `@marp-team/marpit` dependency as an optional local runtime requirement for executive presentation compilation rather than as a prerequisite for core narrative Story Mode.
+- NFR-003-16 The application shall accept an optional `OPENAI_API_KEY_HEADER` naming the HTTP header that carries `OPENAI_API_KEY` instead of `Authorization: Bearer`, for API gateways that require a custom subscription-key header.
 
 ## Acceptance Notes
 

@@ -8,13 +8,13 @@ from collections.abc import Coroutine
 from contextlib import AsyncExitStack
 from typing import Any, cast
 
-from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam
 from openai.types.chat import ChatCompletionSystemMessageParam
 from openai.types.chat import ChatCompletionUserMessageParam
 
 from app.models import SuggestedConnection
 from app.services import copilot_runtime
+from app.services.openai_client import create_async_openai_client
 from app.services.ai_generate import (
     CopilotSettings,
     OpenAISettings,
@@ -310,9 +310,8 @@ def _generate_notes_openai(prompt: str, count: int) -> list[str]:
     settings = load_openai_settings()
 
     async def _call() -> str:
-        client = AsyncOpenAI(
-            api_key=settings.api_key,
-            base_url=settings.base_url or None,
+        client = create_async_openai_client(
+            settings.api_key, settings.base_url, settings.api_key_header
         )
         system_msg: ChatCompletionSystemMessageParam = {
             "role": "system",

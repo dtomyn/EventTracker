@@ -116,7 +116,7 @@ class TestStoryGeneratorSelection(unittest.TestCase):
             clear=True,
         ):
             with env_file_patcher:
-                with patch("app.services.ai_story_mode.AsyncOpenAI"):
+                with patch("app.services.ai_story_mode.create_async_openai_client"):
                     load_app_env.cache_clear()
                     generator = get_story_generator()
 
@@ -207,7 +207,7 @@ class TestOpenAIChatStoryGenerator(unittest.TestCase):
             ),
         ]
 
-        with patch("app.services.ai_story_mode.AsyncOpenAI", return_value=client):
+        with patch("app.services.ai_story_mode.create_async_openai_client", return_value=client):
             generator = OpenAIChatStoryGenerator(
                 OpenAISettings(api_key="test-key", model_id="gpt-5")
             )
@@ -317,7 +317,7 @@ class TestOpenAIChatStoryGenerator(unittest.TestCase):
             ),
         ]
 
-        with patch("app.services.ai_story_mode.AsyncOpenAI", return_value=client):
+        with patch("app.services.ai_story_mode.create_async_openai_client", return_value=client):
             generator = OpenAIChatStoryGenerator(
                 OpenAISettings(api_key="test-key", model_id="gpt-5")
             )

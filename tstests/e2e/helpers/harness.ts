@@ -17,7 +17,7 @@ const REPO_ROOT = resolve(__dirname, '../../..');
 const SOURCE_DB_PATH = resolve(REPO_ROOT, 'data', 'EventTracker.db');
 const SQLITE_BRIDGE_PATH = resolve(__dirname, 'sqlite_bridge.py');
 const SERVER_HOST = '127.0.0.1';
-const SERVER_START_TIMEOUT_MS = 30_000;
+const SERVER_START_TIMEOUT_MS = 60_000;
 const TEMP_DIR_PREFIX = 'eventtracker-playwright-ts-';
 // Temp dirs younger than this may belong to a test still running in another
 // worker (or another Playwright run), so cleanup must leave them alone.
@@ -123,6 +123,7 @@ function buildServerEnv(dbPath: string, aiProvider: AIProvider): NodeJS.ProcessE
     OPENAI_API_KEY: '',
     OPENAI_CHAT_MODEL_ID: '',
     OPENAI_BASE_URL: '',
+    OPENAI_API_KEY_HEADER: '',
     OPENAI_EMBEDDING_MODEL_ID: '',
     COPILOT_CHAT_MODEL_ID: '',
     COPILOT_CLI_PATH: '',
@@ -191,7 +192,7 @@ async function waitForServer(baseURL: string, server: ManagedServer): Promise<vo
     lastError instanceof Error
       ? lastError.message
       : 'The server did not begin accepting connections before timeout.';
-  throw new Error(`EventTracker server did not become ready within 30 seconds. Last error: ${message}`);
+  throw new Error(`EventTracker server did not become ready within ${SERVER_START_TIMEOUT_MS / 1000} seconds. Last error: ${message}`);
 }
 
 /**

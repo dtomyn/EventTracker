@@ -65,6 +65,37 @@ class TestLoadEmbeddingSettings(unittest.TestCase):
                 settings = load_embedding_settings()
         self.assertEqual(settings.api_key, "sk-test-key")
         self.assertEqual(settings.model_id, "text-embedding-3-small")
+        self.assertIsNone(settings.api_key_header)
+
+    def test_api_key_header_is_loaded(self) -> None:
+        with patch("app.services.embeddings.load_app_env"):
+            with patch.dict(
+                os.environ,
+                {
+                    "OPENAI_API_KEY": "sk-test-key",
+                    "OPENAI_EMBEDDING_MODEL_ID": "text-embedding-3-small",
+                    "OPENAI_API_KEY_HEADER": "api-key",
+                },
+                clear=True,
+            ):
+                load_embedding_settings.cache_clear()
+                settings = load_embedding_settings()
+        self.assertEqual(settings.api_key_header, "api-key")
+
+    def test_invalid_api_key_header_raises_configuration_error(self) -> None:
+        with patch("app.services.embeddings.load_app_env"):
+            with patch.dict(
+                os.environ,
+                {
+                    "OPENAI_API_KEY": "sk-test-key",
+                    "OPENAI_EMBEDDING_MODEL_ID": "text-embedding-3-small",
+                    "OPENAI_API_KEY_HEADER": "api key",
+                },
+                clear=True,
+            ):
+                load_embedding_settings.cache_clear()
+                with self.assertRaises(EmbeddingConfigurationError):
+                    load_embedding_settings()
 
 
 class TestValidateDimensions(unittest.TestCase):

@@ -9,14 +9,19 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
+from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
 import re
 
 import httpx
 from bs4 import BeautifulSoup, Tag
-from markitdown import MarkItDown, StreamInfo
 from youtube_transcript_api import YouTubeTranscriptApi
+
+if TYPE_CHECKING:
+    # markitdown pulls in pandas, openpyxl, and python-pptx, which costs
+    # seconds at startup; it is imported only when a source is converted.
+    from markitdown import MarkItDown, StreamInfo
 
 
 logger = logging.getLogger(__name__)
@@ -101,6 +106,8 @@ def _guess_extension(source_url: str, content_type: str | None) -> str | None:
 def _build_stream_info(
     *, source_url: str, content_type: str | None, charset: str | None
 ) -> StreamInfo:
+    from markitdown import StreamInfo
+
     file_name = Path(urlsplit(source_url).path).name or None
     return StreamInfo(
         mimetype=content_type,
@@ -173,6 +180,8 @@ def _fetch_youtube_transcript(video_id: str) -> str | None:
 
 @lru_cache(maxsize=1)
 def _get_markdown_converter() -> MarkItDown:
+    from markitdown import MarkItDown
+
     return MarkItDown()
 
 

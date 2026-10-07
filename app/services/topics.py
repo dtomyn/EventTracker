@@ -12,7 +12,6 @@ from dataclasses import asdict, dataclass, field
 from contextlib import AsyncExitStack
 from typing import Mapping, Protocol
 
-from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam
 from openai.types.chat import ChatCompletionSystemMessageParam
 from openai.types.chat import ChatCompletionUserMessageParam
@@ -26,6 +25,7 @@ except ImportError:
 from app.models import Entry
 from app.services.entries import list_timeline_entries, merge_entry_tags
 from app.services import copilot_runtime
+from app.services.openai_client import create_async_openai_client
 from app.services.ai_generate import (
     DEFAULT_AI_PROVIDER,
     SUPPORTED_AI_PROVIDERS,
@@ -214,9 +214,8 @@ def _build_label_messages(entries: list[Entry]) -> list[ChatCompletionMessagePar
 class OpenAITopicLabelGenerator:
     def __init__(self, settings: OpenAISettings):
         self._settings = settings
-        self._client = AsyncOpenAI(
-            api_key=settings.api_key,
-            base_url=settings.base_url or None,
+        self._client = create_async_openai_client(
+            settings.api_key, settings.base_url, settings.api_key_header
         )
 
     async def generate_label(self, entries: list[Entry]) -> str:
@@ -325,9 +324,8 @@ class EntryTagGenerator(Protocol):
 class OpenAIEntryTagGenerator:
     def __init__(self, settings: OpenAISettings):
         self._settings = settings
-        self._client = AsyncOpenAI(
-            api_key=settings.api_key,
-            base_url=settings.base_url or None,
+        self._client = create_async_openai_client(
+            settings.api_key, settings.base_url, settings.api_key_header
         )
 
     async def generate_tags(self, entry: Entry) -> list[str]:

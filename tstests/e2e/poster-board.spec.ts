@@ -131,3 +131,105 @@ test('poster board shows scoped events and exports a self-contained HTML file', 
   await expect(board.dialogHeading).toHaveText(policyTitle);
   await expect(board.dialog.getByRole('link', { name: /Open full entry/ })).toHaveCount(0);
 });
+
+/** Returns the entry id from an /entries/{id}/view URL. */
+function entryIdFromUrl(url: string): number {
+  const match = /\/entries\/(\d+)\/view$/.exec(new URL(url).pathname);
+  if (!match) throw new Error(`Not an entry view URL: ${url}`);
+  return Number(match[1]);
+}
+
+test('red string overlay ties connected posters together and springs back when plucked', async ({
+  ensureDedicatedGroup,
+  page,
+}) => {
+  const groupId = await ensureDedicatedGroup();
+  const runToken = Date.now();
+  const entryForm = new EntryFormPage(page);
+  const board = new PosterBoardPage(page);
+  const titles = ['Suspect', 'Witness', 'Alibi', 'Bystander'].map(
+    (name) => `${name} ${runToken}`,
+  );
+  const ids: number[] = [];
+  for (const [index, title] of titles.entries()) {
+    await entryForm.gotoNew();
+    await entryForm.selectTimelineGroup(groupId);
+    await entryForm.fillDate('2026', '5', String(index + 2));
+    await entryForm.fillTitle(title);
+    await entryForm.fillEventSummary(`${title} summary for the red string board.`);
+    await entryForm.save();
+    await expect(page).toHaveURL(/\/entries\/\d+\/view$/);
+    ids.push(entryIdFromUrl(page.url()));
+  }
+  const [suspect, witness, alibi, bystander] = ids;
+
+  // Wire Suspect-Witness (stored in both directions) and Witness-Alibi into the
+  // board payload, leaving Bystander unconnected.
+  const response = await page.request.get(`/timeline/board?group_id=${groupId}`);
+  expect(response.ok()).toBeTruthy();
+  const links: Record<number, number[]> = {
+    [suspect]: [witness],
+    [witness]: [suspect, alibi],
+    [alibi]: [witness],
+  };
+  const html = (await response.text()).replace(
+    /(<script id="board-data" type="application\/json">)([\s\S]*?)(<\/script>)/,
+    (_match, start: string, json: string, end: string) => {
+      const payload: { items: { id: number; connections: object[] }[] } = JSON.parse(json);
+      for (const item of payload.items) {
+        item.connections = (links[item.id] ?? []).map((id) => ({
+          id,
+          title: `entry ${id}`,
+          date: 'May 2026',
+          note: 'linked',
+        }));
+      }
+      return start + JSON.stringify(payload).replace(/</g, '\u003c') + end;
+    },
+  );
+  await page.setViewportSize({ width: 1280, height: 860 });
+  await page.route('**/*', (route) => route.abort());
+  await page.setContent(html);
+
+  await expect(board.stringToggle).toBeVisible();
+  await expect(board.stringToggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(board.stringToggle).toContainText('2');
+  await expect(board.strings).toHaveCount(0);
+
+  await board.stringToggle.click();
+  await expect(board.stringToggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(board.strings).toHaveCount(2);
+  await expect(board.string(suspect, witness)).toHaveCount(1);
+  await expect(board.string(witness, alibi)).toHaveCount(1);
+  // One tack per connected poster, shared by every string pinned to it.
+  await expect(board.tacks).toHaveCount(3);
+  await expect(page.locator(`.poster[data-key="${bystander}"]`)).not.toHaveClass(/\blinked\b/);
+  await expect(page.locator(`.poster[data-key="${witness}"]`)).toHaveClass(/\blinked\b/);
+
+  // Pluck the Suspect-Witness string: it follows the pointer, then springs home.
+  const core = board.string(suspect, witness).locator('.yarn__core');
+  const restPath = await core.getAttribute('d');
+  const grip = await board.string(suspect, witness).locator('.yarn__hit').evaluate((path) => {
+    const hit = path as SVGPathElement;
+    const point = hit.getPointAtLength(hit.getTotalLength() / 2);
+    const box = (hit.ownerSVGElement as SVGSVGElement).getBoundingClientRect();
+    return { x: box.left + point.x, y: box.top + point.y };
+  });
+  await page.mouse.move(grip.x, grip.y);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + 30, grip.y + 90, { steps: 4 });
+  await expect(core).not.toHaveAttribute('d', restPath ?? '');
+  await page.mouse.up();
+  await expect.poll(() => core.getAttribute('d'), { timeout: 4000 }).toBe(restPath);
+
+  // Filtering out the hub poster leaves nothing to tie together.
+  await board.search(titles[3]);
+  await expect(board.strings).toHaveCount(0);
+  await expect(board.stringToggle).toBeDisabled();
+  await board.search('');
+  await expect(board.strings).toHaveCount(2);
+
+  await board.stringToggle.click();
+  await expect(board.stringToggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(board.strings).toHaveCount(0);
+});

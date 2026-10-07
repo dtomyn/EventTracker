@@ -503,7 +503,309 @@
     });
 
     first = false;
+    refreshStrings();
   }
+
+  /* ---------- red string ----------
+     The detective-board overlay: every connection whose two ends are both on
+     the board becomes a length of red yarn, sagging under its own weight,
+     pinned to each poster with a thumbtack. One tack per poster, shared by
+     all of its strings, the way it works on a real corkboard. The overlay is
+     decoration over data the detail sheet already lists, so it stays hidden
+     from assistive tech. Purely client-side, so it works in the export too. */
+  var SVGNS = "http://www.w3.org/2000/svg";
+  var STRING_PREF = "eventtracker.posterBoard.strings";
+  var stringToggle = document.getElementById("strings");
+  var stringCount = document.getElementById("string-count");
+  var str = {on:false, edges:[], paths:{}, tacks:{}, until:0, raf:0, fresh:false,
+             pluck:{}, grab:null, springRaf:0};
+  var strSvg = document.createElementNS(SVGNS, "svg");
+  strSvg.setAttribute("class", "strings");
+  strSvg.setAttribute("aria-hidden", "true");
+  strSvg.setAttribute("focusable", "false");
+  strSvg.innerHTML =
+    '<defs><radialGradient id="tack-head" cx="35%" cy="30%" r="75%">' +
+      '<stop offset="0" stop-color="#FFB3A8"/><stop offset=".28" stop-color="#E0362B"/>' +
+      '<stop offset=".8" stop-color="#8E1410"/><stop offset="1" stop-color="#5E0C09"/>' +
+    '</radialGradient></defs><g class="yarns"></g><g class="tacks"></g>';
+  var strYarns = strSvg.querySelector(".yarns");
+  var strTacks = strSvg.querySelector(".tacks");
+  board.appendChild(strSvg);
+
+  /* connections with both ends among the posters currently shown, one per pair */
+  function boardEdges(){
+    var on = {};
+    shown.forEach(function(it){ on[it.id] = 1; });
+    var seen = {}, out = [];
+    shown.forEach(function(it){
+      (it.connections || []).forEach(function(c){
+        if(!on[c.id] || c.id === it.id) return;
+        var a = Math.min(it.id, c.id), b = Math.max(it.id, c.id), k = a + "-" + b;
+        if(seen[k]) return;
+        seen[k] = 1;
+        out.push({key:k, a:a, b:b});
+      });
+    });
+    return out;
+  }
+  var anyStrings = items.some(function(it){
+    return (it.connections || []).some(function(c){
+      return c.id !== it.id && items.some(function(o){ return o.id === c.id; });
+    });
+  });
+
+  /* where the tack goes on a poster: through the top margin, right of centre
+     so it clears the left-aligned category tag and the corner pin, nudged by a
+     stable per-entry amount so a row of posters does not line up like rivets */
+  function tackPoint(id, br){
+    var el = nodes[id];
+    if(!el || !el.parentNode) return null;
+    var r = el.getBoundingClientRect();
+    var h = Math.sin(id * 91.345) * 43758.5453;
+    var j = h - Math.floor(h);
+    return {
+      x: r.left - br.left + r.width * (0.52 + j * 0.16),
+      y: r.top - br.top + 7
+    };
+  }
+
+  /* the quadratic control point a string hangs from when nobody touches it */
+  function restControl(p, q){
+    var dx = q.x - p.x, dy = q.y - p.y;
+    var len = Math.sqrt(dx * dx + dy * dy);
+    /* longer runs droop more; near-vertical runs barely droop at all */
+    var sag = Math.min(len * 0.14, 80) * (0.3 + 0.7 * Math.abs(dx) / Math.max(len, 1));
+    return {x:(p.x + q.x) / 2, y:(p.y + q.y) / 2 + sag};
+  }
+
+  function sagPath(p, q, off){
+    var c = restControl(p, q);
+    var cx = c.x + (off ? off.x : 0), cy = c.y + (off ? off.y : 0);
+    return "M" + p.x.toFixed(1) + " " + p.y.toFixed(1) +
+      " Q" + cx.toFixed(1) + " " + cy.toFixed(1) + " " + q.x.toFixed(1) + " " + q.y.toFixed(1);
+  }
+
+  function svgEl(name, attrs){
+    var el = document.createElementNS(SVGNS, name);
+    Object.keys(attrs).forEach(function(k){ el.setAttribute(k, attrs[k]); });
+    return el;
+  }
+
+  /* rebuild the set of strings and tacks; positions are filled in by drawStrings */
+  function syncStringNodes(){
+    var wantPaths = {}, wantTacks = {};
+    str.edges.forEach(function(e){
+      wantPaths[e.key] = e;
+      wantTacks[e.a] = 1;
+      wantTacks[e.b] = 1;
+    });
+    Object.keys(str.paths).forEach(function(k){
+      if(wantPaths[k]) return;
+      strYarns.removeChild(str.paths[k]);
+      delete str.paths[k];
+      delete str.pluck[k];
+    });
+    Object.keys(str.tacks).forEach(function(k){
+      if(wantTacks[k]) return;
+      strTacks.removeChild(str.tacks[k]);
+      delete str.tacks[k];
+    });
+    str.edges.forEach(function(e){
+      if(str.paths[e.key]) return;
+      var g = svgEl("g", {"class": "yarn" + (str.fresh && !reduced ? " draw" : ""),
+                          "data-a": e.a, "data-b": e.b});
+      g.appendChild(svgEl("path", {"class": "yarn__core", pathLength: "1"}));
+      g.appendChild(svgEl("path", {"class": "yarn__twist"}));
+      /* a wider invisible stroke so the yarn is easy to grab */
+      g.appendChild(svgEl("path", {"class": "yarn__hit", "data-key": e.key}));
+      strYarns.appendChild(g);
+      str.paths[e.key] = g;
+    });
+    Object.keys(wantTacks).forEach(function(id){
+      if(str.tacks[id]) return;
+      /* the outer group carries the position, the inner one the pop-in scale */
+      var g = svgEl("g", {"class": "tack", "data-id": id});
+      var pin = svgEl("g", {"class": "tack__pin"});
+      pin.appendChild(svgEl("ellipse", {"class": "tack__shadow", cx: "2.2", cy: "3.4", rx: "6.4", ry: "5.2"}));
+      pin.appendChild(svgEl("circle", {"class": "tack__head", r: "6.5"}));
+      pin.appendChild(svgEl("circle", {"class": "tack__shine", cx: "-2", cy: "-2.3", r: "1.7"}));
+      g.appendChild(pin);
+      strTacks.appendChild(g);
+      str.tacks[id] = g;
+    });
+    str.fresh = false;
+  }
+
+  function drawStrings(){
+    var br = board.getBoundingClientRect();
+    var pts = {};
+    function at(id){ return pts[id] || (pts[id] = tackPoint(id, br)); }
+    str.edges.forEach(function(e){
+      var g = str.paths[e.key];
+      var p = at(e.a), q = at(e.b);
+      if(!g || !p || !q) return;
+      var d = sagPath(p, q, str.pluck[e.key]);
+      Array.prototype.forEach.call(g.children, function(path){ path.setAttribute("d", d); });
+    });
+    Object.keys(str.tacks).forEach(function(id){
+      var p = at(Number(id));
+      if(p) str.tacks[id].setAttribute("transform", "translate(" + p.x.toFixed(1) + " " + p.y.toFixed(1) + ")");
+    });
+  }
+
+  /* posters glide to their new slots over --move; follow them until they land */
+  function followStrings(ms){
+    str.until = Math.max(str.until, performance.now() + ms);
+    if(str.raf) return;
+    str.raf = requestAnimationFrame(function tick(){
+      drawStrings();
+      str.raf = performance.now() < str.until ? requestAnimationFrame(tick) : 0;
+    });
+  }
+
+  function refreshStrings(){
+    var edges = anyStrings ? boardEdges() : [];
+    stringToggle.hidden = !anyStrings;
+    stringToggle.disabled = !edges.length;
+    stringToggle.title = edges.length ? "" : "No connected posters on the board right now";
+    stringCount.textContent = edges.length;
+    var live = str.on && !flowing;
+    document.body.classList.toggle("strings-on", live);
+    str.edges = live ? edges : [];
+    if(!live){ str.grab = null; str.pluck = {}; strSvg.classList.remove("plucking"); }
+    var linked = {};
+    str.edges.forEach(function(e){ linked[e.a] = linked[e.b] = 1; });
+    Object.keys(nodes).forEach(function(id){
+      nodes[id].classList.toggle("linked", !!linked[id]);
+    });
+    syncStringNodes();
+    drawStrings();
+    if(live) followStrings(reduced ? 0 : 720);
+  }
+
+  function setStrings(on){
+    str.on = on;
+    str.fresh = on;
+    stringToggle.setAttribute("aria-pressed", String(on));
+    try { localStorage.setItem(STRING_PREF, on ? "1" : "0"); } catch(e){}
+    refreshStrings();
+  }
+
+  stringToggle.addEventListener("click", function(){ setStrings(!str.on); });
+
+  /* ---------- plucking ----------
+     Grab a string and pull: the curve follows the pointer, with a soft limit
+     so it stretches but never snaps. Let go and a damped spring flings it back
+     through its resting sag, wobbling a few times before it settles. The
+     spring works on the control point's offset from rest, so a string that is
+     still wobbling keeps up with posters that move underneath it. */
+  var SPRING_K = 340, SPRING_DAMP = 7.5, MAX_PULL = 170;
+
+  function edgeEnds(key){
+    var br = board.getBoundingClientRect();
+    var e = str.edges.find(function(x){ return x.key === key; });
+    if(!e) return null;
+    var p = tackPoint(e.a, br), q = tackPoint(e.b, br);
+    return p && q ? {p:p, q:q, br:br} : null;
+  }
+
+  /* the offset that makes the curve pass through the pointer: a quadratic's
+     midpoint sits halfway between its chord midpoint and its control point */
+  function pullOffset(key, clientX, clientY){
+    var ends = edgeEnds(key);
+    if(!ends) return null;
+    var p = ends.p, q = ends.q, rest = restControl(p, q);
+    var mx = clientX - ends.br.left, my = clientY - ends.br.top;
+    var tx = 2 * mx - (p.x + q.x) / 2 - rest.x;
+    var ty = 2 * my - (p.y + q.y) / 2 - rest.y;
+    var dist = Math.sqrt(tx * tx + ty * ty);
+    var limit = MAX_PULL * 2;
+    if(dist > limit * 0.6){
+      /* past the comfortable stretch the yarn resists harder and harder */
+      var eased = limit * 0.6 + (limit * 0.4) * (1 - Math.exp(-(dist - limit * 0.6) / (limit * 0.4)));
+      tx *= eased / dist; ty *= eased / dist;
+    }
+    return {x:tx, y:ty, vx:0, vy:0};
+  }
+
+  function springStep(){
+    var last = performance.now();
+    if(str.springRaf) return;
+    str.springRaf = requestAnimationFrame(function tick(now){
+      var dt = Math.min((now - last) / 1000, 1 / 30);
+      last = now;
+      var moving = false;
+      Object.keys(str.pluck).forEach(function(k){
+        var o = str.pluck[k];
+        if(str.grab && str.grab.key === k) { moving = true; return; }
+        var ax = -SPRING_K * o.x - SPRING_DAMP * o.vx;
+        var ay = -SPRING_K * o.y - SPRING_DAMP * o.vy;
+        o.vx += ax * dt; o.vy += ay * dt;
+        o.x += o.vx * dt; o.y += o.vy * dt;
+        if(Math.abs(o.x) + Math.abs(o.y) < 0.15 && Math.abs(o.vx) + Math.abs(o.vy) < 2){
+          delete str.pluck[k];
+        } else {
+          moving = true;
+        }
+      });
+      drawStrings();
+      str.springRaf = moving ? requestAnimationFrame(tick) : 0;
+    });
+  }
+
+  strSvg.addEventListener("pointerdown", function(e){
+    var hit = e.target.closest && e.target.closest(".yarn__hit");
+    if(!hit || e.button !== 0) return;
+    e.preventDefault();
+    var key = hit.getAttribute("data-key");
+    var off = pullOffset(key, e.clientX, e.clientY);
+    if(!off) return;
+    str.grab = {key:key, id:e.pointerId, g:hit.parentNode};
+    str.pluck[key] = off;
+    try { hit.setPointerCapture(e.pointerId); } catch(err){}
+    hit.parentNode.classList.add("taut");
+    strSvg.classList.add("plucking");
+    drawStrings();
+  });
+  strSvg.addEventListener("pointermove", function(e){
+    if(!str.grab || e.pointerId !== str.grab.id) return;
+    var off = pullOffset(str.grab.key, e.clientX, e.clientY);
+    if(!off) return;
+    str.pluck[str.grab.key] = off;
+    drawStrings();
+  });
+  function letGo(e){
+    if(!str.grab || e.pointerId !== str.grab.id) return;
+    var key = str.grab.key;
+    str.grab.g.classList.remove("taut");
+    strSvg.classList.remove("plucking");
+    str.grab = null;
+    if(reduced){ delete str.pluck[key]; drawStrings(); return; }
+    springStep();
+  }
+  strSvg.addEventListener("pointerup", letGo);
+  strSvg.addEventListener("pointercancel", letGo);
+  strSvg.addEventListener("lostpointercapture", letGo);
+
+  /* hovering or focusing a poster pulls its own strings forward */
+  function focusStrings(id){
+    strSvg.classList.toggle("focusing", id != null);
+    Array.prototype.forEach.call(strYarns.children, function(g){
+      var hot = id != null && (g.getAttribute("data-a") === id || g.getAttribute("data-b") === id);
+      g.classList.toggle("hot", hot);
+    });
+    Object.keys(str.tacks).forEach(function(k){
+      str.tacks[k].classList.toggle("hot", k === id);
+    });
+  }
+  function posterKey(target){
+    var el = target && target.closest && target.closest(".poster");
+    return el ? el.dataset.key : null;
+  }
+  board.addEventListener("mouseover", function(e){ if(str.on) focusStrings(posterKey(e.target)); });
+  board.addEventListener("mouseleave", function(){ focusStrings(null); });
+  board.addEventListener("focusin", function(e){ if(str.on) focusStrings(posterKey(e.target)); });
+  board.addEventListener("focusout", function(){ focusStrings(null); });
 
   /* ---------- popup ---------- */
   /* body_html was sanitized server-side to a small allow-list of text tags
@@ -678,6 +980,9 @@
   });
 
   /* ---------- go ---------- */
+  try { str.on = localStorage.getItem(STRING_PREF) === "1"; } catch(e){}
+  str.fresh = str.on;
+  stringToggle.setAttribute("aria-pressed", String(str.on));
   layout();
 
   var countEl = document.getElementById("count");

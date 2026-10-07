@@ -22,6 +22,7 @@
       </p>
     </div>
     <div class="chips" id="chips" role="group" aria-label="Filter by category"></div>
+    <button class="act string-toggle" id="strings" type="button" aria-pressed="false" hidden><span class="yarn" aria-hidden="true"></span>Red string<span class="n" id="string-count"></span></button>
     <input class="search" id="search" type="search" placeholder="search the board&hellip;" aria-label="Search the board">
     {% if not export_mode %}
       <form class="controls" method="get" action="/timeline/board" aria-label="Board scope">

@@ -14,6 +14,9 @@ export class PosterBoardPage {
   readonly dialogHeading: Locator;
   readonly nextButton: Locator;
   readonly closeButton: Locator;
+  readonly stringToggle: Locator;
+  readonly strings: Locator;
+  readonly tacks: Locator;
 
   constructor(private readonly page: Page) {
     this.heading = page.getByRole('heading', { level: 1 });
@@ -28,6 +31,9 @@ export class PosterBoardPage {
     this.dialogHeading = this.dialog.getByRole('heading', { level: 2 });
     this.nextButton = this.dialog.getByRole('button', { name: /Next/ });
     this.closeButton = this.dialog.getByRole('button', { name: 'Close' });
+    this.stringToggle = page.getByRole('button', { name: /Red string/ });
+    this.strings = page.locator('svg.strings .yarn');
+    this.tacks = page.locator('svg.strings .tack');
   }
 
   /** Opens the poster board for the selected group. */
@@ -43,6 +49,12 @@ export class PosterBoardPage {
   /** Narrows the board with the client-side search box. */
   async search(text: string): Promise<void> {
     await this.searchInput.fill(text);
+  }
+
+  /** Returns the red string tying two entries together, in either direction. */
+  string(firstId: number, secondId: number): Locator {
+    const [a, b] = firstId < secondId ? [firstId, secondId] : [secondId, firstId];
+    return this.page.locator(`svg.strings .yarn[data-a="${a}"][data-b="${b}"]`);
   }
 
   /** Filters the board to one category chip. */

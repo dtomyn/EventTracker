@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Protocol, cast
 
-from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam
 from openai.types.chat import ChatCompletionSystemMessageParam
 from openai.types.chat import ChatCompletionUserMessageParam
@@ -19,6 +18,11 @@ from app.services import copilot_runtime
 from app.services.copilot_runtime import COPILOT_CLIENT_SETTINGS_MESSAGE
 from app.services.copilot_runtime import COPILOT_SDK_REQUIRED_MESSAGE
 from app.services.extraction import ExtractionResult
+from app.services.openai_client import (
+    OpenAIClientConfigurationError,
+    create_async_openai_client,
+    load_api_key_header,
+)
 
 
 DEFAULT_AI_PROVIDER = "openai"
@@ -75,6 +79,7 @@ class OpenAISettings:
     api_key: str
     model_id: str
     base_url: str | None = None
+    api_key_header: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,9 +92,8 @@ class CopilotSettings:
 class OpenAIChatDraftGenerator:
     def __init__(self, settings: OpenAISettings) -> None:
         self._settings = settings
-        self._client = AsyncOpenAI(
-            api_key=settings.api_key,
-            base_url=settings.base_url or None,
+        self._client = create_async_openai_client(
+            settings.api_key, settings.base_url, settings.api_key_header
         )
 
     async def generate_entry_suggestion(
@@ -237,8 +241,17 @@ def load_openai_settings() -> OpenAISettings:
         raise DraftGenerationConfigurationError(
             f"Draft generation is not configured. Set {names} in your environment."
         )
+    try:
+        api_key_header = load_api_key_header()
+    except OpenAIClientConfigurationError as exc:
+        raise DraftGenerationConfigurationError(str(exc)) from exc
 
-    return OpenAISettings(api_key=api_key, model_id=model_id, base_url=base_url)
+    return OpenAISettings(
+        api_key=api_key,
+        model_id=model_id,
+        base_url=base_url,
+        api_key_header=api_key_header,
+    )
 
 
 def load_copilot_settings() -> CopilotSettings:

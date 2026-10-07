@@ -7,10 +7,15 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import lru_cache
 
-from openai import OpenAI
+from openai import APIStatusError
 
 from app.db import is_sqlite_vec_enabled
 from app.env import load_app_env
+from app.services.openai_client import (
+    OpenAIClientConfigurationError,
+    create_openai_client,
+    load_api_key_header,
+)
 
 try:
     import sqlite_vec
@@ -40,6 +45,7 @@ class OpenAIEmbeddingSettings:
     api_key: str
     model_id: str
     base_url: str | None = None
+    api_key_header: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,9 +202,16 @@ def load_embedding_settings() -> OpenAIEmbeddingSettings:
         raise EmbeddingConfigurationError(
             f"Embeddings are not configured. Set {names} in your environment."
         )
+    try:
+        api_key_header = load_api_key_header()
+    except OpenAIClientConfigurationError as exc:
+        raise EmbeddingConfigurationError(str(exc)) from exc
 
     return OpenAIEmbeddingSettings(
-        api_key=api_key, model_id=model_id, base_url=base_url
+        api_key=api_key,
+        model_id=model_id,
+        base_url=base_url,
+        api_key_header=api_key_header,
     )
 
 
@@ -207,11 +220,21 @@ def _generate_embedding(text: str, settings: OpenAIEmbeddingSettings) -> list[fl
     if not normalized:
         raise EmbeddingError("Cannot embed empty text.")
 
-    client = OpenAI(api_key=settings.api_key, base_url=settings.base_url or None)
+    client = create_openai_client(
+        settings.api_key, settings.base_url, settings.api_key_header
+    )
     try:
         response = client.embeddings.create(model=settings.model_id, input=normalized)
+    except APIStatusError as exc:  # pragma: no cover - network/provider failures.
+        raise EmbeddingError(
+            f"Embedding generation failed: provider returned HTTP {exc.status_code} "
+            f"({type(exc).__name__}). Check OPENAI_API_KEY, OPENAI_BASE_URL, and "
+            "OPENAI_EMBEDDING_MODEL_ID."
+        ) from exc
     except Exception as exc:  # pragma: no cover - network/provider failures.
-        raise EmbeddingError("Embedding generation failed.") from exc
+        raise EmbeddingError(
+            f"Embedding generation failed ({type(exc).__name__})."
+        ) from exc
 
     if not response.data or not response.data[0].embedding:
         raise EmbeddingError("The embedding provider returned an empty vector.")

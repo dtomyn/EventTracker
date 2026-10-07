@@ -150,7 +150,7 @@ class TestDraftGeneratorSelection(unittest.TestCase):
             clear=True,
         ):
             with env_file_patcher:
-                with patch("app.services.ai_generate.AsyncOpenAI"):
+                with patch("app.services.ai_generate.create_async_openai_client"):
                     load_app_env.cache_clear()
                     generator = get_draft_generator()
 
@@ -232,7 +232,7 @@ class TestOpenAIChatDraftGenerator(unittest.TestCase):
             chat=SimpleNamespace(completions=SimpleNamespace(create=create))
         )
 
-        with patch("app.services.ai_generate.AsyncOpenAI", return_value=client):
+        with patch("app.services.ai_generate.create_async_openai_client", return_value=client):
             generator = OpenAIChatDraftGenerator(
                 OpenAISettings(api_key="test-key", model_id="gpt-5")
             )
@@ -871,6 +871,39 @@ class TestLoadOpenAISettings(unittest.TestCase):
         self.assertEqual(settings.api_key, "test-key")
         self.assertEqual(settings.model_id, "gpt-5")
         self.assertIsNone(settings.base_url)
+        self.assertIsNone(settings.api_key_header)
+
+    def test_api_key_header_is_loaded(self) -> None:
+        from app.services.ai_generate import load_openai_settings
+
+        with patch.dict(
+            os.environ,
+            {
+                "OPENAI_API_KEY": "test-key",
+                "OPENAI_CHAT_MODEL_ID": "gpt-5",
+                "OPENAI_API_KEY_HEADER": "api-key",
+            },
+            clear=True,
+        ):
+            load_app_env.cache_clear()
+            settings = load_openai_settings()
+        self.assertEqual(settings.api_key_header, "api-key")
+
+    def test_invalid_api_key_header_raises_error(self) -> None:
+        from app.services.ai_generate import load_openai_settings
+
+        with patch.dict(
+            os.environ,
+            {
+                "OPENAI_API_KEY": "test-key",
+                "OPENAI_CHAT_MODEL_ID": "gpt-5",
+                "OPENAI_API_KEY_HEADER": "Authorization",
+            },
+            clear=True,
+        ):
+            load_app_env.cache_clear()
+            with self.assertRaises(DraftGenerationConfigurationError):
+                load_openai_settings()
 
 
 class TestLoadCopilotSettings(unittest.TestCase):

@@ -71,6 +71,7 @@ def _build_server_env(db_path: Path, *, ai_provider: str) -> dict[str, str]:
     env["OPENAI_API_KEY"] = ""
     env["OPENAI_CHAT_MODEL_ID"] = ""
     env["OPENAI_BASE_URL"] = ""
+    env["OPENAI_API_KEY_HEADER"] = ""
     env["OPENAI_EMBEDDING_MODEL_ID"] = ""
     env["COPILOT_CHAT_MODEL_ID"] = ""
     env["COPILOT_CLI_PATH"] = ""
