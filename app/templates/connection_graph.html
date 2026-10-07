@@ -1,18 +1,30 @@
 {% extends "base.html" %}
+{% from "partials/graph_shell.html" import graph_shell %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', path='/graph.css') }}">
+{% endblock %}
 
 {% block content %}
-<div class="container py-4">
-    <div class="row align-items-center mb-4">
-        <div class="col">
+<div class="container py-4 eg-page">
+    <div class="eg-header">
+        <div>
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb mb-1">
                     <li class="breadcrumb-item"><a href="/?group_id={{ group.id }}" class="text-decoration-none">{{ group.name }}</a></li>
                     <li class="breadcrumb-item active" aria-current="page">Connection Graph</li>
                 </ol>
             </nav>
-            <h1 class="h3 mb-0">Connection Graph</h1>
+            <div class="eg-title-row">
+                <h1 class="h3 mb-0">Connection Graph</h1>
+                <div class="eg-stats" data-graph-stats hidden>
+                    <span class="eg-stat"><strong data-stat-nodes>0</strong> entries</span>
+                    <span class="eg-stat"><strong data-stat-links>0</strong> connections</span>
+                    <span class="eg-stat" data-stat-tag-wrap hidden><strong data-stat-tags>0</strong> shared-tag links</span>
+                </div>
+            </div>
         </div>
-        <div class="col-auto d-flex align-items-center gap-3">
+        <div class="eg-actions">
             <div class="form-check form-switch mb-0">
                 <input class="form-check-input" type="checkbox" role="switch" id="include-tags-toggle">
                 <label class="form-check-label" for="include-tags-toggle">Show tag connections</label>
@@ -21,383 +33,209 @@
         </div>
     </div>
 
-    <div class="card shadow-sm border-0 bg-dark-subtle position-relative">
-        <div id="loading-spinner" class="position-absolute top-50 start-50 translate-middle text-center" style="z-index: 10;">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading connections...</span>
-            </div>
-            <p class="mt-2 text-muted">Loading connection graph...</p>
+    {% call graph_shell("connection-graph", "Connection graph of " ~ group.name ~ " entries", "Loading connection graph…", "Entry", timelapse=True) %}
+        <div>
+            <div class="eg-legend-ramp" data-legend-ramp aria-hidden="true"></div>
+            <div class="eg-legend-ramp-labels"><span data-legend-min>Older</span><span data-legend-max>Newer</span></div>
+            <small class="d-block mt-1 eg-legend-caption">Color shows entry date</small>
         </div>
-        <div class="card-body p-0">
-            <div id="graph-container" style="min-height: 600px; width: 100%; position: relative;">
-                <div class="position-absolute top-0 end-0 p-3" style="z-index: 5;">
-                    <div class="btn-group shadow-sm" role="group" aria-label="Graph zoom controls">
-                        <button id="zoom-out-button" type="button" class="btn btn-light" aria-label="Zoom out" disabled>
-                            -
-                        </button>
-                        <button id="zoom-in-button" type="button" class="btn btn-light" aria-label="Zoom in" disabled>
-                            +
-                        </button>
-                    </div>
-                </div>
-                <svg id="connection-graph-svg" style="width: 100%; height: 100%; min-height: 600px; display: block;"></svg>
-            </div>
+        <div class="eg-legend-row">
+            <svg width="36" height="22" viewBox="0 0 36 22" aria-hidden="true"><circle cx="7" cy="14" r="4.5" fill="#7c8cff"/><circle cx="24" cy="11" r="9" fill="#7c8cff" opacity="0.9"/></svg>
+            <span>Size<small>More connections, bigger node</small></span>
         </div>
-    </div>
+        <div class="eg-legend-row">
+            <svg width="36" height="12" viewBox="0 0 36 12" aria-hidden="true"><path d="M2 9 Q18 1 34 9" fill="none" stroke="#7c8cff" stroke-width="2" stroke-linecap="round"/></svg>
+            <span>Explicit connection</span>
+        </div>
+        <div class="eg-legend-row" data-legend-tag-row hidden>
+            <svg width="36" height="12" viewBox="0 0 36 12" aria-hidden="true"><path d="M2 9 Q18 1 34 9" fill="none" stroke="currentColor" stroke-opacity="0.6" stroke-width="1.6" stroke-dasharray="2 5" stroke-linecap="round"/></svg>
+            <span>Shares 2+ tags</span>
+        </div>
+    {% endcall %}
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="{{ url_for('static', path='/graph.js') }}"></script>
 <script>
-    document.addEventListener("DOMContentLoaded", function() {
+    document.addEventListener("DOMContentLoaded", function () {
         const groupId = {{ group.id }};
-        const container = document.getElementById("graph-container");
-        const svgElement = document.getElementById("connection-graph-svg");
-        const loadingSpinner = document.getElementById("loading-spinner");
-        const zoomInButton = document.getElementById("zoom-in-button");
-        const zoomOutButton = document.getElementById("zoom-out-button");
+        const shell = document.getElementById("connection-graph");
         const includeTagsToggle = document.getElementById("include-tags-toggle");
+        const stats = document.querySelector("[data-graph-stats]");
+        const legendTagRow = shell.querySelector("[data-legend-tag-row]");
+        const RAMP = ["#7c5cff", "#3fb6ff", "#2ee6c5", "#ffd166"];
+        shell.querySelector("[data-legend-ramp]").style.background = `linear-gradient(90deg, ${RAMP.join(", ")})`;
 
-        let currentSimulation = null;
-        let currentZoomBehavior = null;
-        let currentSvg = null;
-        let selectedNodeId = null;
-
-        function setZoomButtonsDisabled(disabled) {
-            zoomInButton.disabled = disabled;
-            zoomOutButton.disabled = disabled;
+        if (window.innerWidth < 768) {
+            shell.querySelector("[data-eg-legend]").open = false;
         }
 
-        function applyZoom(scaleFactor) {
-            if (!currentSvg || !currentZoomBehavior) {
-                return;
-            }
+        const EG = window.EventGraph;
+        const el = EG.el;
+        let radiusScale = () => 15;
+        let colorOf = () => RAMP[1];
 
-            currentSvg
-                .transition()
-                .duration(180)
-                .call(currentZoomBehavior.scaleBy, scaleFactor);
-        }
-
-        zoomInButton.addEventListener("click", () => applyZoom(1.2));
-        zoomOutButton.addEventListener("click", () => applyZoom(0.8));
-
-        includeTagsToggle.addEventListener("change", () => {
-            loadGraph();
+        const graph = EG.create(shell, {
+            emptyMessage: "No connections yet. Connect entries from the entry form to build your knowledge graph.",
+            nodeRadius: (d) => radiusScale(d.size),
+            nodeColor: (d) => colorOf(d),
+            nodeLabel: (d) => d.label || "Entry",
+            nodeAriaLabel: (d) => {
+                const suffix = d.size === 1 ? "connection" : "connections";
+                return `${d.label || "Entry"}, ${d.display_date || ""}, ${d.size} ${suffix}`;
+            },
+            linkKind: (e) => (e.type === "tag" ? "tag" : "explicit"),
+            linkWidth: (e) => (e.type === "tag" ? 1.3 : 2),
+            linkColor: (e) => (e.type === "tag" ? null : e.source.color),
+            linkDistance: (e) => (e.type === "tag" ? 150 : 105),
+            charge: -320,
+            timeOf: (d) => EG.parseIsoDay(d.date),
+            onActivate: (d) => { window.location.href = `/entries/${encodeURIComponent(d.id)}/view`; },
+            renderPanel: renderEntryPanel,
         });
 
-        function truncateLabel(text, maxLen) {
-            if (!text) return "";
-            return text.length > maxLen ? text.substring(0, maxLen - 1) + "\u2026" : text;
+        function renderEntryPanel(d, api) {
+            api.setKicker(d.display_date || "Entry", d.color);
+            api.setTitle(d.label || "Entry");
+
+            const meta = el("div", "eg-meta");
+            if (d.group_name) meta.appendChild(el("span", "", d.group_name));
+            meta.appendChild(el("span", "", `${d.size} ${d.size === 1 ? "connection" : "connections"}`));
+            api.body.appendChild(meta);
+
+            if (d.excerpt) {
+                api.body.appendChild(el("p", "mb-0", d.excerpt));
+            }
+
+            if (d.tags && d.tags.length) {
+                api.body.appendChild(el("h3", "eg-panel-section-title", "Tags"));
+                const chips = el("div", "eg-chips");
+                d.tags.forEach((tag) => {
+                    const chip = el("a", "eg-chip", tag);
+                    chip.href = `/?q=${encodeURIComponent(tag)}&group_id=${groupId}`;
+                    chips.appendChild(chip);
+                });
+                api.body.appendChild(chips);
+            }
+
+            const neighborLinks = api.linksOf();
+            if (neighborLinks.length) {
+                api.body.appendChild(el("h3", "eg-panel-section-title", "Connected entries"));
+                const list = el("ul", "eg-list");
+                neighborLinks
+                    .map((e) => ({ edge: e, other: e.source.id === d.id ? e.target : e.source }))
+                    .sort((a, b) => (b.other.sort_key || 0) - (a.other.sort_key || 0))
+                    .forEach(({ edge, other }) => {
+                        const item = el("li");
+                        const button = el("button", "eg-list-item");
+                        button.type = "button";
+                        const dot = el("span", "eg-dot");
+                        dot.style.background = other.color;
+                        dot.style.color = other.color;
+                        button.appendChild(dot);
+                        const text = el("span");
+                        text.appendChild(document.createTextNode(other.label || "Entry"));
+                        if (edge.type === "tag") {
+                            text.appendChild(el("div", "eg-note", "Shares tags"));
+                        } else if (edge.note) {
+                            text.appendChild(el("div", "eg-note", edge.note));
+                        }
+                        button.appendChild(text);
+                        button.appendChild(el("small", "", other.display_date || ""));
+                        button.setAttribute("aria-label", `Show ${other.label || "entry"} in graph`);
+                        button.addEventListener("click", () => api.select(other.id));
+                        item.appendChild(button);
+                        list.appendChild(item);
+                    });
+                api.body.appendChild(list);
+            }
+
+            const cta = el("a", "eg-cta", "Open entry");
+            cta.href = `/entries/${encodeURIComponent(d.id)}/view`;
+            api.footer.appendChild(cta);
         }
 
-        function renderGraph(data) {
-            loadingSpinner.style.display = 'none';
+        function prepareScales(data) {
+            const sizes = data.nodes.map((n) => n.size);
+            const minSize = d3.min(sizes) ?? 1;
+            const maxSize = d3.max(sizes) ?? 1;
+            radiusScale = minSize === maxSize
+                ? () => 15
+                : d3.scaleSqrt().domain([minSize, maxSize]).range([9, 24]);
 
-            // Always use the current SVG element from the DOM (it may have been recreated)
-            const activeSvgElement = document.getElementById("connection-graph-svg");
-
-            if (!data.nodes || data.nodes.length === 0) {
-                setZoomButtonsDisabled(true);
-                container.innerHTML = '<p class="text-muted text-center pt-5 mt-5">No connections yet. Connect entries from the entry form to build your knowledge graph.</p>';
-                return;
+            const times = data.nodes.map((n) => EG.parseIsoDay(n.date)).filter((t) => t !== null);
+            const minTime = d3.min(times);
+            const maxTime = d3.max(times);
+            const interpolate = d3.interpolateRgbBasis(RAMP);
+            colorOf = (n) => {
+                const t = EG.parseIsoDay(n.date);
+                if (t === null || minTime === maxTime) return RAMP[1];
+                return interpolate((t - minTime) / (maxTime - minTime));
+            };
+            if (minTime !== undefined) {
+                shell.querySelector("[data-legend-min]").textContent = EG.formatDay(minTime);
+                shell.querySelector("[data-legend-max]").textContent = EG.formatDay(maxTime);
             }
+        }
 
-            const nodeSizes = data.nodes.map(node => node.size);
-            const minNodeSize = d3.min(nodeSizes) ?? 1;
-            const maxNodeSize = d3.max(nodeSizes) ?? 1;
-            const midpointNodeSize = minNodeSize === maxNodeSize ? maxNodeSize : minNodeSize + ((maxNodeSize - minNodeSize) / 2);
-            const themeStyles = getComputedStyle(document.documentElement);
-            const baseSuccess = themeStyles.getPropertyValue("--bs-success").trim() || "#198754";
-            const basePrimary = themeStyles.getPropertyValue("--bs-primary").trim() || "#0d6efd";
-            const baseDanger = themeStyles.getPropertyValue("--bs-danger").trim() || "#dc3545";
-            const bodyBackground = themeStyles.getPropertyValue("--bs-body-bg").trim() || "#ffffff";
-            const radiusScale = minNodeSize === maxNodeSize
-                ? () => 22
-                : d3.scaleSqrt().domain([minNodeSize, maxNodeSize]).range([12, 38]);
-            const strokeWidthScale = minNodeSize === maxNodeSize
-                ? () => 2
-                : d3.scaleLinear().domain([minNodeSize, maxNodeSize]).range([1.5, 3.5]);
-            const fontSizeScale = minNodeSize === maxNodeSize
-                ? () => 11
-                : d3.scaleLinear().domain([minNodeSize, maxNodeSize]).range([9, 14]);
-            const colorScale = minNodeSize === maxNodeSize
-                ? () => basePrimary
-                : d3.scaleLinear()
-                    .domain([minNodeSize, midpointNodeSize, maxNodeSize])
-                    .range([baseSuccess, basePrimary, baseDanger])
-                    .interpolate(d3.interpolateHcl);
+        function updateStats(data) {
+            const explicit = data.edges.filter((e) => e.type !== "tag").length;
+            stats.querySelector("[data-stat-nodes]").textContent = String(data.nodes.length);
+            stats.querySelector("[data-stat-links]").textContent = String(explicit);
+            stats.querySelector("[data-stat-tags]").textContent = String(data.edges.length - explicit);
+            stats.querySelector("[data-stat-tag-wrap]").hidden = !includeTagsToggle.checked;
+            stats.hidden = data.nodes.length === 0;
+            legendTagRow.hidden = !includeTagsToggle.checked;
+        }
 
-            function getNodeRadius(node) {
-                return radiusScale(node.size);
-            }
-
-            function getNodeStrokeWidth(node) {
-                return strokeWidthScale(node.size);
-            }
-
-            function getNodeFill(node) {
-                return colorScale(node.size);
-            }
-
-            function getNodeHoverFill(node) {
-                const color = d3.color(getNodeFill(node));
-                return color ? color.brighter(0.6).formatHex() : getNodeFill(node);
-            }
-
-            const width = container.clientWidth;
-            const height = 600;
-
-            const svg = d3.select(activeSvgElement);
-            svg.selectAll("*").remove();
-            currentSvg = svg;
-            selectedNodeId = null;
-
-            // Setup force simulation
-            const simulation = d3.forceSimulation(data.nodes)
-                .force("link", d3.forceLink(data.edges).id(d => d.id).distance(120).strength(d => d.weight * 0.7))
-                .force("charge", d3.forceManyBody().strength(-200))
-                .force("center", d3.forceCenter(width / 2, height / 2))
-                .force("collide", d3.forceCollide().radius(d => radiusScale(d.size) + 8).iterations(2));
-
-            currentSimulation = simulation;
-
-            const g = svg.append("g");
-
-            // Add zoom capabilities
-            const zoom = d3.zoom()
-                .scaleExtent([0.1, 4])
-                .on("zoom", (event) => {
-                    g.attr("transform", event.transform);
-                });
-            svg.call(zoom);
-            svg.on("dblclick.zoom", null);
-            currentZoomBehavior = zoom;
-            setZoomButtonsDisabled(false);
-
-            // Click on empty space to deselect
-            svg.on("click", function(event) {
-                if (event.target === activeSvgElement) {
-                    clearSelection();
+        /** A to B and B to A are one visual connection; keep both notes. */
+        function mergeReciprocalEdges(edges) {
+            const merged = new Map();
+            edges.forEach((edge) => {
+                const a = String(edge.source);
+                const b = String(edge.target);
+                const key = `${edge.type || "explicit"}:${a < b ? a : b}:${a < b ? b : a}`;
+                const existing = merged.get(key);
+                if (!existing) {
+                    merged.set(key, Object.assign({}, edge));
+                } else if (edge.note && edge.note !== existing.note) {
+                    existing.note = existing.note ? `${existing.note} / ${edge.note}` : edge.note;
                 }
             });
-
-            // Build adjacency map for highlight logic
-            const adjacencyMap = new Map();
-            data.nodes.forEach(n => adjacencyMap.set(n.id, new Set()));
-            data.edges.forEach(e => {
-                const sourceId = typeof e.source === "object" ? e.source.id : e.source;
-                const targetId = typeof e.target === "object" ? e.target.id : e.target;
-                adjacencyMap.get(sourceId)?.add(targetId);
-                adjacencyMap.get(targetId)?.add(sourceId);
-            });
-
-            const link = g.append("g")
-                .selectAll("line")
-                .data(data.edges)
-                .join("line")
-                .style("stroke", "var(--bs-border-color)")
-                .attr("stroke-opacity", d => d.type === "tag" ? 0.3 : 0.7)
-                .attr("stroke-width", d => d.type === "tag" ? 1 : 2)
-                .attr("stroke-dasharray", d => d.type === "tag" ? "5,5" : null);
-
-            link.append("title")
-                .text(d => d.note || "");
-
-            const nodeGroup = g.append("g")
-                .selectAll("g")
-                .data(data.nodes)
-                .join("g")
-                .style("cursor", "pointer")
-                .call(d3.drag()
-                    .on("start", dragstarted)
-                    .on("drag", dragged)
-                    .on("end", dragended))
-                .on("click", function(event, d) {
-                    event.stopPropagation();
-
-                    if (event.defaultPrevented || d.wasDragged) {
-                        d.wasDragged = false;
-                        return;
-                    }
-
-                    if (selectedNodeId === d.id) {
-                        clearSelection();
-                    } else {
-                        selectNode(d.id);
-                    }
-                })
-                .on("dblclick", (event, d) => {
-                    event.stopPropagation();
-
-                    if (event.defaultPrevented || d.wasDragged) {
-                        d.wasDragged = false;
-                        return;
-                    }
-
-                    window.location.href = `/entries/${d.id}/view`;
-                })
-                .on("mouseover", function(event, d) {
-                    if (selectedNodeId !== null) return;
-                    d3.select(this)
-                        .select("circle")
-                        .style("fill", getNodeHoverFill(d))
-                        .style("stroke-width", `${getNodeStrokeWidth(d) + 1.25}px`);
-
-                    // Highlight connected edges
-                    const neighbors = adjacencyMap.get(d.id) || new Set();
-                    link.attr("stroke-opacity", e => {
-                        const srcId = typeof e.source === "object" ? e.source.id : e.source;
-                        const tgtId = typeof e.target === "object" ? e.target.id : e.target;
-                        if (srcId === d.id || tgtId === d.id) {
-                            return e.type === "tag" ? 0.6 : 1.0;
-                        }
-                        return e.type === "tag" ? 0.1 : 0.2;
-                    });
-                })
-                .on("mouseout", function(event, d) {
-                    if (selectedNodeId !== null) return;
-                    d3.select(this)
-                        .select("circle")
-                        .style("fill", getNodeFill(d))
-                        .style("stroke-width", `${getNodeStrokeWidth(d)}px`);
-
-                    // Restore edge opacity
-                    link.attr("stroke-opacity", e => e.type === "tag" ? 0.3 : 0.7);
-                });
-
-            function selectNode(nodeId) {
-                selectedNodeId = nodeId;
-                const neighbors = adjacencyMap.get(nodeId) || new Set();
-
-                nodeGroup.style("opacity", d => {
-                    return (d.id === nodeId || neighbors.has(d.id)) ? 1.0 : 0.15;
-                });
-
-                link.attr("stroke-opacity", e => {
-                    const srcId = typeof e.source === "object" ? e.source.id : e.source;
-                    const tgtId = typeof e.target === "object" ? e.target.id : e.target;
-                    if (srcId === nodeId || tgtId === nodeId) {
-                        return e.type === "tag" ? 0.6 : 1.0;
-                    }
-                    return 0.05;
-                });
-            }
-
-            function clearSelection() {
-                selectedNodeId = null;
-                nodeGroup.style("opacity", 1.0);
-                link.attr("stroke-opacity", e => e.type === "tag" ? 0.3 : 0.7);
-            }
-
-            // Node circles
-            nodeGroup.append("circle")
-                .attr("r", d => getNodeRadius(d))
-                .style("fill", d => getNodeFill(d))
-                .style("stroke", bodyBackground)
-                .style("stroke-width", d => `${getNodeStrokeWidth(d)}px`);
-
-            nodeGroup.append("title")
-                .text(d => {
-                    const label = d.label || "Entry";
-                    const dateLine = d.display_date || "";
-                    const groupLine = d.group_name || "";
-                    const meta = [dateLine, groupLine].filter(Boolean).join(" | ");
-                    const suffix = d.size === 1 ? "connection" : "connections";
-                    return `${label}\n${meta}\n${d.size} ${suffix}`;
-                });
-
-            // Labels
-            nodeGroup.append("text")
-                .text(d => truncateLabel(d.label || "Entry", 25))
-                .attr("text-anchor", "middle")
-                .attr("dy", d => getNodeRadius(d) + fontSizeScale(d.size) + 2)
-                .attr("font-size", d => `${fontSizeScale(d.size)}px`)
-                .attr("font-weight", "500")
-                .style("fill", "var(--bs-body-color)")
-                .style("pointer-events", "none");
-
-            function ticked() {
-                link
-                    .attr("x1", d => d.source.x)
-                    .attr("y1", d => d.source.y)
-                    .attr("x2", d => d.target.x)
-                    .attr("y2", d => d.target.y);
-
-                nodeGroup
-                    .attr("transform", d => `translate(${d.x},${d.y})`);
-            }
-
-            simulation.on("tick", ticked);
-
-            function dragstarted(event) {
-                if (!event.active) simulation.alphaTarget(0.3).restart();
-                event.subject.wasDragged = false;
-                event.subject.fx = event.subject.x;
-                event.subject.fy = event.subject.y;
-            }
-
-            function dragged(event) {
-                event.subject.wasDragged = true;
-                event.subject.fx = event.x;
-                event.subject.fy = event.y;
-            }
-
-            function dragended(event) {
-                if (!event.active) simulation.alphaTarget(0);
-                event.subject.fx = null;
-                event.subject.fy = null;
-            }
-
-            // Handle window resize
-            window.addEventListener('resize', () => {
-                svg.attr("width", container.clientWidth);
-                simulation.force("center", d3.forceCenter(container.clientWidth / 2, height / 2));
-                simulation.alpha(0.3).restart();
-            });
+            return Array.from(merged.values());
         }
 
         function loadGraph() {
-            // If a previous render replaced container contents (empty state or error),
-            // restore the original SVG element so renderGraph can target it.
-            if (!document.getElementById("connection-graph-svg")) {
-                container.innerHTML = '';
-                const controlsDiv = document.createElement("div");
-                controlsDiv.className = "position-absolute top-0 end-0 p-3";
-                controlsDiv.style.zIndex = "5";
-                controlsDiv.innerHTML = `
-                    <div class="btn-group shadow-sm" role="group" aria-label="Graph zoom controls">
-                        <button id="zoom-out-button" type="button" class="btn btn-light" aria-label="Zoom out" disabled>-</button>
-                        <button id="zoom-in-button" type="button" class="btn btn-light" aria-label="Zoom in" disabled>+</button>
-                    </div>`;
-                container.appendChild(controlsDiv);
-                const newSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-                newSvg.id = "connection-graph-svg";
-                newSvg.style.cssText = "width: 100%; height: 100%; min-height: 600px; display: block;";
-                container.appendChild(newSvg);
-            }
-
-            loadingSpinner.style.display = '';
+            graph.loading("Loading connection graph…");
             let url = `/api/groups/${groupId}/connections`;
-            if (includeTagsToggle.checked) {
-                url += "?include_tags=1";
-            }
-
-            fetch(url)
-                .then(res => {
+            if (includeTagsToggle.checked) url += "?include_tags=1";
+            fetch(url, { headers: { Accept: "application/json" } })
+                .then((res) => {
                     if (!res.ok) throw new Error("Failed to load connections");
                     return res.json();
                 })
-                .then(data => {
-                    renderGraph(data);
+                .then((data) => {
+                    data.nodes = data.nodes || [];
+                    data.edges = mergeReciprocalEdges(data.edges || []);
+                    const degree = new Map();
+                    data.edges.filter((e) => e.type !== "tag").forEach((e) => {
+                        degree.set(e.source, (degree.get(e.source) || 0) + 1);
+                        degree.set(e.target, (degree.get(e.target) || 0) + 1);
+                    });
+                    data.nodes.forEach((n) => { n.size = degree.get(n.id) || 1; });
+                    if (window.d3) prepareScales(data);
+                    updateStats(data);
+                    graph.render(data);
                 })
-                .catch(err => {
-                    loadingSpinner.style.display = 'none';
-                    setZoomButtonsDisabled(true);
-                    container.innerHTML = `<p class="text-danger text-center pt-5 mt-5">Error loading connections: ${err.message}</p>`;
+                .catch((err) => {
+                    stats.hidden = true;
+                    graph.error(`Error loading connections: ${err.message}`);
                 });
         }
 
-        // Initial load
+        includeTagsToggle.addEventListener("change", loadGraph);
         loadGraph();
     });
 </script>

@@ -133,6 +133,7 @@ from app.services.suggested_connections import (
 from app.services.topics import (
     build_tag_graph,
     get_topic_clusters_from_cache,
+    list_topic_entry_summaries,
     save_topic_clusters_to_cache,
 )
 from app.services.poster_board import (
@@ -2227,7 +2228,13 @@ def api_group_topics(group_id: int) -> JSONResponse:
             raise HTTPException(status_code=404, detail="Timeline group not found")
 
         graph = get_topic_clusters_from_cache(connection, group_id)
-        return JSONResponse(asdict(graph))
+        payload = asdict(graph)
+        payload["entries"] = list_topic_entry_summaries(
+            connection,
+            group_id,
+            [entry_id for node in graph.nodes for entry_id in node.entry_ids],
+        )
+        return JSONResponse(payload)
 
 
 @app.get("/api/heatmap")
