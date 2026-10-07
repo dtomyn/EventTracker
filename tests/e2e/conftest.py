@@ -77,6 +77,12 @@ def _build_server_env(db_path: Path, *, ai_provider: str) -> dict[str, str]:
     env["COPILOT_CLI_URL"] = ""
     env["PYTHONUNBUFFERED"] = "1"
     env.setdefault("LOG_LEVEL", "WARNING")
+    # Each server would otherwise size native thread pools (OpenBLAS reserves
+    # per-core buffers on import) to every core; with parallel workers that
+    # exhausts memory and servers die before becoming ready.
+    env["OPENBLAS_NUM_THREADS"] = "1"
+    env["OMP_NUM_THREADS"] = "1"
+    env["MKL_NUM_THREADS"] = "1"
     return env
 
 

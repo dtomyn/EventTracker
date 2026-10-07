@@ -107,6 +107,12 @@ function buildServerEnv(dbPath: string, aiProvider: AIProvider): NodeJS.ProcessE
     COPILOT_CLI_URL: '',
     PYTHONUNBUFFERED: '1',
     LOG_LEVEL: process.env.LOG_LEVEL ?? 'WARNING',
+    // Each server would otherwise size native thread pools (OpenBLAS reserves
+    // per-core buffers on import) to every core; with parallel workers that
+    // exhausts memory and servers die before becoming ready.
+    OPENBLAS_NUM_THREADS: '1',
+    OMP_NUM_THREADS: '1',
+    MKL_NUM_THREADS: '1',
   };
 }
 
