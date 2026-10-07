@@ -289,6 +289,7 @@
       foot: el.querySelector(".foot"),
       pin: el.querySelector(".pin"),
       flag: el.querySelector(".flag"),
+      cat: el.querySelector(".cat"),
       tapes: el.querySelectorAll(".tape")
     };
     return el;
@@ -557,14 +558,12 @@
       dressGaps(plan.free || [], cw, ch, gap, rects,
                 first && !reduced ? Math.min(plan.cells.length, 27) * 24 + PAPER_IN_MS - 120 : null);
 
-      var landing = 0;
       plan.cells.forEach(function(c, i){
         var it = c.it;
         var el = nodes[it.id] || (nodes[it.id] = build(it));
         seen[it.id] = 1;
         var w = rects[i].w, h = rects[i].h, x = rects[i].x, y = rects[i].y;
         var fresh = !el.parentNode;
-        if(fresh && !reduced) landing = Math.max(landing, (first ? Math.min(i, 26) * 24 : 0) + PAPER_IN_MS);
         el.style.width = w + "px";
         el.style.height = h + "px";
         el.style.transform = "translate3d(" + x + "px," + y + "px,0)";
@@ -573,19 +572,25 @@
         el.classList.remove("out");
         if(fresh && !reduced){
           var paper = el.parts.paper;
-          paper.style.transitionDelay = (first ? Math.min(i, 26) * 24 : 0) + "ms";
+          var inDelay = first ? Math.min(i, 26) * 24 : 0;
+          paper.style.transitionDelay = inDelay + "ms";
+          /* yarn is strung only once the paper it ties together has landed.
+             The landing clock starts when the poster actually starts to fall
+             in, not when it was scheduled: frames can be held back (a
+             background tab, a busy machine) while timers keep running. */
+          str.pendingIn++;
           requestAnimationFrame(function(){
             requestAnimationFrame(function(){
               el.classList.add("in");
               setTimeout(function(){ paper.style.transitionDelay = ""; }, 900);
+              str.holdUntil = Math.max(str.holdUntil, performance.now() + inDelay + PAPER_IN_MS + 60);
+              if(--str.pendingIn === 0 && str.held) refreshStrings();
             });
           });
         } else {
           el.classList.add("in");
         }
       });
-      /* yarn is strung only once the paper it ties together has landed */
-      if(landing) str.holdUntil = Math.max(str.holdUntil, performance.now() + landing + 60);
     }
 
     /* retire posters that fell out of the filter */
@@ -618,7 +623,7 @@
      aim: where a string's control point is pulled to while its poster is hot */
   var str = {on:false, edges:[], paths:{}, tacks:{}, until:0, raf:0,
              pluck:{}, aim:{}, grab:null, springRaf:0,
-             queue:[], held:false, holdUntil:0, holdTimer:0, tackDelay:{}, hot:null};
+             queue:[], held:false, holdUntil:0, holdTimer:0, pendingIn:0, tackDelay:{}, hot:null};
   var STAGGER_MS = 90, STAGGER_MAX_MS = 1100;
 
   function svgEl(name, attrs){
@@ -631,9 +636,9 @@
     board.appendChild(s);
     return s;
   }
-  /* Two layers: the yarn runs BEHIND the posters, so it never crosses a
-     headline, and only shows on the cork between them; the tacks sit ABOVE,
-     pinned through each poster's edge where the yarn ducks underneath. */
+  /* Two layers, both above the posters like yarn on a real corkboard: the
+     yarn runs across the sheets, and the tacks sit on top of the yarn so
+     every string is visibly tied off at its pin. */
   var strSvg = layer("strings--yarn");
   var strYarns = strSvg.appendChild(svgEl("g", {"class": "yarns"}));
   var tackSvg = layer("strings--tacks");
@@ -667,11 +672,11 @@
   });
 
   /* ---------- where a string is pinned ----------
-     Each end is tacked to the edge of its poster that faces the other poster,
-     so the yarn leaves straight onto the cork instead of across the paper.
-     One tack per used edge, shared by every string leaving through it, nudged
-     by a stable per-entry amount so a row of posters does not line up like
-     rivets. Positions come from the unrotated poster box. */
+     One pushpin per poster, through its top margin, shared by every string
+     tied to that poster, the way detectives pin a board. The pin is nudged
+     sideways by a stable per-entry amount so a row of posters does not line
+     up like rivets, and stays near the centre, clear of the category tag on
+     the left and the NEW flag on the right. */
   function cardBox(id, br){
     var el = nodes[id];
     if(!el || !el.parentNode) return null;
@@ -682,28 +687,26 @@
     var h = Math.sin(id * 91.345 + salt * 12.7) * 43758.5453;
     return h - Math.floor(h);
   }
-  function sideFacing(a, b){
-    var dx = (b.x + b.w / 2) - (a.x + a.w / 2);
-    var dy = (b.y + b.h / 2) - (a.y + a.h / 2);
-    if(Math.abs(dx) * a.h > Math.abs(dy) * a.w) return dx > 0 ? "r" : "l";
-    return dy > 0 ? "b" : "t";
+  /* The pin bites into the top margin, in the gap between the category tag
+     and the NEW flag. When a long tag leaves no gap, it goes higher, into
+     the very edge of the sheet, clear of the tag's top. */
+  var TACK_INSET = 7, TACK_INSET_TIGHT = 3, TACK_CLEAR = 10;
+  function shownRect(el){
+    return el && el.offsetParent ? el.getBoundingClientRect() : null;
   }
-  /* top and bottom tacks bite into the margin; side tacks sit on the edge
-     itself, half on the cork, so they never touch the type */
-  var TACK_INSET = 3;
-  function anchorAt(id, side, b){
-    /* top tacks stay right of centre, clear of the category tag; side tacks
-       stay in the upper half, clear of the footer */
-    if(side === "t") return {x:b.x + b.w * (0.54 + jitter(id, 1) * 0.14), y:b.y + TACK_INSET};
-    if(side === "b") return {x:b.x + b.w * (0.32 + jitter(id, 2) * 0.14), y:b.y + b.h - TACK_INSET};
-    if(side === "l") return {x:b.x, y:b.y + b.h * (0.30 + jitter(id, 3) * 0.14)};
-    return {x:b.x + b.w, y:b.y + b.h * (0.30 + jitter(id, 4) * 0.14)};
+  function anchorAt(id, b, br){
+    var parts = nodes[id] && nodes[id].parts;
+    var lo = b.x + b.w * 0.2, hi = b.x + b.w * 0.8;
+    var cat = parts && shownRect(parts.cat), flag = parts && shownRect(parts.flag);
+    if(cat) lo = Math.max(lo, cat.right - br.left + TACK_CLEAR);
+    if(flag) hi = Math.min(hi, flag.left - br.left - TACK_CLEAR);
+    if(hi > lo) return {x:lo + (hi - lo) * (0.35 + jitter(id, 1) * 0.3), y:b.y + TACK_INSET};
+    return {x:b.x + b.w * (0.44 + jitter(id, 1) * 0.12), y:b.y + TACK_INSET_TIGHT};
   }
   function edgeEnds(e, box){
     var A = box(e.a), B = box(e.b);
     if(!A || !B) return null;
-    var sa = sideFacing(A, B), sb = sideFacing(B, A);
-    return {p:anchorAt(e.a, sa, A), q:anchorAt(e.b, sb, B), sa:sa, sb:sb};
+    return {p:anchorAt(e.a, A, box.br), q:anchorAt(e.b, B, box.br), sa:"t", sb:"t"};
   }
   function boxCache(){
     var br = board.getBoundingClientRect(), memo = {};
@@ -860,13 +863,16 @@
     });
     syncStringNodes();
     var wait = live ? str.holdUntil - performance.now() : 0;
+    var pending = live && str.pendingIn > 0;
     clearTimeout(str.holdTimer);
-    if(wait > 0 && str.queue.length){
-      /* the posters are still landing: keep the yarn in the drawer until then */
+    if((wait > 0 || pending) && str.queue.length){
+      /* the posters are still landing: keep the yarn in the drawer until then.
+         While some have not even started falling, the last one to start
+         calls back in here. */
       str.held = true;
       strSvg.classList.add("held");
       tackSvg.classList.add("held");
-      str.holdTimer = setTimeout(refreshStrings, wait);
+      if(!pending) str.holdTimer = setTimeout(refreshStrings, wait);
       return;
     }
     if(str.queue.length) stringUp();

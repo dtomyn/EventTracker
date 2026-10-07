@@ -201,9 +201,9 @@ test('red string overlay ties connected posters together and springs back when p
   await expect(board.strings).toHaveCount(2);
   await expect(board.string(suspect, witness)).toHaveCount(1);
   await expect(board.string(witness, alibi)).toHaveCount(1);
-  // Every connected poster is tacked; strings leaving through the same edge share a tack.
+  // Every connected poster has exactly one pushpin, shared by all of its strings.
   for (const id of [suspect, witness, alibi]) {
-    await expect(board.tacks.and(page.locator(`[data-id="${id}"]`)).first()).toBeAttached();
+    await expect(board.tacks.and(page.locator(`[data-id="${id}"]`))).toHaveCount(1);
   }
   await expect(page.locator(`svg.strings .tack[data-id="${bystander}"]`)).toHaveCount(0);
   await expect(page.locator(`.poster[data-key="${bystander}"]`)).not.toHaveClass(/\blinked\b/);
@@ -235,7 +235,20 @@ test('red string overlay ties connected posters together and springs back when p
       }),
   );
   const restPath = await core.getAttribute('d');
-  // The yarn runs behind the posters: grab it where it crosses open cork.
+  // Like a real detective board, the yarn runs on top of the posters: where it
+  // leaves its pushpin it lies across the poster's paper, above the sheet.
+  const onTop = await board.string(suspect, witness).locator('.yarn__hit').evaluate((path) => {
+    const hit = path as SVGPathElement;
+    const box = (hit.ownerSVGElement as SVGSVGElement).getBoundingClientRect();
+    const start = hit.getPointAtLength(0);
+    const stack = document.elementsFromPoint(box.left + start.x, box.top + start.y);
+    const paperIndex = stack.findIndex((el) => el.classList.contains('paper'));
+    return { hitIndex: stack.indexOf(hit), paperIndex };
+  });
+  expect(onTop.paperIndex).toBeGreaterThan(-1);
+  expect(onTop.hitIndex).toBeGreaterThan(-1);
+  expect(onTop.hitIndex).toBeLessThan(onTop.paperIndex);
+  // Grab it at a point where nothing else is in the way.
   const grip = await board.string(suspect, witness).locator('.yarn__hit').evaluate((path) => {
     const hit = path as SVGPathElement;
     const box = (hit.ownerSVGElement as SVGSVGElement).getBoundingClientRect();
@@ -377,8 +390,7 @@ test('red string waits for posters to land, keeps decorations clear, and spotlig
   expect(overlaps.hits).toBe(0);
 
   const paper = (id: number) => page.locator(`.poster[data-key="${id}"] .paper`);
-  // A faded poster steps back with a filter but stays fully opaque, so the
-  // yarn running behind it never shows through its text.
+  // A faded poster steps back with a filter but stays fully opaque.
   const look = (id: number) => paper(id).evaluate((el) => {
     const style = getComputedStyle(el);
     return { opacity: Number(style.opacity), faded: style.filter !== 'none' };
