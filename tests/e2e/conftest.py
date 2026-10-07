@@ -5,11 +5,11 @@ import os
 from pathlib import Path
 import re
 import shutil
-import socket
 import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from typing import Callable, Iterator
 
@@ -21,8 +21,13 @@ from playwright.sync_api import Browser, Page, Playwright, expect, sync_playwrig
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_DB_PATH = REPO_ROOT / "data" / "EventTracker.db"
 SERVER_HOST = "127.0.0.1"
-SERVER_START_TIMEOUT_SECONDS = 30.0
-SCREENSHOTS_DIR = REPO_ROOT / "test-screenshots"
+# Readiness is event-driven (uvicorn banner), so this is only a ceiling: it costs
+# nothing when startup is fast but tolerates a heavily loaded machine, where
+# importing the app in many parallel servers can exceed 30s.
+SERVER_START_TIMEOUT_SECONDS = 120.0
+# Per-test end-of-run screenshots consumed by scripts/generate_test_report.py.
+# Run artefacts only: the directory is gitignored.
+SCREENSHOTS_DIR = REPO_ROOT / "test-results" / "e2e-screenshots"
 TEMP_DIR_CLEANUP_TIMEOUT_SECONDS = 5.0
 TEMP_DIR_CLEANUP_RETRY_INTERVAL_SECONDS = 0.2
 STALE_TEMP_DIR_AGE_SECONDS = 60 * 60
@@ -52,12 +57,6 @@ class E2ESession:
     ai_provider: str
 
 
-def _find_free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind((SERVER_HOST, 0))
-        return int(sock.getsockname()[1])
-
-
 def _copy_seed_database(target_db_path: Path) -> None:
     target_db_path.parent.mkdir(parents=True, exist_ok=True)
     if SOURCE_DB_PATH.exists():
@@ -81,60 +80,86 @@ def _build_server_env(db_path: Path, *, ai_provider: str) -> dict[str, str]:
     return env
 
 
-def _start_server(db_path: Path, port: int, *, ai_provider: str) -> subprocess.Popen[str]:
-    return subprocess.Popen(
-        [
-            sys.executable,
-            "-m",
-            "uvicorn",
-            "app.main:app",
-            "--host",
-            SERVER_HOST,
-            "--port",
-            str(port),
-        ],
-        cwd=REPO_ROOT,
-        env=_build_server_env(db_path, ai_provider=ai_provider),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
+class _ManagedServer:
+    """A uvicorn child process whose output is drained on a background thread.
 
+    The server binds port 0 so the OS assigns a free port atomically; the
+    actual port is parsed from uvicorn's startup banner. This removes the race
+    between probing for a free port and the server binding it. Draining the
+    pipe continuously also stops a chatty server from blocking on a full pipe.
+    """
 
-def _wait_for_server(base_url: str, process: subprocess.Popen[str]) -> None:
-    deadline = time.monotonic() + SERVER_START_TIMEOUT_SECONDS
-    last_error: Exception | None = None
-    while time.monotonic() < deadline:
-        if process.poll() is not None:
-            output = ""
-            if process.stdout is not None:
-                output = process.stdout.read()
+    _READY_PATTERN = re.compile(r"Uvicorn running on http://[\d.]+:(\d+)")
+
+    def __init__(self, db_path: Path, *, ai_provider: str) -> None:
+        self.process = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "uvicorn",
+                "app.main:app",
+                "--host",
+                SERVER_HOST,
+                "--port",
+                "0",
+                "--log-level",
+                "info",
+                "--no-access-log",
+            ],
+            cwd=REPO_ROOT,
+            env=_build_server_env(db_path, ai_provider=ai_provider),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        self._lines: list[str] = []
+        self._port: int | None = None
+        self._ready = threading.Event()
+        self._reader = threading.Thread(target=self._drain, daemon=True)
+        self._reader.start()
+
+    def _drain(self) -> None:
+        assert self.process.stdout is not None
+        for line in self.process.stdout:
+            self._lines.append(line)
+            if self._port is None:
+                match = self._READY_PATTERN.search(line)
+                if match:
+                    self._port = int(match.group(1))
+                    self._ready.set()
+        self._ready.set()
+
+    @property
+    def output(self) -> str:
+        return "".join(self._lines)
+
+    def wait_until_ready(self) -> int:
+        """Block until uvicorn reports it is serving, returning the bound port."""
+        if not self._ready.wait(SERVER_START_TIMEOUT_SECONDS):
+            raise RuntimeError(
+                f"EventTracker server did not become ready within {SERVER_START_TIMEOUT_SECONDS:.0f} seconds.\n"
+                f"Captured output:\n{self.output}"
+            )
+        if self._port is None:
             raise RuntimeError(
                 "EventTracker server exited before it became ready.\n"
-                f"Captured output:\n{output}"
+                f"Captured output:\n{self.output}"
             )
-        try:
-            response = httpx.get(base_url, timeout=1.5)
-            if response.status_code == 200:
-                return
-        except Exception as exc:  # pragma: no cover - timing dependent.
-            last_error = exc
-        time.sleep(0.2)
-    raise RuntimeError(
-        f"EventTracker server did not become ready within {SERVER_START_TIMEOUT_SECONDS:.0f} seconds."
-    ) from last_error
+        return self._port
 
-
-def _stop_server(process: subprocess.Popen[str]) -> None:
-    if process.poll() is None:
-        process.terminate()
-        try:
-            process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=10)
-    if process.stdout is not None:
-        process.stdout.close()
+    def stop(self) -> None:
+        if self.process.poll() is None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait(timeout=10)
+        self._reader.join(timeout=5)
+        if self.process.stdout is not None:
+            self.process.stdout.close()
 
 
 def _is_retryable_windows_cleanup_error(error: OSError) -> bool:
@@ -173,7 +198,12 @@ def _cleanup_stale_temp_dirs() -> None:
         except OSError:
             continue
         if is_stale:
-            _remove_temp_dir(temp_dir)
+            # Best effort: a concurrent run (another worktree, the TS suite) may be
+            # sweeping the same directory, which surfaces as ENOENT or EACCES.
+            try:
+                _remove_temp_dir(temp_dir)
+            except OSError:
+                continue
 
 
 def _lookup_group_id(db_path: Path, group_name: str) -> int | None:
@@ -200,32 +230,43 @@ def _create_e2e_session(*, ai_provider: str) -> Iterator[E2ESession]:
     temp_dir = Path(tempfile.mkdtemp(prefix="eventtracker-playwright-"))
     temp_db_path = temp_dir / "EventTracker-playwright.db"
     _copy_seed_database(temp_db_path)
-    port = _find_free_port()
-    base_url = f"http://{SERVER_HOST}:{port}"
-    process = _start_server(temp_db_path, port, ai_provider=ai_provider)
+    server = _ManagedServer(temp_db_path, ai_provider=ai_provider)
     try:
-        _wait_for_server(base_url, process)
+        port = server.wait_until_ready()
         yield E2ESession(
-            base_url=base_url,
+            base_url=f"http://{SERVER_HOST}:{port}",
             run_id=run_id,
             group_name=f"Playwright E2E {run_id}",
             db_path=temp_db_path,
             ai_provider=ai_provider,
         )
     finally:
-        _stop_server(process)
+        server.stop()
         _remove_temp_dir(temp_dir)
 
 
 @pytest.fixture(scope="session")
 def playwright_instance() -> Iterator[Playwright]:
-    _cleanup_stale_temp_dirs()
     with sync_playwright() as playwright:
         yield playwright
-    _cleanup_stale_temp_dirs()
 
 
-@pytest.fixture
+def _is_xdist_worker(session: pytest.Session) -> bool:
+    return hasattr(session.config, "workerinput")
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    # Sweep once per run (in the xdist controller), not once per worker.
+    if not _is_xdist_worker(session):
+        _cleanup_stale_temp_dirs()
+
+
+def pytest_sessionfinish(session: pytest.Session) -> None:
+    if not _is_xdist_worker(session):
+        _cleanup_stale_temp_dirs()
+
+
+@pytest.fixture(scope="session")
 def browser(playwright_instance: Playwright) -> Iterator[Browser]:
     raw_headless = os.getenv("EVENTTRACKER_PLAYWRIGHT_HEADLESS", "1").strip().lower()
     headless = raw_headless not in {"0", "false", "no"}
@@ -235,9 +276,6 @@ def browser(playwright_instance: Playwright) -> Iterator[Browser]:
         yield browser
     finally:
         browser.close()
-
-
-SCREENSHOTS_DIR = REPO_ROOT / "test-screenshots"
 
 
 @pytest.fixture
@@ -255,6 +293,10 @@ def _create_page(browser: Browser, session: E2ESession, *, test_name: str = "") 
         base_url=session.base_url,
         accept_downloads=True,
         viewport={"width": 1440, "height": 1100},
+        # Entrance animations (card reveals, count-ups, view transitions) are not
+        # what these tests verify; reduced motion makes the UI settle immediately.
+        # Tests that exercise timed behaviour opt back in with page.emulate_media.
+        reduced_motion="reduce",
     )
     context.route(
         "**://cdn.jsdelivr.net/**",
@@ -299,4 +341,4 @@ def ensure_dedicated_group(
         assert group_id is not None
         return group_id
 
-    return _ensure
+    return _ensure

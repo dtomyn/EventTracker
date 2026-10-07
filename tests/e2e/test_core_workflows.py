@@ -318,6 +318,11 @@ def test_timeline_views_and_drill_down_cover_details_summaries_months_and_years(
         final_text="Prior year event used to prove the year bucket drill-down.",
     )
 
+    # Playback advances on timers (the first period's status is shown for only
+    # a few hundred ms), so drive them with a fake clock instead of racing them.
+    # Reduced motion collapses every playback delay to zero, so opt back in.
+    page.emulate_media(reduced_motion="no-preference")
+    page.clock.install()
     page.goto(f"/?group_id={group_id}")
 
     current_view = page.locator("[data-current-view-label]")
@@ -359,12 +364,12 @@ def test_timeline_views_and_drill_down_cover_details_summaries_months_and_years(
     expect(play_button).to_have_attribute("aria-label", "Play summaries replay")
     expect(pause_button).to_be_disabled()
 
+    page.clock.pause_at(page.evaluate("Date.now()") + 1_000)
     play_button.click()
     expect(play_button).to_be_disabled()
     expect(pause_button).to_be_enabled()
-    expect(playback_status).to_have_text(
-        "Playing January 2025 oldest first.", timeout=5000
-    )
+    page.clock.run_for(200)
+    expect(playback_status).to_have_text("Playing January 2025 oldest first.")
 
     pause_button.click()
     expect(play_button).to_be_enabled()
@@ -376,9 +381,9 @@ def test_timeline_views_and_drill_down_cover_details_summaries_months_and_years(
     restart_button.click()
     expect(play_button).to_be_disabled()
     expect(pause_button).to_be_enabled()
-    expect(playback_status).to_have_text(
-        "Playing January 2025 oldest first.", timeout=5000
-    )
+    page.clock.run_for(200)
+    expect(playback_status).to_have_text("Playing January 2025 oldest first.")
+    page.clock.resume()
 
     months_button.click()
     expect(current_view).to_have_text("Months")

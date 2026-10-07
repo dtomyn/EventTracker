@@ -1,6 +1,107 @@
 {% extends "base.html" %}
 {% from "partials/story_links.html" import story_href %}
 
+{% block head %}
+    <style>
+        .story-present-group {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0.75rem;
+        }
+
+        .story-present-btn {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem 1.25rem 0.5rem 0.5rem;
+            border-radius: 999px;
+            overflow: hidden;
+            isolation: isolate;
+            color: #fff;
+            text-decoration: none;
+            background: linear-gradient(120deg, #6d28d9 0%, #4f46e5 45%, #0ea5e9 100%);
+            background-size: 180% 100%;
+            background-position: 0% 50%;
+            box-shadow: 0 10px 28px rgba(79, 70, 229, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+            transition: background-position 0.6s cubic-bezier(0.22, 0.8, 0.24, 1), transform 0.25s cubic-bezier(0.22, 0.8, 0.24, 1), box-shadow 0.25s;
+        }
+
+        .story-present-btn::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            z-index: -1;
+            background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.28) 50%, transparent 65%);
+            transform: translateX(-120%);
+            transition: transform 0.8s cubic-bezier(0.22, 0.8, 0.24, 1);
+        }
+
+        .story-present-btn:hover,
+        .story-present-btn:focus-visible {
+            color: #fff;
+            background-position: 100% 50%;
+            transform: translateY(-2px);
+            box-shadow: 0 14px 36px rgba(79, 70, 229, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+        }
+
+        .story-present-btn:hover::after,
+        .story-present-btn:focus-visible::after { transform: translateX(120%); }
+
+        .story-present-btn:focus-visible {
+            outline: 2px solid #a5b4fc;
+            outline-offset: 3px;
+        }
+
+        .story-present-btn-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.25rem;
+            height: 2.25rem;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+        }
+
+        .story-present-btn-icon svg {
+            width: 1rem;
+            height: 1rem;
+            margin-left: 2px;
+            fill: currentColor;
+        }
+
+        .story-present-btn-text {
+            display: flex;
+            flex-direction: column;
+            line-height: 1.15;
+            text-align: left;
+        }
+
+        .story-present-btn-label {
+            font-weight: 650;
+            font-size: 0.9375rem;
+            letter-spacing: 0.005em;
+        }
+
+        .story-present-btn-sub {
+            font-size: 0.6875rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            opacity: 0.8;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .story-present-btn,
+            .story-present-btn::after { transition: none; }
+            .story-present-btn:hover,
+            .story-present-btn:focus-visible { transform: none; }
+        }
+    </style>
+{% endblock %}
+
 {% block content %}
     <section class="story-hero mb-4">
         <div class="story-hero-header">
@@ -169,7 +270,18 @@
                                     </button>
                                 </form>
                             {% else %}
-                                <span class="badge text-bg-success">Saved snapshot</span>
+                                <div class="story-present-group">
+                                    <span class="badge text-bg-success">Saved snapshot</span>
+                                    <a class="story-present-btn" href="/story/{{ story_result.story_id }}/presentation" data-story-present-link>
+                                        <span class="story-present-btn-icon" aria-hidden="true">
+                                            <svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>
+                                        </span>
+                                        <span class="story-present-btn-text">
+                                            <span class="story-present-btn-label">Present story</span>
+                                            <span class="story-present-btn-sub">Cinematic full-screen</span>
+                                        </span>
+                                    </a>
+                                </div>
                             {% endif %}
                         </div>
 
@@ -205,7 +317,7 @@
                                     <div class="text-body-secondary small">{% if story_result.presentation_url %}Switch to Presentation view to open the compiled deck.{% else %}The compiled presentation will be saved with this snapshot.{% endif %}</div>
                                 {% elif story_result.is_saved %}
                                     <div class="fw-semibold">Narrative only</div>
-                                    <div class="text-body-secondary small">No presentation was generated for this snapshot.</div>
+                                    <div class="text-body-secondary small">No executive deck was generated. Use Present story for the cinematic view.</div>
                                 {% else %}
                                     <div class="fw-semibold">Not yet generated</div>
                                     <div class="text-body-secondary small">Review the narrative below, then generate a presentation when ready.</div>

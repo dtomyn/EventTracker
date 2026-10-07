@@ -201,19 +201,53 @@ test('red string overlay ties connected posters together and springs back when p
   await expect(board.strings).toHaveCount(2);
   await expect(board.string(suspect, witness)).toHaveCount(1);
   await expect(board.string(witness, alibi)).toHaveCount(1);
-  // One tack per connected poster, shared by every string pinned to it.
-  await expect(board.tacks).toHaveCount(3);
+  // Every connected poster is tacked; strings leaving through the same edge share a tack.
+  for (const id of [suspect, witness, alibi]) {
+    await expect(board.tacks.and(page.locator(`[data-id="${id}"]`)).first()).toBeAttached();
+  }
+  await expect(page.locator(`svg.strings .tack[data-id="${bystander}"]`)).toHaveCount(0);
   await expect(page.locator(`.poster[data-key="${bystander}"]`)).not.toHaveClass(/\blinked\b/);
   await expect(page.locator(`.poster[data-key="${witness}"]`)).toHaveClass(/\blinked\b/);
 
   // Pluck the Suspect-Witness string: it follows the pointer, then springs home.
   const core = board.string(suspect, witness).locator('.yarn__core');
+  // The yarn stays held (undrawn, its path frozen or empty) until the posters
+  // have landed, then draws in slack and springs taut. Wait in-page until it has
+  // been released and its path has stopped changing for a run of frames; a
+  // frozen path while still held is not the rest shape.
+  await core.evaluate(
+    (path) =>
+      new Promise<void>((resolve, reject) => {
+        const yarnLayer = (path as SVGPathElement).ownerSVGElement as SVGSVGElement;
+        const deadline = performance.now() + 8000;
+        let last: string | null = null;
+        let stableFrames = 0;
+        const tick = () => {
+          const d = path.getAttribute('d');
+          const released = !yarnLayer.classList.contains('held') && !!d;
+          stableFrames = released && d === last ? stableFrames + 1 : 0;
+          last = d;
+          if (stableFrames >= 15) return resolve();
+          if (performance.now() > deadline) return reject(new Error('Red string never settled'));
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+  );
   const restPath = await core.getAttribute('d');
+  // The yarn runs behind the posters: grab it where it crosses open cork.
   const grip = await board.string(suspect, witness).locator('.yarn__hit').evaluate((path) => {
     const hit = path as SVGPathElement;
-    const point = hit.getPointAtLength(hit.getTotalLength() / 2);
     const box = (hit.ownerSVGElement as SVGSVGElement).getBoundingClientRect();
-    return { x: box.left + point.x, y: box.top + point.y };
+    const length = hit.getTotalLength();
+    for (let step = 1; step < 40; step++) {
+      const t = 0.5 + (step % 2 ? 1 : -1) * Math.floor(step / 2) * 0.025;
+      const point = hit.getPointAtLength(length * t);
+      const x = box.left + point.x;
+      const y = box.top + point.y;
+      if (document.elementFromPoint(x, y) === hit) return { x, y };
+    }
+    throw new Error('No exposed stretch of yarn to grab');
   });
   await page.mouse.move(grip.x, grip.y);
   await page.mouse.down();
@@ -253,4 +287,122 @@ test('red string overlay ties connected posters together and springs back when p
   await board.stringToggle.click();
   await expect(board.stringToggle).toHaveAttribute('aria-pressed', 'false');
   await expect(board.strings).toHaveCount(0);
+});
+
+test('red string waits for posters to land, keeps decorations clear, and spotlights on hover', async ({
+  ensureDedicatedGroup,
+  page,
+}) => {
+  const groupId = await ensureDedicatedGroup();
+  const runToken = Date.now();
+  const entryForm = new EntryFormPage(page);
+  const board = new PosterBoardPage(page);
+  const titles = ['Hub', 'Spoke', 'Rim', 'Loner'].map((name) => `${name} ${runToken}`);
+  const ids: number[] = [];
+  for (const [index, title] of titles.entries()) {
+    await entryForm.gotoNew();
+    await entryForm.selectTimelineGroup(groupId);
+    await entryForm.fillDate('2026', '6', String(index + 2));
+    await entryForm.fillTitle(title);
+    await entryForm.fillEventSummary(`${title} summary for the spotlight board.`);
+    await entryForm.save();
+    await expect(page).toHaveURL(/\/entries\/\d+\/view$/);
+    ids.push(entryIdFromUrl(page.url()));
+  }
+  const [hub, spoke, rim, loner] = ids;
+  const links: Record<number, number[]> = { [hub]: [spoke, rim], [spoke]: [hub], [rim]: [hub] };
+
+  const boardPath = `/timeline/board?group_id=${groupId}`;
+  const response = await page.request.get(boardPath);
+  expect(response.ok()).toBeTruthy();
+  const html = (await response.text()).replace(
+    /(<script id="board-data" type="application\/json">)([\s\S]*?)(<\/script>)/,
+    (_match, start: string, json: string, end: string) => {
+      const payload: { items: { id: number; connections: object[] }[] } = JSON.parse(json);
+      for (const item of payload.items) {
+        item.connections = (links[item.id] ?? []).map((id) => ({
+          id, title: `entry ${id}`, date: 'Jun 2026', note: 'linked',
+        }));
+      }
+      return start + JSON.stringify(payload).replace(/</g, '\u003c') + end;
+    },
+  );
+  // Strings already switched on, and a probe that timestamps the first frame
+  // with every poster at full size versus the first frame with visible yarn.
+  await page.addInitScript(() => {
+    localStorage.setItem('eventtracker.posterBoard.strings', '1');
+    const probe: { landed?: number; strung?: number } = {};
+    (window as unknown as { __probe: typeof probe }).__probe = probe;
+    const tick = () => {
+      const now = performance.now();
+      const papers = [...document.querySelectorAll('.poster .paper')];
+      if (probe.landed === undefined && papers.length && papers.every((paper) => {
+        const m = new DOMMatrix(getComputedStyle(paper).transform);
+        return Math.hypot(m.a, m.b) > 0.999;
+      })) probe.landed = now;
+      const yarn = document.querySelector('svg.strings--yarn');
+      const core = yarn?.querySelector('.yarn__core');
+      if (probe.strung === undefined && yarn && core &&
+          getComputedStyle(yarn).visibility === 'visible' &&
+          parseFloat(getComputedStyle(core).strokeDashoffset || '0') < 0.99) probe.strung = now;
+      if (now < 6000) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  await page.route(`**${boardPath}`, (route) => route.fulfill({ body: html, contentType: 'text/html' }));
+  await page.setViewportSize({ width: 1280, height: 860 });
+  await page.goto(boardPath);
+
+  await expect(board.stringToggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(board.strings).toHaveCount(2);
+  type Probe = { landed?: number; strung?: number };
+  const readProbe = () => page.evaluate(() => (window as unknown as { __probe: Probe }).__probe);
+  await expect.poll(async () => {
+    const p = await readProbe();
+    return p.landed !== undefined && p.strung !== undefined;
+  }, { timeout: 6000 }).toBe(true);
+  const probe = (await readProbe()) as Required<Probe>;
+  expect(probe.strung).toBeGreaterThanOrEqual(probe.landed);
+
+  // Decorations only ever sit on open cork.
+  const overlaps = await page.evaluate(() => {
+    const papers = [...document.querySelectorAll('.poster.in .paper')].map((el) => el.getBoundingClientRect());
+    const stickers = [...document.querySelectorAll('.sticker > *')].map((el) => el.getBoundingClientRect());
+    let hits = 0;
+    for (const s of stickers) for (const c of papers) {
+      if (s.left < c.right && s.right > c.left && s.top < c.bottom && s.bottom > c.top) hits++;
+    }
+    return { hits, stickers: stickers.length };
+  });
+  expect(overlaps.hits).toBe(0);
+
+  const paper = (id: number) => page.locator(`.poster[data-key="${id}"] .paper`);
+  // A faded poster steps back with a filter but stays fully opaque, so the
+  // yarn running behind it never shows through its text.
+  const look = (id: number) => paper(id).evaluate((el) => {
+    const style = getComputedStyle(el);
+    return { opacity: Number(style.opacity), faded: style.filter !== 'none' };
+  });
+
+  // Hovering the hub lights its strings and fades the poster it has no tie to.
+  await paper(hub).hover();
+  await expect(board.string(hub, spoke)).toHaveClass(/\bhot\b/);
+  await expect(board.string(hub, rim)).toHaveClass(/\bhot\b/);
+  await expect.poll(() => look(loner)).toEqual({ opacity: 1, faded: true });
+  expect(await look(spoke)).toEqual({ opacity: 1, faded: false });
+  expect(await look(hub)).toEqual({ opacity: 1, faded: false });
+
+  // Hovering a spoke: the rim is unrelated to it, so it fades too.
+  await paper(spoke).hover();
+  await expect(board.string(hub, rim)).not.toHaveClass(/\bhot\b/);
+  await expect.poll(() => look(rim)).toEqual({ opacity: 1, faded: true });
+
+  await page.mouse.move(2, 2);
+  await expect.poll(() => look(rim)).toEqual({ opacity: 1, faded: false });
+  await expect(page.locator('body')).not.toHaveClass(/\bboard-focus\b/);
+
+  // Keyboard focus spotlights exactly like hover.
+  await paper(rim).focus();
+  await expect(board.string(hub, rim)).toHaveClass(/\bhot\b/);
+  await expect.poll(() => look(spoke)).toEqual({ opacity: 1, faded: true });
 });

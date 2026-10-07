@@ -28,7 +28,8 @@ uv run pytest tests/                       # All unit/integration tests
 uv run pytest tests/test_smoke.py          # Smoke tests
 uv run pytest tests/test_entries.py        # Single test file
 uv run pytest tests/test_entries.py -k "test_name"  # Single test
-uv run pytest tests/e2e                    # Python Playwright E2E suite
+uv run pytest tests/e2e -n 4               # Python Playwright E2E suite (parallel; each test has its own server + DB)
+                                           # Screenshots land in test-results/e2e-screenshots/ (gitignored)
 ```
 
 ### TypeScript Playwright E2E tests

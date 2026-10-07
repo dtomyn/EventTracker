@@ -27,6 +27,7 @@ dev = [
     "playwright>=1.52,<2",
     "pyright>=1.1.404,<2",
     "pytest>=9.0.3,<10",
+    "pytest-xdist>=3.6,<4",
 ]
 
 [tool.uv]
@@ -67,6 +68,7 @@ include = [
     "app/services/story_deck.py",
     "app/services/openai_client.py",
     "app/services/story_mode.py",
+    "app/services/story_presentation.py",
     "app/services/suggested_connections.py",
     "app/services/topics.py",
     "scripts/accept_suggested_connections.py",
@@ -100,6 +102,7 @@ include = [
     "tests/test_smoke.py",
     "tests/test_story_deck.py",
     "tests/test_story_mode.py",
+    "tests/test_story_presentation.py",
     "tests/test_story_routes.py",
     "tests/test_topics.py",
     "tests/e2e/conftest.py",

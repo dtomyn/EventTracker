@@ -3,12 +3,12 @@
 {% block content %}
     <div class="row justify-content-center">
         <div class="col-xl-9">
-            <div class="d-flex justify-content-between align-items-center mb-4">
+            <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mb-4">
                 <div>
                     <h1 class="h3 mb-1">{{ page_title }}</h1>
                     <p class="text-body-secondary mb-0">Entries are stored locally in SQLite. Event summaries support basic HTML formatting.</p>
                 </div>
-                <a class="btn btn-link" href="/">Back to timeline</a>
+                <a class="btn btn-outline-secondary text-nowrap align-self-start align-self-sm-center" href="/">Back to timeline</a>
             </div>
 
             <form method="post" action="{% if entry_id %}/entries/{{ entry_id }}{% else %}/entries/new{% endif %}" class="card shadow-sm border-0">

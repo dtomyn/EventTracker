@@ -22,37 +22,71 @@
   var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   /* poster footprint in grid cells, by impact tier. This is the ONLY
-     thing that encodes importance — placement is deliberately random. */
+     thing that encodes importance - placement is deliberately random. */
   var FOOT = {1:{w:3,h:3}, 2:{w:2,h:2}, 3:{w:2,h:1}, 4:{w:1,h:1}};
+  /* matches the .paper transform transition in board.css */
+  var PAPER_IN_MS = 420;
 
   /* ---------- sticker pack ----------
      Board furniture for the cells no poster claimed. Swap this array to change
      the board's personality. Three kinds of sticker:
-       {emoji:0x1F440}             a system emoji by codepoint - zero bytes, offline
+       {object:"name"}             a drawn desk object (see OBJECTS below)
        {stamp:"TEXT", tint:"#hex"} a rubber-stamped phrase
        {note:"text"}               a scribbled sticky note
      Nothing here is clickable, none of it is announced to screen readers, and
-     it all disappears in the narrow-screen fallback. */
+     it all disappears in the narrow-screen fallback. A sticker that cannot be
+     placed clear of every poster is simply left off. */
   var STICKERS = [
-    {emoji:0x1F440},                              /* eyes */
+    {object:"magnifier"},
     {stamp:"KEY MOMENT", tint:"#C4342B"},
     {note:"remember this?"},
-    {emoji:0x1F4CC},                              /* pushpin */
+    {object:"tacks"},
     {stamp:"CITATION NEEDED", tint:"#2F5FA8"},
-    {emoji:0x1F5D3},                              /* spiral calendar */
+    {object:"clip"},
     {note:"connect the dots"},
-    {emoji:0x1F4C8},                              /* chart increasing */
+    {object:"ring"},
     {stamp:"WORTH A LOOK", tint:"#6B3FA0"},
-    {emoji:0x1F9ED},                              /* compass */
     {note:"what changed?"},
-    {emoji:0x26A1},                               /* high voltage */
     {stamp:"FOLLOW UP", tint:"#8A5A0B"},
-    {emoji:0x1F9E0},                              /* brain */
     {note:"bigger than it looks"},
-    {emoji:0x1F50D},                              /* magnifying glass */
-    {stamp:"ON THE RECORD", tint:"#4F7211"},
-    {emoji:0x1F4DA}                               /* books */
+    {stamp:"ON THE RECORD", tint:"#4F7211"}
   ];
+
+  /* Desk objects drawn in SVG so they share the cork-and-paper palette and
+     render identically everywhere (system emoji do not). Each is a viewBox
+     plus a list of [element, attributes]; all values are static. */
+  var OBJECTS = {
+    magnifier: ["0 0 100 100", [
+      ["line", {x1:62, y1:62, x2:90, y2:90, stroke:"#3B2A17", "stroke-width":11, "stroke-linecap":"round"}],
+      ["line", {x1:62, y1:62, x2:70, y2:70, stroke:"#9A8A6E", "stroke-width":12, "stroke-linecap":"butt"}],
+      ["circle", {cx:40, cy:40, r:28, fill:"rgba(214,236,240,.45)", stroke:"#6E5B40", "stroke-width":6}],
+      ["path", {d:"M24 34a18 18 0 0 1 14-13", fill:"none", stroke:"rgba(255,255,255,.85)", "stroke-width":4, "stroke-linecap":"round"}]
+    ]],
+    clip: ["0 0 60 120", [
+      ["path", {d:"M22 30V88a10 10 0 0 0 20 0V22a16 16 0 0 0-32 0v72a22 22 0 0 0 44 0V36",
+                fill:"none", stroke:"#8E949B", "stroke-width":5, "stroke-linecap":"round"}],
+      ["path", {d:"M22 30V88a10 10 0 0 0 20 0V22a16 16 0 0 0-32 0v72a22 22 0 0 0 44 0V36",
+                fill:"none", stroke:"rgba(255,255,255,.55)", "stroke-width":1.4, "stroke-linecap":"round",
+                transform:"translate(-1 -1)"}]
+    ]],
+    ring: ["0 0 100 100", [
+      ["circle", {cx:50, cy:50, r:36, fill:"none", stroke:"rgba(96,58,22,.20)", "stroke-width":7}],
+      ["circle", {cx:50, cy:50, r:36, fill:"none", stroke:"rgba(96,58,22,.24)", "stroke-width":2.5,
+                  "stroke-dasharray":"60 12 90 20", transform:"rotate(-30 50 50)"}],
+      ["circle", {cx:53, cy:47, r:31, fill:"none", stroke:"rgba(96,58,22,.10)", "stroke-width":3}]
+    ]],
+    tacks: ["0 0 100 70", [
+      ["ellipse", {cx:24, cy:44, rx:12, ry:10, fill:"rgba(58,22,8,.28)"}],
+      ["circle", {cx:21, cy:40, r:11, fill:"#2F6FD0", stroke:"rgba(10,30,70,.5)", "stroke-width":1}],
+      ["circle", {cx:17, cy:36, r:3, fill:"rgba(255,255,255,.8)"}],
+      ["ellipse", {cx:56, cy:30, rx:12, ry:10, fill:"rgba(58,22,8,.28)"}],
+      ["circle", {cx:53, cy:26, r:11, fill:"#D23A2E", stroke:"rgba(70,8,6,.5)", "stroke-width":1}],
+      ["circle", {cx:49, cy:22, r:3, fill:"rgba(255,255,255,.8)"}],
+      ["ellipse", {cx:82, cy:54, rx:12, ry:10, fill:"rgba(58,22,8,.28)"}],
+      ["circle", {cx:79, cy:50, r:11, fill:"#E8B21C", stroke:"rgba(90,60,6,.5)", "stroke-width":1}],
+      ["circle", {cx:75, cy:46, r:3, fill:"rgba(255,255,255,.8)"}]
+    ]]
+  };
 
   var state = {cat:"All", q:""};
   var shown = [];              // items on the board right now (pack order)
@@ -72,6 +106,12 @@
       var p = new URL(u);
       return p.protocol === "http:" || p.protocol === "https:" ? p.href : "";
     } catch(e){ return ""; }
+  }
+  function node(tag, cls, text){
+    var el = document.createElement(tag);
+    if(cls) el.className = cls;
+    if(text != null) el.textContent = String(text);
+    return el;
   }
   function pad2(n){ return (n < 10 ? "0" : "") + n; }
   function clamp(v, lo, hi){ return v < lo ? lo : (v > hi ? hi : v); }
@@ -106,7 +146,7 @@
   var multiYear = Object.keys(years).length > 1;
   function shortDate(it){
     var p = splitKey(it.sort_key || 0), y = p[0], m = p[1], d = p[2];
-    if(m < 1 || m > 12) return esc(it.date);
+    if(m < 1 || m > 12) return String(it.date || "");
     var out = MONTHS[m - 1] + (d ? " " + d : "");
     return multiYear || !d ? out + " " + y : out;
   }
@@ -221,18 +261,27 @@
     el.dataset.key = it.id;
     var srcs = it.sources || [];
     var s0 = srcs[0];
-    el.innerHTML =
-      '<span class="tape l"></span><span class="tape r"></span>' +
-      '<article class="paper" style="--rot:' + tilt(it) + 'deg" tabindex="0" role="button"' +
-        ' aria-label="Open story: ' + esc(it.headline) + '">' +
-        '<span class="pin"></span>' +
-        '<div class="row"><span class="cat">' + esc(it.category) + '</span>' +
-          (isNew(it) ? '<span class="flag">New</span>' : '') + '</div>' +
-        '<h3 class="headline">' + esc(it.headline) + '</h3>' +
-        '<p class="dek">' + esc(it.dek) + '</p>' +
-        '<div class="foot"><span>' + shortDate(it) + '</span>' +
-          '<span class="src">' + esc(s0 ? s0.name : it.group) + '</span></div>' +
-      '</article>';
+    /* built with DOM APIs: every string here is user data */
+    var paper = node("article", "paper");
+    paper.style.setProperty("--rot", tilt(it) + "deg");
+    paper.tabIndex = 0;
+    paper.setAttribute("role", "button");
+    paper.setAttribute("aria-label", "Open story: " + (it.headline || ""));
+    /* the tape rides on the paper so it tilts with the sheet it holds */
+    paper.appendChild(node("span", "tape l"));
+    paper.appendChild(node("span", "tape r"));
+    paper.appendChild(node("span", "pin"));
+    var row = node("div", "row");
+    row.appendChild(node("span", "cat", it.category));
+    if(isNew(it)) row.appendChild(node("span", "flag", "New"));
+    paper.appendChild(row);
+    paper.appendChild(node("h3", "headline", it.headline));
+    paper.appendChild(node("p", "dek", it.dek));
+    var foot = node("div", "foot");
+    foot.appendChild(node("span", "", shortDate(it)));
+    foot.appendChild(node("span", "src", s0 ? s0.name : it.group));
+    paper.appendChild(foot);
+    el.appendChild(paper);
     el.parts = {
       paper: el.querySelector(".paper"),
       headline: el.querySelector(".headline"),
@@ -248,8 +297,8 @@
   var FITVARS = ["--pad","--fs","--lh","--dfs","--tagfs","--footfs","--tagls","--hlgap","--pinpad","--hl","--dl"];
 
   /* An off-screen ruler measures how many lines a headline really wraps to.
-     Guessing from character counts is unreliable — one long word ("PARLIAMENT'S")
-     can blow out a line — and the posters themselves cannot be measured while
+     Guessing from character counts is unreliable - one long word ("PARLIAMENT'S")
+     can blow out a line - and the posters themselves cannot be measured while
      their width is mid-transition. */
   var css = getComputedStyle(document.documentElement);
   var FACE_DISPLAY = css.getPropertyValue("--display").trim();
@@ -366,41 +415,74 @@
     var h = Math.sin((i + 3) * 78.233) * 43758.5453;
     el.style.setProperty("--rot", ((((h - Math.floor(h)) * 2) - 1) * 7).toFixed(2) + "deg");
     el.style.setProperty("--delay", ((i % 6) * 0.7).toFixed(1) + "s");
-    if(spec.emoji){
-      el.innerHTML = '<span class="s-emoji">' + String.fromCodePoint(spec.emoji) + '</span>';
+    if(spec.object && OBJECTS[spec.object]){
+      var def = OBJECTS[spec.object];
+      var svg = document.createElementNS(SVGNS, "svg");
+      svg.setAttribute("class", "s-object s-object--" + spec.object);
+      svg.setAttribute("viewBox", def[0]);
+      svg.setAttribute("focusable", "false");
+      def[1].forEach(function(part){ svg.appendChild(svgEl(part[0], part[1])); });
+      el.appendChild(svg);
     } else if(spec.stamp){
-      el.innerHTML = '<span class="s-stamp" style="--tint:' + esc(spec.tint || "#C4342B") +
-        '">' + esc(spec.stamp) + '</span>';
+      var stamp = node("span", "s-stamp", spec.stamp);
+      stamp.style.setProperty("--tint", spec.tint || "#C4342B");
+      el.appendChild(stamp);
     } else if(spec.note){
-      el.innerHTML = '<span class="s-note">' + esc(spec.note) + '</span>';
+      el.appendChild(node("span", "s-note", spec.note));
     }
     return el;
   }
 
   /* Rotate through the KINDS of sticker rather than striding the flat array:
      with only a handful of gaps a stride can skip an entire kind. */
-  var STICKER_KINDS = ["emoji", "stamp", "note"].map(function(k){
+  var STICKER_KINDS = ["object", "stamp", "note"].map(function(k){
     return STICKERS.filter(function(s){ return s[k] !== undefined; });
   }).filter(function(g){ return g.length; });
 
-  function dressGaps(free, cw, ch, gap){
+  function overlaps(a, b){
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  }
+
+  /* `cards` are the posters' target rectangles in board coordinates. Each
+     sticker is inset into its free block and checked against every card
+     (padded for tilt, tape and hover lift); one that would touch a poster,
+     or is too cramped to read, is dropped rather than squeezed in. */
+  function dressGaps(free, cw, ch, gap, cards, delay){
     Array.prototype.forEach.call(board.querySelectorAll(".sticker"), function(s){
       s.parentNode.removeChild(s);
     });
     if(!STICKER_KINDS.length) return;
     var kinds = STICKER_KINDS;
     var frag = document.createDocumentFragment();
-    free.forEach(function(f, i){
+    var inset = clamp(gap * 1.2, 10, 20);
+    var guard = clamp(gap, 8, 16);
+    var placed = 0, usedObj = {};
+    free.forEach(function(f){
+      var w = f.w * cw + (f.w - 1) * gap - inset * 2;
+      var hh = f.h * ch + (f.h - 1) * gap - inset * 2;
+      if(w < 72 || hh < 56) return;
+      var box = {x:f.x * (cw + gap) + inset, y:f.y * (ch + gap) + inset, w:w, h:hh};
+      var clash = cards.some(function(c){
+        return overlaps(box, {x:c.x - guard, y:c.y - guard, w:c.w + guard * 2, h:c.h + guard * 2});
+      });
+      if(clash) return;
+      var i = placed++;
       var group = kinds[i % kinds.length];
       var spec = group[Math.floor(i / kinds.length) % group.length];
+      /* words need room to stay legible; a cramped slot gets a desk object */
+      if((spec.note && w < 116) || (spec.stamp && w < 100)){
+        spec = STICKERS.find(function(s){ return s.object && !usedObj[s.object]; });
+        if(!spec){ placed--; return; }
+      }
+      if(spec.object){
+        if(usedObj[spec.object]){ placed--; return; }
+        usedObj[spec.object] = 1;
+      }
       var el = buildSticker(spec, i);
-      var w = f.w * cw + (f.w - 1) * gap;
-      var hh = f.h * ch + (f.h - 1) * gap;
       el.style.width = w + "px";
       el.style.height = hh + "px";
-      el.style.transform = "translate3d(" + (f.x * (cw + gap)) + "px," +
-        (f.y * (ch + gap)) + "px,0)";
-      el.style.setProperty("--efs", (Math.min(w, hh) * 0.58).toFixed(0) + "px");
+      el.style.transform = "translate3d(" + box.x + "px," + box.y + "px,0)";
+      el.style.setProperty("--efs", (Math.min(w, hh) * 0.72).toFixed(0) + "px");
       /* a long unbreakable word ("UNCONFIRMED") has to shrink to fit its cell,
          so size the stamp off its longest word rather than the whole phrase */
       var longest = spec.stamp
@@ -409,9 +491,18 @@
       el.style.setProperty("--tfs",
         clamp(Math.min(w * 0.13, (w * 0.80) / (longest * 0.72)), 9, 28).toFixed(1) + "px");
       el.style.setProperty("--nfs", clamp(w * 0.105, 10, 21).toFixed(1) + "px");
+      if(delay != null) el.classList.add("late");
       frag.appendChild(el);
     });
     board.appendChild(frag);
+    /* furniture settles in after the posters have landed, never before */
+    if(delay != null){
+      setTimeout(function(){
+        Array.prototype.forEach.call(board.querySelectorAll(".sticker.late"), function(s){
+          s.classList.remove("late");
+        });
+      }, delay);
+    }
   }
 
   /* ---------- filtering ---------- */
@@ -433,7 +524,7 @@
     shown = list;
     emptyMsg.hidden = list.length > 0;
 
-    /* too cramped to pack a wall — fall back to a scrolling column */
+    /* too cramped to pack a wall - fall back to a scrolling column */
     var wantFlow = window.innerWidth < 620 || window.innerHeight < 460;
     if(wantFlow !== flowing){
       flowing = wantFlow;
@@ -459,17 +550,21 @@
       var cw = (boxW - (plan.cols - 1) * gap) / plan.cols;
       var ch = (boxH - (plan.rows - 1) * gap) / plan.rows;
 
-      dressGaps(plan.free || [], cw, ch, gap);
+      var rects = plan.cells.map(function(c){
+        return {x:c.x * (cw + gap), y:c.y * (ch + gap),
+                w:c.w * cw + (c.w - 1) * gap, h:c.h * ch + (c.h - 1) * gap};
+      });
+      dressGaps(plan.free || [], cw, ch, gap, rects,
+                first && !reduced ? Math.min(plan.cells.length, 27) * 24 + PAPER_IN_MS - 120 : null);
 
+      var landing = 0;
       plan.cells.forEach(function(c, i){
         var it = c.it;
         var el = nodes[it.id] || (nodes[it.id] = build(it));
         seen[it.id] = 1;
-        var w = c.w * cw + (c.w - 1) * gap;
-        var h = c.h * ch + (c.h - 1) * gap;
-        var x = c.x * (cw + gap);
-        var y = c.y * (ch + gap);
+        var w = rects[i].w, h = rects[i].h, x = rects[i].x, y = rects[i].y;
         var fresh = !el.parentNode;
+        if(fresh && !reduced) landing = Math.max(landing, (first ? Math.min(i, 26) * 24 : 0) + PAPER_IN_MS);
         el.style.width = w + "px";
         el.style.height = h + "px";
         el.style.transform = "translate3d(" + x + "px," + y + "px,0)";
@@ -489,6 +584,8 @@
           el.classList.add("in");
         }
       });
+      /* yarn is strung only once the paper it ties together has landed */
+      if(landing) str.holdUntil = Math.max(str.holdUntil, performance.now() + landing + 60);
     }
 
     /* retire posters that fell out of the filter */
@@ -517,20 +614,35 @@
   var STRING_PREF = "eventtracker.posterBoard.strings";
   var stringToggle = document.getElementById("strings");
   var stringCount = document.getElementById("string-count");
-  var str = {on:false, edges:[], paths:{}, tacks:{}, until:0, raf:0, fresh:false,
-             pluck:{}, grab:null, springRaf:0};
-  var strSvg = document.createElementNS(SVGNS, "svg");
-  strSvg.setAttribute("class", "strings");
-  strSvg.setAttribute("aria-hidden", "true");
-  strSvg.setAttribute("focusable", "false");
-  strSvg.innerHTML =
-    '<defs><radialGradient id="tack-head" cx="35%" cy="30%" r="75%">' +
-      '<stop offset="0" stop-color="#FFB3A8"/><stop offset=".28" stop-color="#E0362B"/>' +
-      '<stop offset=".8" stop-color="#8E1410"/><stop offset="1" stop-color="#5E0C09"/>' +
-    '</radialGradient></defs><g class="yarns"></g><g class="tacks"></g>';
-  var strYarns = strSvg.querySelector(".yarns");
-  var strTacks = strSvg.querySelector(".tacks");
-  board.appendChild(strSvg);
+  /* queue: yarns waiting to be strung; holdUntil: the moment the posters land;
+     aim: where a string's control point is pulled to while its poster is hot */
+  var str = {on:false, edges:[], paths:{}, tacks:{}, until:0, raf:0,
+             pluck:{}, aim:{}, grab:null, springRaf:0,
+             queue:[], held:false, holdUntil:0, holdTimer:0, tackDelay:{}, hot:null};
+  var STAGGER_MS = 90, STAGGER_MAX_MS = 1100;
+
+  function svgEl(name, attrs){
+    var el = document.createElementNS(SVGNS, name);
+    Object.keys(attrs).forEach(function(k){ el.setAttribute(k, attrs[k]); });
+    return el;
+  }
+  function layer(cls){
+    var s = svgEl("svg", {"class": "strings " + cls, "aria-hidden": "true", focusable: "false"});
+    board.appendChild(s);
+    return s;
+  }
+  /* Two layers: the yarn runs BEHIND the posters, so it never crosses a
+     headline, and only shows on the cork between them; the tacks sit ABOVE,
+     pinned through each poster's edge where the yarn ducks underneath. */
+  var strSvg = layer("strings--yarn");
+  var strYarns = strSvg.appendChild(svgEl("g", {"class": "yarns"}));
+  var tackSvg = layer("strings--tacks");
+  var grad = svgEl("radialGradient", {id: "tack-head", cx: "35%", cy: "30%", r: "75%"});
+  [["0", "#FFB3A8"], [".28", "#E0362B"], [".8", "#8E1410"], ["1", "#5E0C09"]].forEach(function(s){
+    grad.appendChild(svgEl("stop", {offset: s[0], "stop-color": s[1]}));
+  });
+  tackSvg.appendChild(svgEl("defs", {})).appendChild(grad);
+  var strTacks = tackSvg.appendChild(svgEl("g", {"class": "tacks"}));
 
   /* connections with both ends among the posters currently shown, one per pair */
   function boardEdges(){
@@ -554,27 +666,59 @@
     });
   });
 
-  /* where the tack goes on a poster: through the top margin, right of centre
-     so it clears the left-aligned category tag and the corner pin, nudged by a
-     stable per-entry amount so a row of posters does not line up like rivets */
-  function tackPoint(id, br){
+  /* ---------- where a string is pinned ----------
+     Each end is tacked to the edge of its poster that faces the other poster,
+     so the yarn leaves straight onto the cork instead of across the paper.
+     One tack per used edge, shared by every string leaving through it, nudged
+     by a stable per-entry amount so a row of posters does not line up like
+     rivets. Positions come from the unrotated poster box. */
+  function cardBox(id, br){
     var el = nodes[id];
     if(!el || !el.parentNode) return null;
     var r = el.getBoundingClientRect();
-    var h = Math.sin(id * 91.345) * 43758.5453;
-    var j = h - Math.floor(h);
-    return {
-      x: r.left - br.left + r.width * (0.52 + j * 0.16),
-      y: r.top - br.top + 7
-    };
+    return {x:r.left - br.left, y:r.top - br.top, w:r.width, h:r.height};
+  }
+  function jitter(id, salt){
+    var h = Math.sin(id * 91.345 + salt * 12.7) * 43758.5453;
+    return h - Math.floor(h);
+  }
+  function sideFacing(a, b){
+    var dx = (b.x + b.w / 2) - (a.x + a.w / 2);
+    var dy = (b.y + b.h / 2) - (a.y + a.h / 2);
+    if(Math.abs(dx) * a.h > Math.abs(dy) * a.w) return dx > 0 ? "r" : "l";
+    return dy > 0 ? "b" : "t";
+  }
+  /* top and bottom tacks bite into the margin; side tacks sit on the edge
+     itself, half on the cork, so they never touch the type */
+  var TACK_INSET = 3;
+  function anchorAt(id, side, b){
+    /* top tacks stay right of centre, clear of the category tag; side tacks
+       stay in the upper half, clear of the footer */
+    if(side === "t") return {x:b.x + b.w * (0.54 + jitter(id, 1) * 0.14), y:b.y + TACK_INSET};
+    if(side === "b") return {x:b.x + b.w * (0.32 + jitter(id, 2) * 0.14), y:b.y + b.h - TACK_INSET};
+    if(side === "l") return {x:b.x, y:b.y + b.h * (0.30 + jitter(id, 3) * 0.14)};
+    return {x:b.x + b.w, y:b.y + b.h * (0.30 + jitter(id, 4) * 0.14)};
+  }
+  function edgeEnds(e, box){
+    var A = box(e.a), B = box(e.b);
+    if(!A || !B) return null;
+    var sa = sideFacing(A, B), sb = sideFacing(B, A);
+    return {p:anchorAt(e.a, sa, A), q:anchorAt(e.b, sb, B), sa:sa, sb:sb};
+  }
+  function boxCache(){
+    var br = board.getBoundingClientRect(), memo = {};
+    var box = function(id){ return id in memo ? memo[id] : (memo[id] = cardBox(id, br)); };
+    box.br = br;
+    return box;
   }
 
-  /* the quadratic control point a string hangs from when nobody touches it */
+  /* the quadratic control point a string hangs from when nobody touches it:
+     a gentle catenary-like droop, deeper on long runs, barely any when the
+     run is close to vertical */
   function restControl(p, q){
     var dx = q.x - p.x, dy = q.y - p.y;
     var len = Math.sqrt(dx * dx + dy * dy);
-    /* longer runs droop more; near-vertical runs barely droop at all */
-    var sag = Math.min(len * 0.14, 80) * (0.3 + 0.7 * Math.abs(dx) / Math.max(len, 1));
+    var sag = Math.min(len * 0.16, 90) * (0.3 + 0.7 * Math.abs(dx) / Math.max(len, 1));
     return {x:(p.x + q.x) / 2, y:(p.y + q.y) / 2 + sag};
   }
 
@@ -585,71 +729,70 @@
       " Q" + cx.toFixed(1) + " " + cy.toFixed(1) + " " + q.x.toFixed(1) + " " + q.y.toFixed(1);
   }
 
-  function svgEl(name, attrs){
-    var el = document.createElementNS(SVGNS, name);
-    Object.keys(attrs).forEach(function(k){ el.setAttribute(k, attrs[k]); });
-    return el;
-  }
-
-  /* rebuild the set of strings and tacks; positions are filled in by drawStrings */
+  /* add and retire yarn nodes; new ones wait in the queue to be strung */
   function syncStringNodes(){
-    var wantPaths = {}, wantTacks = {};
-    str.edges.forEach(function(e){
-      wantPaths[e.key] = e;
-      wantTacks[e.a] = 1;
-      wantTacks[e.b] = 1;
-    });
+    var want = {};
+    str.edges.forEach(function(e){ want[e.key] = e; });
     Object.keys(str.paths).forEach(function(k){
-      if(wantPaths[k]) return;
+      if(want[k]) return;
       strYarns.removeChild(str.paths[k]);
       delete str.paths[k];
       delete str.pluck[k];
+      delete str.aim[k];
     });
-    Object.keys(str.tacks).forEach(function(k){
-      if(wantTacks[k]) return;
-      strTacks.removeChild(str.tacks[k]);
-      delete str.tacks[k];
-    });
+    str.queue = str.queue.filter(function(k){ return want[k]; });
     str.edges.forEach(function(e){
       if(str.paths[e.key]) return;
-      var g = svgEl("g", {"class": "yarn" + (str.fresh && !reduced ? " draw" : ""),
-                          "data-a": e.a, "data-b": e.b});
+      var g = svgEl("g", {"class": "yarn", "data-a": e.a, "data-b": e.b});
       g.appendChild(svgEl("path", {"class": "yarn__core", pathLength: "1"}));
       g.appendChild(svgEl("path", {"class": "yarn__twist"}));
       /* a wider invisible stroke so the yarn is easy to grab */
       g.appendChild(svgEl("path", {"class": "yarn__hit", "data-key": e.key}));
       strYarns.appendChild(g);
       str.paths[e.key] = g;
+      if(!reduced) str.queue.push(e.key);
     });
-    Object.keys(wantTacks).forEach(function(id){
-      if(str.tacks[id]) return;
-      /* the outer group carries the position, the inner one the pop-in scale */
-      var g = svgEl("g", {"class": "tack", "data-id": id});
-      var pin = svgEl("g", {"class": "tack__pin"});
-      pin.appendChild(svgEl("ellipse", {"class": "tack__shadow", cx: "2.2", cy: "3.4", rx: "6.4", ry: "5.2"}));
-      pin.appendChild(svgEl("circle", {"class": "tack__head", r: "6.5"}));
-      pin.appendChild(svgEl("circle", {"class": "tack__shine", cx: "-2", cy: "-2.3", r: "1.7"}));
-      g.appendChild(pin);
-      strTacks.appendChild(g);
-      str.tacks[id] = g;
-    });
-    str.fresh = false;
+  }
+
+  function makeTack(id, side, delay){
+    /* the outer group carries the position, the inner one the pop-in scale */
+    var g = svgEl("g", {"class": "tack", "data-id": id, "data-side": side});
+    var pin = svgEl("g", {"class": "tack__pin"});
+    if(delay) pin.style.animationDelay = delay + "ms";
+    pin.appendChild(svgEl("ellipse", {"class": "tack__shadow", cx: "2.2", cy: "3.4", rx: "6.4", ry: "5.2"}));
+    pin.appendChild(svgEl("circle", {"class": "tack__head", r: "6.5"}));
+    pin.appendChild(svgEl("circle", {"class": "tack__shine", cx: "-2", cy: "-2.3", r: "1.7"}));
+    g.appendChild(pin);
+    if(str.hot != null && String(id) === str.hot) g.classList.add("hot");
+    strTacks.appendChild(g);
+    return g;
   }
 
   function drawStrings(){
-    var br = board.getBoundingClientRect();
-    var pts = {};
-    function at(id){ return pts[id] || (pts[id] = tackPoint(id, br)); }
+    if(str.held) return;
+    var box = boxCache();
+    var want = {};
     str.edges.forEach(function(e){
       var g = str.paths[e.key];
-      var p = at(e.a), q = at(e.b);
-      if(!g || !p || !q) return;
-      var d = sagPath(p, q, str.pluck[e.key]);
-      Array.prototype.forEach.call(g.children, function(path){ path.setAttribute("d", d); });
+      var ends = g && edgeEnds(e, box);
+      if(!ends) return;
+      var d = sagPath(ends.p, ends.q, str.pluck[e.key]);
+      for(var i = 0; i < g.children.length; i++) g.children[i].setAttribute("d", d);
+      var delay = str.tackDelay[e.key] || 0;
+      [[e.a, ends.sa, ends.p], [e.b, ends.sb, ends.q]].forEach(function(t){
+        var k = t[0] + t[1];
+        if(!want[k] || delay < want[k].delay) want[k] = {id:t[0], side:t[1], p:t[2], delay:delay};
+      });
     });
-    Object.keys(str.tacks).forEach(function(id){
-      var p = at(Number(id));
-      if(p) str.tacks[id].setAttribute("transform", "translate(" + p.x.toFixed(1) + " " + p.y.toFixed(1) + ")");
+    Object.keys(str.tacks).forEach(function(k){
+      if(want[k]) return;
+      strTacks.removeChild(str.tacks[k]);
+      delete str.tacks[k];
+    });
+    Object.keys(want).forEach(function(k){
+      var w = want[k];
+      var t = str.tacks[k] || (str.tacks[k] = makeTack(w.id, w.side, w.delay));
+      t.setAttribute("transform", "translate(" + w.p.x.toFixed(1) + " " + w.p.y.toFixed(1) + ")");
     });
   }
 
@@ -663,6 +806,38 @@
     });
   }
 
+  /* String up everything in the queue: each yarn draws itself out from its
+     first tack, staggered, starting slack and pulling taut with a little
+     overshoot (the pluck spring does the settling). */
+  function stringUp(){
+    str.held = false;
+    strSvg.classList.remove("held");
+    tackSvg.classList.remove("held");
+    var queue = str.queue;
+    str.queue = [];
+    var step = queue.length > 1 ? Math.min(STAGGER_MS, STAGGER_MAX_MS / (queue.length - 1)) : 0;
+    var now = performance.now();
+    var box = boxCache();
+    queue.forEach(function(key, k){
+      var g = str.paths[key];
+      var e = str.edges.find(function(x){ return x.key === key; });
+      if(!g || !e) return;
+      var delay = Math.round(k * step);
+      str.tackDelay[key] = delay;
+      g.style.setProperty("--d", delay + "ms");
+      g.classList.add("draw");
+      var ends = edgeEnds(e, box);
+      if(ends && !str.pluck[key]){
+        var dx = ends.q.x - ends.p.x, dy = ends.q.y - ends.p.y;
+        var slack = Math.min(Math.sqrt(dx * dx + dy * dy) * 0.16, 64) + 10;
+        str.pluck[key] = {x:0, y:slack, vx:0, vy:0, start:now + delay + 120};
+      }
+    });
+    drawStrings();
+    str.tackDelay = {};
+    if(queue.length) springStep();
+  }
+
   function refreshStrings(){
     var edges = anyStrings ? boardEdges() : [];
     stringToggle.hidden = !anyStrings;
@@ -673,20 +848,34 @@
     document.body.classList.toggle("strings-on", live);
     str.edges = live ? edges : [];
     if(tieKey && !str.edges.some(function(e){ return e.key === tieKey; })) closeTie();
-    if(!live){ str.grab = null; str.pluck = {}; strSvg.classList.remove("plucking"); }
+    if(!live){
+      str.grab = null; str.pluck = {}; str.aim = {}; str.queue = [];
+      strSvg.classList.remove("plucking");
+      focusStrings(null);
+    }
     var linked = {};
     str.edges.forEach(function(e){ linked[e.a] = linked[e.b] = 1; });
     Object.keys(nodes).forEach(function(id){
       nodes[id].classList.toggle("linked", !!linked[id]);
     });
     syncStringNodes();
-    drawStrings();
+    var wait = live ? str.holdUntil - performance.now() : 0;
+    clearTimeout(str.holdTimer);
+    if(wait > 0 && str.queue.length){
+      /* the posters are still landing: keep the yarn in the drawer until then */
+      str.held = true;
+      strSvg.classList.add("held");
+      tackSvg.classList.add("held");
+      str.holdTimer = setTimeout(refreshStrings, wait);
+      return;
+    }
+    if(str.queue.length) stringUp();
+    else { str.held = false; strSvg.classList.remove("held"); tackSvg.classList.remove("held"); drawStrings(); }
     if(live) followStrings(reduced ? 0 : 720);
   }
 
   function setStrings(on){
     str.on = on;
-    str.fresh = on;
     stringToggle.setAttribute("aria-pressed", String(on));
     try { localStorage.setItem(STRING_PREF, on ? "1" : "0"); } catch(e){}
     refreshStrings();
@@ -699,21 +888,24 @@
      so it stretches but never snaps. Let go and a damped spring flings it back
      through its resting sag, wobbling a few times before it settles. The
      spring works on the control point's offset from rest, so a string that is
-     still wobbling keeps up with posters that move underneath it. */
+     still wobbling keeps up with posters that move underneath it. The same
+     spring pulls a hot poster's strings taut (towards str.aim) and lets them
+     sag again afterwards. */
   var SPRING_K = 340, SPRING_DAMP = 7.5, MAX_PULL = 170;
+  var NO_AIM = {x:0, y:0};
 
-  function edgeEnds(key){
-    var br = board.getBoundingClientRect();
+  function endsFor(key){
     var e = str.edges.find(function(x){ return x.key === key; });
     if(!e) return null;
-    var p = tackPoint(e.a, br), q = tackPoint(e.b, br);
-    return p && q ? {p:p, q:q, br:br} : null;
+    var box = boxCache();
+    var ends = edgeEnds(e, box);
+    return ends ? {p:ends.p, q:ends.q, br:box.br} : null;
   }
 
   /* the offset that makes the curve pass through the pointer: a quadratic's
      midpoint sits halfway between its chord midpoint and its control point */
   function pullOffset(key, clientX, clientY){
-    var ends = edgeEnds(key);
+    var ends = endsFor(key);
     if(!ends) return null;
     var p = ends.p, q = ends.q, rest = restControl(p, q);
     var mx = clientX - ends.br.left, my = clientY - ends.br.top;
@@ -739,12 +931,15 @@
       Object.keys(str.pluck).forEach(function(k){
         var o = str.pluck[k];
         if(str.grab && str.grab.key === k) { moving = true; return; }
-        var ax = -SPRING_K * o.x - SPRING_DAMP * o.vx;
-        var ay = -SPRING_K * o.y - SPRING_DAMP * o.vy;
+        if(o.start && now < o.start) { moving = true; return; }
+        var aim = str.aim[k] || NO_AIM;
+        var ax = -SPRING_K * (o.x - aim.x) - SPRING_DAMP * o.vx;
+        var ay = -SPRING_K * (o.y - aim.y) - SPRING_DAMP * o.vy;
         o.vx += ax * dt; o.vy += ay * dt;
         o.x += o.vx * dt; o.y += o.vy * dt;
-        if(Math.abs(o.x) + Math.abs(o.y) < 0.15 && Math.abs(o.vx) + Math.abs(o.vy) < 2){
-          delete str.pluck[k];
+        if(Math.abs(o.x - aim.x) + Math.abs(o.y - aim.y) < 0.15 && Math.abs(o.vx) + Math.abs(o.vy) < 2){
+          if(str.aim[k]){ o.x = aim.x; o.y = aim.y; o.vx = o.vy = 0; }
+          else delete str.pluck[k];
         } else {
           moving = true;
         }
@@ -916,24 +1111,69 @@
   strSvg.addEventListener("lostpointercapture", letGo);
 
   /* hovering or focusing a poster pulls its own strings forward */
+  /* Hovering or focusing a connected poster pulls its strings taut and lights
+     them, and everything not tied to it steps back. Under reduced motion the
+     strings simply snap to their taut shape. */
+  var TAUT = 0.6;
   function focusStrings(id){
-    strSvg.classList.toggle("focusing", id != null);
+    if(id != null && (!str.on || flowing || str.held)) id = null;
+    var kin = {};
+    var hotEdges = id == null ? [] : str.edges.filter(function(e){
+      return String(e.a) === id || String(e.b) === id;
+    });
+    if(!hotEdges.length) id = null;
+    if(id === str.hot) return;
+    str.hot = id;
+    hotEdges.forEach(function(e){ kin[e.a] = kin[e.b] = 1; });
+    var focusing = id != null;
+    document.body.classList.toggle("board-focus", focusing);
+    strSvg.classList.toggle("focusing", focusing);
+    tackSvg.classList.toggle("focusing", focusing);
+    Object.keys(nodes).forEach(function(k){ nodes[k].classList.toggle("kin", !!kin[k]); });
     Array.prototype.forEach.call(strYarns.children, function(g){
-      var hot = id != null && (g.getAttribute("data-a") === id || g.getAttribute("data-b") === id);
-      g.classList.toggle("hot", hot);
+      g.classList.toggle("hot", focusing && (g.getAttribute("data-a") === id || g.getAttribute("data-b") === id));
     });
     Object.keys(str.tacks).forEach(function(k){
-      str.tacks[k].classList.toggle("hot", k === id);
+      str.tacks[k].classList.toggle("hot", focusing && str.tacks[k].getAttribute("data-id") === id);
     });
+
+    /* aim each hot string's control point most of the way up to its chord */
+    var box = boxCache();
+    var hotKeys = {};
+    hotEdges.forEach(function(e){
+      var ends = edgeEnds(e, box);
+      if(!ends) return;
+      var rest = restControl(ends.p, ends.q);
+      str.aim[e.key] = {x:((ends.p.x + ends.q.x) / 2 - rest.x) * TAUT,
+                        y:((ends.p.y + ends.q.y) / 2 - rest.y) * TAUT};
+      hotKeys[e.key] = 1;
+    });
+    Object.keys(str.aim).forEach(function(k){ if(!hotKeys[k]) delete str.aim[k]; });
+    if(reduced){
+      str.pluck = {};
+      Object.keys(str.aim).forEach(function(k){
+        str.pluck[k] = {x:str.aim[k].x, y:str.aim[k].y, vx:0, vy:0};
+      });
+      drawStrings();
+      return;
+    }
+    Object.keys(hotKeys).forEach(function(k){
+      if(!str.pluck[k]) str.pluck[k] = {x:0, y:0, vx:0, vy:0};
+    });
+    springStep();
   }
   function posterKey(target){
     var el = target && target.closest && target.closest(".poster");
     return el ? el.dataset.key : null;
   }
-  board.addEventListener("mouseover", function(e){ if(str.on) focusStrings(posterKey(e.target)); });
-  board.addEventListener("mouseleave", function(){ focusStrings(null); });
-  board.addEventListener("focusin", function(e){ if(str.on) focusStrings(posterKey(e.target)); });
-  board.addEventListener("focusout", function(){ focusStrings(null); });
+  board.addEventListener("mouseover", function(e){
+    if(!str.grab) focusStrings(posterKey(e.target));
+  });
+  board.addEventListener("mouseleave", function(){ if(!str.grab) focusStrings(null); });
+  board.addEventListener("focusin", function(e){ focusStrings(posterKey(e.target)); });
+  board.addEventListener("focusout", function(e){
+    if(!e.relatedTarget || !board.contains(e.relatedTarget)) focusStrings(null);
+  });
 
   /* ---------- popup ---------- */
   /* body_html was sanitized server-side to a small allow-list of text tags
@@ -1109,7 +1349,6 @@
 
   /* ---------- go ---------- */
   try { str.on = localStorage.getItem(STRING_PREF) === "1"; } catch(e){}
-  str.fresh = str.on;
   stringToggle.setAttribute("aria-pressed", String(str.on));
   layout();
 

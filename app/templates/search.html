@@ -35,11 +35,11 @@
                 </details>
             {% endif %}
 
-            <div class="d-flex gap-2">
+            <div class="d-flex flex-wrap gap-2 search-header-actions">
                 {% if has_query %}
-                    <a class="btn btn-primary" href="{{ story_href(selected_group_query_value, query) }}">Create story</a>
-                    <a class="btn btn-outline-secondary" href="/?{% if selected_group_query_value %}group_id={{ selected_group_query_value }}&{% endif %}q={{ query | urlencode }}">Filter Timeline</a>
-                    <a class="btn btn-link" href="/search{% if selected_group_query_value %}?group_id={{ selected_group_query_value }}{% endif %}">Clear search</a>
+                    <a class="btn btn-primary text-nowrap" href="{{ story_href(selected_group_query_value, query) }}">Create story</a>
+                    <a class="btn btn-outline-secondary text-nowrap" href="/?{% if selected_group_query_value %}group_id={{ selected_group_query_value }}&{% endif %}q={{ query | urlencode }}">Filter Timeline</a>
+                    <a class="btn btn-link text-nowrap" href="/search{% if selected_group_query_value %}?group_id={{ selected_group_query_value }}{% endif %}">Clear search</a>
                 {% endif %}
             </div>
         </div>

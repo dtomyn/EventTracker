@@ -4,7 +4,6 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { constants as fsConstants } from 'node:fs';
 import { access, copyFile, mkdir, mkdtemp, readdir, rm, stat } from 'node:fs/promises';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -17,7 +16,8 @@ const REPO_ROOT = resolve(__dirname, '../../..');
 const SOURCE_DB_PATH = resolve(REPO_ROOT, 'data', 'EventTracker.db');
 const SQLITE_BRIDGE_PATH = resolve(__dirname, 'sqlite_bridge.py');
 const SERVER_HOST = '127.0.0.1';
-const SERVER_START_TIMEOUT_MS = 60_000;
+// Readiness is event-driven (uvicorn banner), so this is only a ceiling for loaded machines.
+const SERVER_START_TIMEOUT_MS = 120_000;
 const TEMP_DIR_PREFIX = 'eventtracker-playwright-ts-';
 // Temp dirs younger than this may belong to a test still running in another
 // worker (or another Playwright run), so cleanup must leave them alone.
@@ -44,7 +44,11 @@ type HarnessFixtures = {
 type ManagedServer = {
   process: ChildProcess;
   getOutput: () => string;
+  /** Resolves with the bound port once uvicorn reports it is serving; rejects if it exits first. */
+  ready: Promise<number>;
 };
+
+const READY_PATTERN = /Uvicorn running on http:\/\/[\d.]+:(\d+)/;
 
 /**
  * Return a stable timestamp token suitable for database paths and group names.
@@ -86,33 +90,6 @@ async function copySeedDatabase(targetDbPath: string): Promise<void> {
 }
 
 /**
- * Reserve and return a free localhost TCP port for an isolated app instance.
- */
-async function findFreePort(): Promise<number> {
-  return await new Promise<number>((resolvePort, reject) => {
-    const server = createServer();
-    server.unref();
-    server.once('error', reject);
-    server.listen(0, SERVER_HOST, () => {
-      const address = server.address();
-      if (address === null || typeof address === 'string') {
-        server.close();
-        reject(new Error('Failed to resolve a numeric TCP port for Playwright.'));
-        return;
-      }
-
-      server.close((error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolvePort(address.port);
-      });
-    });
-  });
-}
-
-/**
  * Build the environment for an isolated EventTracker server process.
  */
 function buildServerEnv(dbPath: string, aiProvider: AIProvider): NodeJS.ProcessEnv {
@@ -134,12 +111,30 @@ function buildServerEnv(dbPath: string, aiProvider: AIProvider): NodeJS.ProcessE
 }
 
 /**
- * Start an isolated uvicorn process and capture its combined stdout and stderr.
+ * Start an isolated uvicorn process on an OS-assigned port and capture its combined output.
+ *
+ * Binding port 0 lets the OS pick a free port atomically, avoiding the race between
+ * probing for a free port and the server binding it. The actual port is parsed from
+ * uvicorn's startup banner, which is only printed once application startup completes,
+ * so no HTTP readiness polling is needed.
  */
-function startServer(dbPath: string, port: number, aiProvider: AIProvider): ManagedServer {
+function startServer(dbPath: string, aiProvider: AIProvider): ManagedServer {
   const serverProcess = spawn(
     'uv',
-    ['run', 'python', '-m', 'uvicorn', 'app.main:app', '--host', SERVER_HOST, '--port', `${port}`],
+    [
+      'run',
+      'python',
+      '-m',
+      'uvicorn',
+      'app.main:app',
+      '--host',
+      SERVER_HOST,
+      '--port',
+      '0',
+      '--log-level',
+      'info',
+      '--no-access-log',
+    ],
     {
       cwd: REPO_ROOT,
       env: buildServerEnv(dbPath, aiProvider),
@@ -148,51 +143,48 @@ function startServer(dbPath: string, port: number, aiProvider: AIProvider): Mana
     },
   );
   const outputChunks: Buffer[] = [];
+  const getOutput = () => Buffer.concat(outputChunks).toString('utf8');
 
-  serverProcess.stdout.on('data', (chunk: Buffer) => {
-    outputChunks.push(chunk);
-  });
-  serverProcess.stderr.on('data', (chunk: Buffer) => {
-    outputChunks.push(chunk);
-  });
-
-  return {
-    process: serverProcess,
-    getOutput: () => Buffer.concat(outputChunks).toString('utf8'),
-  };
-}
-
-/**
- * Poll the local app until it serves HTTP 200 or the backing process exits.
- */
-async function waitForServer(baseURL: string, server: ManagedServer): Promise<void> {
-  const deadline = Date.now() + SERVER_START_TIMEOUT_MS;
-  let lastError: unknown;
-
-  while (Date.now() < deadline) {
-    if (server.process.exitCode !== null) {
-      throw new Error(
-        `EventTracker server exited before it became ready.\nCaptured output:\n${server.getOutput()}`,
-      );
-    }
-
-    try {
-      const response = await fetch(baseURL, { signal: AbortSignal.timeout(1_500) });
-      if (response.status === 200) {
-        return;
+  const ready = new Promise<number>((resolveReady, rejectReady) => {
+    let settled = false;
+    const settle = (action: () => void) => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timeoutHandle);
+        action();
       }
-    } catch (error) {
-      lastError = error;
-    }
+    };
+    const timeoutHandle = setTimeout(() => {
+      settle(() =>
+        rejectReady(
+          new Error(
+            `EventTracker server did not become ready within ${SERVER_START_TIMEOUT_MS / 1000} seconds.\nCaptured output:\n${getOutput()}`,
+          ),
+        ),
+      );
+    }, SERVER_START_TIMEOUT_MS);
+    const onData = (chunk: Buffer) => {
+      outputChunks.push(chunk);
+      if (!settled) {
+        const match = READY_PATTERN.exec(getOutput());
+        if (match) {
+          settle(() => resolveReady(Number(match[1])));
+        }
+      }
+    };
+    serverProcess.stdout.on('data', onData);
+    serverProcess.stderr.on('data', onData);
+    serverProcess.once('error', (error) => {
+      settle(() => rejectReady(new Error(`EventTracker server failed to start: ${error.message}`)));
+    });
+    serverProcess.once('exit', () => {
+      settle(() =>
+        rejectReady(new Error(`EventTracker server exited before it became ready.\nCaptured output:\n${getOutput()}`)),
+      );
+    });
+  });
 
-    await delay(200);
-  }
-
-  const message =
-    lastError instanceof Error
-      ? lastError.message
-      : 'The server did not begin accepting connections before timeout.';
-  throw new Error(`EventTracker server did not become ready within ${SERVER_START_TIMEOUT_MS / 1000} seconds. Last error: ${message}`);
+  return { process: serverProcess, getOutput, ready };
 }
 
 /**
@@ -404,12 +396,11 @@ function createHarnessTest(aiProvider: AIProvider) {
       const tempDbPath = join(tempDir, 'EventTracker-playwright.db');
       await copySeedDatabase(tempDbPath);
 
-      const port = await findFreePort();
-      const baseURL = `http://${SERVER_HOST}:${port}`;
-      const server = startServer(tempDbPath, port, aiProvider);
+      const server = startServer(tempDbPath, aiProvider);
 
       try {
-        await waitForServer(baseURL, server);
+        const port = await server.ready;
+        const baseURL = `http://${SERVER_HOST}:${port}`;
         await use({
           baseURL,
           runId,

@@ -1005,7 +1005,7 @@ def build_connection_graph(
     entry_rows = connection.execute(
         """
         SELECT e.id, e.title, e.event_year, e.event_month, e.event_day,
-               tg.name AS group_name
+               e.sort_key, e.final_text, tg.name AS group_name
         FROM entries e
         JOIN timeline_groups tg ON tg.id = e.group_id
         WHERE e.group_id = ?
@@ -1023,6 +1023,20 @@ def build_connection_graph(
         return {"nodes": [], "edges": []}
 
     conn_rows = list_connections_within(connection, entry_ids)
+
+    tag_map: dict[int, list[str]] = {}
+    placeholders = ",".join("?" for _ in entry_ids)
+    for tag_row in connection.execute(
+        f"""
+        SELECT et.entry_id, t.name
+        FROM entry_tags et
+        JOIN tags t ON t.id = et.tag_id
+        WHERE et.entry_id IN ({placeholders})
+        ORDER BY t.name COLLATE NOCASE
+        """,
+        list(entry_ids),
+    ).fetchall():
+        tag_map.setdefault(tag_row["entry_id"], []).append(tag_row["name"])
 
     count_map: dict[int, int] = {}
     for cr in conn_rows:
@@ -1045,6 +1059,13 @@ def build_connection_graph(
                 "label": row["title"] or f"Entry #{row['id']}",
                 "size": count_map.get(row["id"], 1),
                 "display_date": display_date,
+                "date": (
+                    f"{row['event_year']:04d}-{row['event_month']:02d}-"
+                    f"{(day or 1):02d}"
+                ),
+                "sort_key": row["sort_key"],
+                "tags": tag_map.get(row["id"], []),
+                "excerpt": preview_text(row["final_text"] or "", 240),
                 "group_name": row["group_name"],
             }
         )
@@ -1641,3 +1662,295 @@ def is_valid_url(value: str) -> bool:
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
+
+
+TAG_TONE_COUNT = 10
+TIMELINE_SPARKLINE_MAX_MONTHS = 36
+TIMELINE_SPARKLINE_WEEKLY_MAX_MONTHS = 6
+TIMELINE_SPARKLINE_WIDTH = 160
+TIMELINE_SPARKLINE_HEIGHT = 40
+
+
+class TimelineTagStat(TypedDict):
+    name: str
+    count: int
+    tone: int
+
+
+class TimelineSparkline(TypedDict):
+    line_points: str
+    area_points: str
+    peak_x: float
+    peak_y: float
+    peak_count: int
+    peak_label: str
+    bucket_unit: Literal["week", "month"]
+    bucket_count: int
+    start_label: str
+    end_label: str
+
+
+class TimelineStats(TypedDict):
+    total: int
+    span_months: int
+    span_value: str
+    span_unit: str
+    first_label: str
+    last_label: str
+    tag_count: int
+    top_tags: list[TimelineTagStat]
+    sparkline: TimelineSparkline | None
+
+
+TAG_TONE_HERO_TAGS_PER_SCOPE = 3
+
+
+def _normalize_tag_key(tag: str) -> str:
+    return tag.strip().casefold()
+
+
+def tag_tone(tag: str, tone_map: Mapping[str, int] | None = None) -> int:
+    """Map a tag name to a palette slot (0..TAG_TONE_COUNT-1).
+
+    Tags present in ``tone_map`` (see :func:`build_tag_tone_map`) use their
+    assigned slot so that frequent tags never share a colour. Any other tag
+    falls back to a stable hash of its normalized name.
+    """
+    normalized = _normalize_tag_key(tag)
+    if tone_map is not None:
+        assigned = tone_map.get(normalized)
+        if assigned is not None:
+            return assigned
+    digest = hashlib.sha1(normalized.encode("utf-8")).digest()
+    return int.from_bytes(digest[:4], "big") % TAG_TONE_COUNT
+
+
+def build_tag_tone_map(connection: sqlite3.Connection) -> dict[str, int]:
+    """Assign distinct palette slots to the most prominent tags.
+
+    Priority order: the overall top tags, then the top tags of every timeline
+    group (the tags each hero header shows), then the rest by global usage.
+    Ties break by name. The first ``TAG_TONE_COUNT`` tags in that order each
+    get a different slot; every tag keeps its hashed slot when it is still
+    free, so colours stay stable as usage shifts. Remaining tags are left out
+    of the map and use the hash fallback in :func:`tag_tone`.
+    """
+    global_rows = connection.execute(
+        """
+        SELECT t.name, COUNT(*) AS cnt
+        FROM entry_tags et
+        JOIN tags t ON t.id = et.tag_id
+        GROUP BY t.id
+        ORDER BY cnt DESC, t.name COLLATE NOCASE ASC
+        """
+    ).fetchall()
+    group_rows = connection.execute(
+        """
+        SELECT name FROM (
+            SELECT t.name AS name, e.group_id AS group_id,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY e.group_id
+                       ORDER BY COUNT(*) DESC, t.name COLLATE NOCASE ASC
+                   ) AS rank_in_group
+            FROM entry_tags et
+            JOIN tags t ON t.id = et.tag_id
+            JOIN entries e ON e.id = et.entry_id
+            GROUP BY e.group_id, t.id
+        )
+        WHERE rank_in_group <= ?
+        ORDER BY group_id ASC, rank_in_group ASC
+        """,
+        (TAG_TONE_HERO_TAGS_PER_SCOPE,),
+    ).fetchall()
+
+    global_names = [str(row[0]) for row in global_rows]
+    priority: list[str] = []
+    seen: set[str] = set()
+    for name in (
+        global_names[:TAG_TONE_HERO_TAGS_PER_SCOPE]
+        + [str(row[0]) for row in group_rows]
+        + global_names
+    ):
+        key = _normalize_tag_key(name)
+        if key in seen:
+            continue
+        seen.add(key)
+        priority.append(key)
+        if len(priority) >= TAG_TONE_COUNT:
+            break
+
+    tone_map: dict[str, int] = {}
+    used: set[int] = set()
+    for key in priority:
+        tone = tag_tone(key)
+        while tone in used:
+            tone = (tone + 1) % TAG_TONE_COUNT
+        used.add(tone)
+        tone_map[key] = tone
+    return tone_map
+
+
+def _short_month_label(year: int, month: int) -> str:
+    return f"{MONTH_NAMES[month - 1][:3]} {year}"
+
+
+def _build_timeline_sparkline(
+    series: list[tuple[str, int]],
+    bucket_unit: Literal["week", "month"],
+) -> TimelineSparkline | None:
+    """Turn ``(label, count)`` buckets into polyline geometry for the hero."""
+    if not series:
+        return None
+    width = TIMELINE_SPARKLINE_WIDTH
+    height = TIMELINE_SPARKLINE_HEIGHT
+    inset = 3.0
+    peak_count = max(count for _, count in series)
+    steps = max(1, len(series) - 1)
+    points: list[tuple[float, float]] = []
+    for index, (_, count) in enumerate(series):
+        x = round(inset + (width - 2 * inset) * index / steps, 2)
+        ratio = count / peak_count if peak_count else 0.0
+        y = round(height - inset - (height - 2 * inset) * ratio, 2)
+        points.append((x, y))
+    if len(points) == 1:
+        points = [(inset, points[0][1]), (width - inset, points[0][1])]
+    line_points = " ".join(f"{x},{y}" for x, y in points)
+    area_points = f"{points[0][0]},{height} {line_points} {points[-1][0]},{height}"
+    peak_index = max(range(len(series)), key=lambda i: (series[i][1], i))
+    peak_point = points[min(peak_index, len(points) - 1)]
+    return {
+        "line_points": line_points,
+        "area_points": area_points,
+        "peak_x": peak_point[0],
+        "peak_y": peak_point[1],
+        "peak_count": peak_count,
+        "peak_label": series[peak_index][0],
+        "bucket_unit": bucket_unit,
+        "bucket_count": len(series),
+        "start_label": series[0][0],
+        "end_label": series[-1][0],
+    }
+
+
+def get_timeline_stats(
+    connection: sqlite3.Connection,
+    group_id: int | None = None,
+    top_tag_limit: int = 3,
+    tone_map: Mapping[str, int] | None = None,
+) -> TimelineStats:
+    """Summarize a timeline scope for the hero header.
+
+    Returns the total entry count, the covered month span, the most used tags,
+    and sparkline geometry for activity: weekly buckets for spans of up to six
+    months, otherwise monthly buckets over the last 36 months of the span.
+    """
+    group_filter = "WHERE e.group_id = ?" if group_id is not None else ""
+    params: tuple[object, ...] = () if group_id is None else (group_id,)
+
+    day_rows = connection.execute(
+        f"""
+        SELECT e.event_year, e.event_month, COALESCE(e.event_day, 1) AS event_day,
+               COUNT(*) AS cnt
+        FROM entries e
+        {group_filter}
+        GROUP BY e.event_year, e.event_month, COALESCE(e.event_day, 1)
+        ORDER BY e.event_year, e.event_month, event_day
+        """,
+        params,
+    ).fetchall()
+
+    tag_rows = connection.execute(
+        f"""
+        SELECT t.name, COUNT(*) AS cnt
+        FROM entry_tags et
+        JOIN tags t ON t.id = et.tag_id
+        JOIN entries e ON e.id = et.entry_id
+        {group_filter}
+        GROUP BY t.id
+        ORDER BY cnt DESC, t.name COLLATE NOCASE ASC
+        """,
+        params,
+    ).fetchall()
+
+    if tone_map is None:
+        tone_map = build_tag_tone_map(connection)
+    total = sum(int(row[3]) for row in day_rows)
+    top_tags: list[TimelineTagStat] = [
+        {"name": str(row[0]), "count": int(row[1]), "tone": tag_tone(str(row[0]), tone_map)}
+        for row in tag_rows[: max(0, top_tag_limit)]
+    ]
+    empty: TimelineStats = {
+        "total": total,
+        "span_months": 0,
+        "span_value": "0",
+        "span_unit": "months",
+        "first_label": "",
+        "last_label": "",
+        "tag_count": len(tag_rows),
+        "top_tags": top_tags,
+        "sparkline": None,
+    }
+    if not day_rows:
+        return empty
+
+    day_counts: dict[date, int] = {}
+    for row in day_rows:
+        year, month, day = int(row[0]), int(row[1]), int(row[2])
+        try:
+            bucket_day = date(year, month, day)
+        except ValueError:
+            bucket_day = date(year, month, 1)
+        day_counts[bucket_day] = day_counts.get(bucket_day, 0) + int(row[3])
+
+    first_day = min(day_counts)
+    last_day = max(day_counts)
+    first_year, first_month = first_day.year, first_day.month
+    last_year, last_month = last_day.year, last_day.month
+    first_index = first_year * 12 + (first_month - 1)
+    last_index = last_year * 12 + (last_month - 1)
+    span_months = last_index - first_index + 1
+
+    series: list[tuple[str, int]] = []
+    bucket_unit: Literal["week", "month"]
+    if span_months <= TIMELINE_SPARKLINE_WEEKLY_MAX_MONTHS:
+        # Short spans read better as weekly buckets (Monday-based).
+        bucket_unit = "week"
+        week_start = first_day.toordinal() - first_day.weekday()
+        week_end = last_day.toordinal() - last_day.weekday()
+        week_counts: dict[int, int] = {}
+        for bucket_day, count in day_counts.items():
+            week = bucket_day.toordinal() - bucket_day.weekday()
+            week_counts[week] = week_counts.get(week, 0) + count
+        for week in range(week_start, week_end + 1, 7):
+            monday = date.fromordinal(week)
+            label = f"{MONTH_NAMES[monday.month - 1][:3]} {monday.day}"
+            series.append((label, week_counts.get(week, 0)))
+    else:
+        bucket_unit = "month"
+        month_counts: dict[int, int] = {}
+        for bucket_day, count in day_counts.items():
+            month_index = bucket_day.year * 12 + (bucket_day.month - 1)
+            month_counts[month_index] = month_counts.get(month_index, 0) + count
+        series_start = max(first_index, last_index - TIMELINE_SPARKLINE_MAX_MONTHS + 1)
+        for month_index in range(series_start, last_index + 1):
+            year, month_zero = divmod(month_index, 12)
+            series.append(
+                (_short_month_label(year, month_zero + 1), month_counts.get(month_index, 0))
+            )
+
+    if span_months >= 24:
+        span_value = f"{span_months / 12:.1f}".removesuffix(".0")
+        span_unit = "years"
+    else:
+        span_value = str(span_months)
+        span_unit = "month" if span_months == 1 else "months"
+
+    return {
+        **empty,
+        "span_months": span_months,
+        "span_value": span_value,
+        "span_unit": span_unit,
+        "first_label": _short_month_label(first_year, first_month),
+        "last_label": _short_month_label(last_year, last_month),
+        "sparkline": _build_timeline_sparkline(series, bucket_unit),
+    }

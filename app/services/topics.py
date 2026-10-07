@@ -388,6 +388,53 @@ def load_entry_tag_generator() -> EntryTagGenerator:
     raise ValueError(f"Unsupported AI provider: {provider}")
 
 
+_MONTH_ABBREVIATIONS = (
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+)
+
+
+def list_topic_entry_summaries(
+    connection: sqlite3.Connection, group_id: int, entry_ids: list[int]
+) -> dict[str, dict[str, object]]:
+    """Return lightweight entry metadata keyed by entry id (as a string).
+
+    Used by the Tag Clusters page side panel so it can list the entries behind
+    a tag without an extra request per click.  Only entries that belong to
+    *group_id* are returned.
+    """
+    unique_ids = sorted({int(entry_id) for entry_id in entry_ids})
+    if not unique_ids:
+        return {}
+
+    summaries: dict[str, dict[str, object]] = {}
+    chunk_size = 500
+    for start in range(0, len(unique_ids), chunk_size):
+        chunk = unique_ids[start : start + chunk_size]
+        placeholders = ",".join("?" for _ in chunk)
+        rows = connection.execute(
+            f"""
+            SELECT id, title, event_year, event_month, event_day, sort_key
+            FROM entries
+            WHERE group_id = ? AND id IN ({placeholders})
+            """,
+            [group_id, *chunk],
+        ).fetchall()
+        for row in rows:
+            month = _MONTH_ABBREVIATIONS[int(row["event_month"]) - 1]
+            day = row["event_day"]
+            display_date = (
+                f"{month} {day}, {row['event_year']}" if day else f"{month} {row['event_year']}"
+            )
+            summaries[str(row["id"])] = {
+                "id": int(row["id"]),
+                "title": row["title"] or f"Entry #{row['id']}",
+                "display_date": display_date,
+                "sort_key": int(row["sort_key"]),
+            }
+    return summaries
+
+
 def build_tag_graph(connection: sqlite3.Connection, group_id: int) -> TopicGraph:
     """Build a topic graph from existing entry tags for a group.
 

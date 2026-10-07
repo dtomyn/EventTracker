@@ -1,0 +1,416 @@
+/* ==========================================================================
+   Timeline page: hero header, stat tiles and timeline spine.
+   The shared tag palette (.tag-tone-*, .tag-pill) lives in styles.css.
+   Loaded only by timeline.html via {% block head %}.
+   ========================================================================== */
+
+:root {
+    --tl-sticky-top: 4.25rem;
+    --tl-spine-gutter: 2.5rem;
+    --tl-spine-x: 0.875rem;
+    --tl-node-size: 0.875rem;
+    --tl-ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+    /* Accent text that meets WCAG AA (4.5:1) on light surfaces. */
+    --tl-accent-text: #0e7490;
+}
+
+[data-bs-theme="dark"] {
+    --tl-accent-text: #22d3ee;
+}
+
+/* --- Hero header ---------------------------------------------------------- */
+.tl-hero {
+    gap: 1.25rem;
+}
+
+.tl-hero .timeline-hero-header {
+    align-items: flex-end;
+}
+
+.tl-hero-eyebrow {
+    margin: 0 0 0.375rem;
+    color: var(--tl-accent-text);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.tl-hero-title {
+    margin: 0;
+    color: var(--et-text);
+    font-size: clamp(1.875rem, 1.25rem + 2vw, 2.75rem);
+    font-weight: 800;
+    line-height: 1.08;
+    letter-spacing: -0.03em;
+    text-wrap: balance;
+}
+
+.tl-hero-subtitle {
+    margin: 0.5rem 0 0;
+    color: var(--et-text-secondary);
+    font-size: 1rem;
+}
+
+.tl-hero .timeline-hero-actions {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.tl-hero .timeline-hero-actions .ms-2 {
+    margin-left: 0 !important;
+}
+
+/* --- Stat tiles ----------------------------------------------------------- */
+.tl-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.875rem;
+}
+
+.tl-stat {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+    padding: 1rem 1.125rem;
+    border: 1px solid var(--et-border);
+    border-radius: 0.875rem;
+    background:
+        radial-gradient(120% 140% at 100% 0%, var(--et-primary-bg), transparent 60%),
+        var(--et-card-bg);
+    box-shadow: 0 1px 2px var(--et-card-shadow), 0 0.75rem 1.5rem -1rem var(--et-card-shadow-hover);
+    overflow: hidden;
+}
+
+.tl-stat-label {
+    color: var(--et-text-secondary);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.tl-stat-value {
+    display: flex;
+    align-items: baseline;
+    gap: 0.375rem;
+    color: var(--et-text);
+    font-size: 2rem;
+    font-weight: 750;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+}
+
+.tl-stat-unit {
+    color: var(--et-text-secondary);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    letter-spacing: 0;
+}
+
+.tl-stat-meta {
+    margin-top: auto;
+    color: var(--et-text-secondary);
+    font-size: 0.8125rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tl-stat-tag-list {
+    display: grid;
+    gap: 0.375rem;
+    margin-top: 0.25rem;
+}
+
+.tl-stat-tag-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.tl-stat-tag-count {
+    flex: 0 0 auto;
+    color: var(--et-text-secondary);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.tl-sparkline {
+    display: block;
+    width: 100%;
+    height: 2.75rem;
+    margin: 0.25rem 0 0.125rem;
+    color: var(--et-primary);
+    overflow: visible;
+}
+
+.tl-sparkline-line {
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+html.tl-motion .tl-sparkline {
+    clip-path: inset(-4px 100% -4px -4px);
+    animation: tl-draw 1.2s var(--tl-ease-out) 0.15s forwards;
+}
+
+@keyframes tl-draw {
+    to { clip-path: inset(-4px -4px -4px -4px); }
+}
+
+/* --- Timeline spine (Details view) ----------------------------------------- */
+.timeline-spine-group {
+    position: relative;
+}
+
+.timeline-spine-marker {
+    position: sticky;
+    top: var(--tl-sticky-top);
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    margin: 0 -0.5rem;
+    padding: 0.625rem 0.5rem 0.625rem calc(var(--tl-spine-gutter) + 0.5rem);
+    border-bottom: 1px solid var(--et-border);
+    border-radius: 0.625rem 0.625rem 0 0;
+    background: color-mix(in srgb, var(--et-surface-bg) 86%, transparent);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.timeline-spine-marker::before {
+    content: "";
+    position: absolute;
+    left: calc(var(--tl-spine-x) + 0.5rem - 0.4375rem);
+    top: 50%;
+    width: 0.875rem;
+    height: 0.875rem;
+    border: 2px solid var(--et-primary);
+    border-radius: 0.25rem;
+    background: var(--et-card-bg);
+    transform: translateY(-50%) rotate(45deg);
+}
+
+.timeline-spine-marker .h5 {
+    font-size: 1.0625rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.timeline-spine-list {
+    position: relative;
+    padding-left: var(--tl-spine-gutter);
+}
+
+.timeline-spine-list::before {
+    content: "";
+    position: absolute;
+    top: -1rem;
+    bottom: -3rem;
+    left: calc(var(--tl-spine-x) - 1px);
+    width: 2px;
+    border-radius: 2px;
+    background: linear-gradient(180deg, var(--et-primary-line-start), var(--et-primary-line-end));
+}
+
+.timeline-spine-group:last-child .timeline-spine-list::before {
+    bottom: 1.5rem;
+}
+
+.timeline-spine-item {
+    position: relative;
+}
+
+.timeline-spine-node {
+    position: absolute;
+    top: 1.75rem;
+    left: calc(var(--tl-spine-x) - var(--tl-spine-gutter) - var(--tl-node-size) / 2);
+    z-index: 1;
+    width: var(--tl-node-size);
+    height: var(--tl-node-size);
+    border-radius: 999px;
+    background: var(--tag-dot, var(--et-primary));
+    box-shadow: 0 0 0 3px var(--et-surface-bg), 0 0 0 7px var(--tag-glow, var(--et-primary-bg));
+    transition: transform 0.2s var(--tl-ease-out);
+}
+
+/* Short connector from the node to the card edge. */
+.timeline-spine-node::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: calc(var(--tl-node-size) + 3px);
+    width: calc(var(--tl-spine-gutter) - var(--tl-spine-x) - var(--tl-node-size) / 2 - 3px);
+    height: 2px;
+    background: linear-gradient(90deg, var(--tag-glow, var(--et-primary-bg)), var(--et-border));
+    transform: translateY(-50%);
+}
+
+.timeline-spine-item:hover .timeline-spine-node,
+.timeline-spine-item:focus-within .timeline-spine-node {
+    transform: scale(1.25);
+}
+
+.timeline-spine-item .timeline-card {
+    border-color: var(--et-border);
+}
+
+.timeline-spine-item:hover .timeline-card {
+    border-color: var(--tag-border, var(--et-primary-border-hover));
+}
+
+/* Long group names must never push the card wider than the column. The
+   surface grids default to min-content columns, so pin them to the track. */
+.visualization-surface,
+.visualization-shell {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.timeline-spine-item .entry-card-header > div:first-child {
+    min-width: 0;
+}
+
+.timeline-spine-item .entry-card-meta .badge {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* --- Summaries view: sticky month heading, nodes colored by tag ----------- */
+#visualization-content .visualization-heading {
+    position: sticky;
+    top: var(--tl-sticky-top);
+    z-index: 2;
+    margin: -0.5rem -1.25rem 1rem;
+    padding: 0.75rem 1.25rem;
+    border-radius: 0.75rem 0.75rem 0 0;
+    background: color-mix(in srgb, var(--et-surface-bg) 90%, transparent);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.visualization-item[class*="tag-tone-"] .visualization-node {
+    background: var(--tag-dot);
+    box-shadow: 0 0 0 1px var(--tag-border);
+}
+
+/* --- Reveal-on-scroll (only when timeline.js opted in) ---------------------- */
+html.tl-motion .timeline-spine-item {
+    transition:
+        opacity 0.55s var(--tl-ease-out) var(--tl-delay, 0ms),
+        transform 0.55s var(--tl-ease-out) var(--tl-delay, 0ms);
+}
+
+html.tl-motion .timeline-spine-item.tl-pending {
+    opacity: 0;
+    transform: translateY(1rem);
+}
+
+html.tl-motion .timeline-spine-item.tl-pending .timeline-spine-node {
+    transform: scale(0.4);
+}
+
+/* --- Responsive ------------------------------------------------------------ */
+@media (max-width: 991.98px) {
+    .tl-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 575.98px) {
+    :root {
+        --tl-spine-gutter: 1.5rem;
+        --tl-spine-x: 0.4375rem;
+        --tl-node-size: 0.6875rem;
+    }
+
+    .tl-hero .timeline-hero-header {
+        align-items: stretch;
+    }
+
+    .tl-stats {
+        gap: 0.625rem;
+    }
+
+    .tl-stat {
+        padding: 0.875rem;
+    }
+
+    .tl-stat-value {
+        font-size: 1.625rem;
+    }
+
+    .tl-stat-meta {
+        white-space: normal;
+    }
+
+    .timeline-spine-marker {
+        margin: 0 -0.25rem;
+        padding-left: calc(var(--tl-spine-gutter) + 0.25rem);
+    }
+
+    .timeline-spine-marker::before {
+        left: calc(var(--tl-spine-x) + 0.25rem - 0.3125rem);
+        width: 0.625rem;
+        height: 0.625rem;
+        border-radius: 0.1875rem;
+    }
+
+    .timeline-spine-node {
+        top: 1.375rem;
+        box-shadow: 0 0 0 3px var(--et-surface-bg);
+    }
+
+    .visualization-surface {
+        padding: 0.875rem 0.75rem;
+    }
+
+    .timeline-spine-item .timeline-card > .card-body {
+        position: relative;
+        padding: 1rem !important;
+    }
+
+    /* Float View/Edit into the corner so the text gets the full card width. */
+    .timeline-spine-item .entry-card-header {
+        display: block !important;
+    }
+
+    .timeline-spine-item .entry-card-actions {
+        position: absolute;
+        top: 0.75rem;
+        right: 0.75rem;
+    }
+
+    .timeline-spine-item .entry-card-meta {
+        min-height: 2rem;
+        padding-right: 7rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html.tl-motion .timeline-spine-item,
+    html.tl-motion .timeline-spine-item.tl-pending {
+        opacity: 1;
+        transform: none;
+        transition: none;
+    }
+
+    .timeline-spine-node,
+    html.tl-motion .timeline-spine-item.tl-pending .timeline-spine-node {
+        transform: none;
+        transition: none;
+    }
+
+    html.tl-motion .tl-sparkline {
+        animation: none;
+        clip-path: none;
+    }
+}

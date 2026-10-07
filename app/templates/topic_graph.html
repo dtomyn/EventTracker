@@ -1,285 +1,288 @@
 {% extends "base.html" %}
+{% from "partials/graph_shell.html" import graph_shell %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', path='/graph.css') }}">
+{% endblock %}
 
 {% block content %}
-<div class="container py-4">
-    <div class="row align-items-center mb-4">
-        <div class="col">
+<div class="container py-4 eg-page">
+    <div class="eg-header">
+        <div>
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb mb-1">
                     <li class="breadcrumb-item"><a href="/?group_id={{ group.id }}" class="text-decoration-none">{{ group.name }}</a></li>
                     <li class="breadcrumb-item active" aria-current="page">Tag Clusters</li>
                 </ol>
             </nav>
-            <h1 class="h3 mb-0">Tag Clusters</h1>
+            <div class="eg-title-row">
+                <h1 class="h3 mb-0">Tag Clusters</h1>
+                <div class="eg-stats" data-graph-stats hidden>
+                    <span class="eg-stat"><strong data-stat-nodes>0</strong> tags</span>
+                    <span class="eg-stat"><strong data-stat-clusters>0</strong> clusters</span>
+                    <span class="eg-stat"><strong data-stat-entries>0</strong> entries</span>
+                </div>
+            </div>
         </div>
-        <div class="col-auto">
+        <div class="eg-actions">
             <a href="/?group_id={{ group.id }}" class="btn btn-outline-secondary">Back to Timeline</a>
         </div>
     </div>
 
-    <div class="card shadow-sm border-0 bg-dark-subtle position-relative">
-        <div id="loading-spinner" class="position-absolute top-50 start-50 translate-middle text-center" style="z-index: 10;">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading clusters...</span>
-            </div>
-            <p class="mt-2 text-muted">Generating AI clusters...</p>
+    {% call graph_shell("topic-graph", "Tag cluster graph of " ~ group.name, "Loading tag clusters…", "Tag") %}
+        <div>
+            <div class="eg-legend-swatches" data-legend-clusters></div>
+            <small class="d-block mt-1 eg-legend-caption">Color groups tags that often appear together</small>
         </div>
-        <div class="card-body p-0">
-            <div id="graph-container" style="min-height: 600px; width: 100%; position: relative;">
-                <div class="position-absolute top-0 end-0 p-3" style="z-index: 5;">
-                    <div class="btn-group shadow-sm" role="group" aria-label="Graph zoom controls">
-                        <button id="zoom-out-button" type="button" class="btn btn-light" aria-label="Zoom out" disabled>
-                            -
-                        </button>
-                        <button id="zoom-in-button" type="button" class="btn btn-light" aria-label="Zoom in" disabled>
-                            +
-                        </button>
-                    </div>
-                </div>
-                <svg id="topic-graph-svg" style="width: 100%; height: 100%; min-height: 600px; display: block;"></svg>
-            </div>
+        <div class="eg-legend-row">
+            <svg width="36" height="22" viewBox="0 0 36 22" aria-hidden="true"><circle cx="7" cy="14" r="4.5" fill="#7c8cff"/><circle cx="24" cy="11" r="9" fill="#7c8cff" opacity="0.9"/></svg>
+            <span>Size<small>More entries use this tag</small></span>
         </div>
-    </div>
+        <div class="eg-legend-row">
+            <svg width="36" height="14" viewBox="0 0 36 14" aria-hidden="true"><path d="M2 5 Q18 0 34 5" fill="none" stroke="#7c8cff" stroke-opacity="0.7" stroke-width="1" stroke-linecap="round"/><path d="M2 12 Q18 7 34 12" fill="none" stroke="#7c8cff" stroke-opacity="0.7" stroke-width="3.5" stroke-linecap="round"/></svg>
+            <span>Link<small>Thicker means tags co-occur more often</small></span>
+        </div>
+    {% endcall %}
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="{{ url_for('static', path='/graph.js') }}"></script>
 <script>
-    document.addEventListener("DOMContentLoaded", function() {
+    document.addEventListener("DOMContentLoaded", function () {
         const groupId = {{ group.id }};
-        const container = document.getElementById("graph-container");
-        const svgElement = document.getElementById("topic-graph-svg");
-        const loadingSpinner = document.getElementById("loading-spinner");
-        const zoomInButton = document.getElementById("zoom-in-button");
-        const zoomOutButton = document.getElementById("zoom-out-button");
+        const shell = document.getElementById("topic-graph");
+        const stats = document.querySelector("[data-graph-stats]");
+        const legendClusters = shell.querySelector("[data-legend-clusters]");
+        const PALETTE = ["#7c6cff", "#2ed3c1", "#ff7a9c", "#ffbf47", "#4cb8ff", "#c38bff", "#6fdc8c", "#ff9a62"];
+        const NEUTRAL = "#8a93b8";
 
-        let currentSimulation = null;
-        let currentZoomBehavior = null;
-        let currentSvg = null;
-
-        function setZoomButtonsDisabled(disabled) {
-            zoomInButton.disabled = disabled;
-            zoomOutButton.disabled = disabled;
+        if (window.innerWidth < 768) {
+            shell.querySelector("[data-eg-legend]").open = false;
         }
 
-        function applyZoom(scaleFactor) {
-            if (!currentSvg || !currentZoomBehavior) {
-                return;
-            }
+        const EG = window.EventGraph;
+        const el = EG.el;
+        let radiusScale = () => 20;
+        let entriesById = {};
+        const clusterOf = new Map();
+        const clusterInfo = new Map();
 
-            currentSvg
-                .transition()
-                .duration(180)
-                .call(currentZoomBehavior.scaleBy, scaleFactor);
+        function filterUrl(label) {
+            return label && label !== "Topic"
+                ? `/?q=${encodeURIComponent(label)}&group_id=${groupId}`
+                : `/?group_id=${groupId}`;
         }
 
-        zoomInButton.addEventListener("click", () => applyZoom(1.2));
-        zoomOutButton.addEventListener("click", () => applyZoom(0.8));
+        const graph = EG.create(shell, {
+            emptyMessage: "No tag clusters found or embeddings are unavailable.",
+            nodeRadius: (d) => radiusScale(d.size),
+            nodeColor: (d) => (clusterInfo.get(clusterOf.get(d.id)) || { color: NEUTRAL }).color,
+            nodeLabel: (d) => d.label || "Topic",
+            nodeAriaLabel: (d) => `Tag ${d.label || "Topic"}, ${d.size} ${d.size === 1 ? "entry" : "entries"}`,
+            linkKind: () => "cooccur",
+            linkWidth: (e) => Math.max(1, (e.weight || 0) * 4.5),
+            linkColor: (e) => e.source.color,
+            linkDistance: (e) => 150 - (e.weight || 0) * 60,
+            charge: -300,
+            onActivate: (d) => { window.location.href = filterUrl(d.label); },
+            renderPanel: renderTagPanel,
+        });
 
-        function renderGraph(data) {
-            loadingSpinner.style.display = 'none';
-
-            if (!data.nodes || data.nodes.length === 0) {
-                setZoomButtonsDisabled(true);
-                container.innerHTML = '<p class="text-muted text-center pt-5 mt-5">No tag clusters found or embeddings are unavailable.</p>';
-                return;
-            }
-
-            const nodeSizes = data.nodes.map(node => node.size);
-            const minNodeSize = d3.min(nodeSizes) ?? 1;
-            const maxNodeSize = d3.max(nodeSizes) ?? 1;
-            const midpointNodeSize = minNodeSize === maxNodeSize ? maxNodeSize : minNodeSize + ((maxNodeSize - minNodeSize) / 2);
-            const themeStyles = getComputedStyle(document.documentElement);
-            const baseInfo = themeStyles.getPropertyValue("--bs-info").trim() || "#0dcaf0";
-            const basePrimary = themeStyles.getPropertyValue("--bs-primary").trim() || "#0d6efd";
-            const baseWarning = themeStyles.getPropertyValue("--bs-warning").trim() || "#ffc107";
-            const bodyBackground = themeStyles.getPropertyValue("--bs-body-bg").trim() || "#ffffff";
-            const radiusScale = minNodeSize === maxNodeSize
-                ? () => 34
-                : d3.scaleSqrt().domain([minNodeSize, maxNodeSize]).range([18, 56]);
-            const strokeWidthScale = minNodeSize === maxNodeSize
-                ? () => 2.5
-                : d3.scaleLinear().domain([minNodeSize, maxNodeSize]).range([2, 4.5]);
-            const fontSizeScale = minNodeSize === maxNodeSize
-                ? () => 14
-                : d3.scaleLinear().domain([minNodeSize, maxNodeSize]).range([11, 18]);
-            const colorScale = minNodeSize === maxNodeSize
-                ? () => basePrimary
-                : d3.scaleLinear()
-                    .domain([minNodeSize, midpointNodeSize, maxNodeSize])
-                    .range([baseInfo, basePrimary, baseWarning])
-                    .interpolate(d3.interpolateHcl);
-
-            function getNodeRadius(node) {
-                return radiusScale(node.size);
-            }
-
-            function getNodeStrokeWidth(node) {
-                return strokeWidthScale(node.size);
-            }
-
-            function getNodeFill(node) {
-                return colorScale(node.size);
-            }
-
-            function getNodeHoverFill(node) {
-                const color = d3.color(getNodeFill(node));
-                return color ? color.brighter(0.6).formatHex() : getNodeFill(node);
-            }
-
-            const width = container.clientWidth;
-            const height = 600;
-
-            const svg = d3.select(svgElement);
-            svg.selectAll("*").remove(); 
-            currentSvg = svg;
-
-            // Setup force simulation
-            const simulation = d3.forceSimulation(data.nodes)
-                .force("link", d3.forceLink(data.edges).id(d => d.id).distance(d => 150 - (d.weight * 50)).strength(d => d.weight))
-                .force("charge", d3.forceManyBody().strength(-300))
-                .force("center", d3.forceCenter(width / 2, height / 2))
-                .force("collide", d3.forceCollide().radius(d => getNodeRadius(d) + 12).iterations(2));
-
-            currentSimulation = simulation;
-
-            const g = svg.append("g");
-
-            // Add zoom capabilities
-            const zoom = d3.zoom()
-                .scaleExtent([0.1, 4])
-                .on("zoom", (event) => {
-                    g.attr("transform", event.transform);
-                });
-            svg.call(zoom);
-            svg.on("dblclick.zoom", null);
-            currentZoomBehavior = zoom;
-            setZoomButtonsDisabled(false);
-
-            const link = g.append("g")
-                .selectAll("line")
-                .data(data.edges)
-                .join("line")
-                .style("stroke", "var(--bs-border-color)")
-                .attr("stroke-opacity", 0.6)
-                .attr("stroke-width", d => Math.max(1, d.weight * 5));
-
-            const nodeGroup = g.append("g")
-                .selectAll("g")
-                .data(data.nodes)
-                .join("g")
-                .style("cursor", "pointer")
-                .call(d3.drag()
-                    .on("start", dragstarted)
-                    .on("drag", dragged)
-                    .on("end", dragended))
-                .on("dblclick", (event, d) => {
-                    event.stopPropagation();
-
-                    if (event.defaultPrevented || d.wasDragged) {
-                        d.wasDragged = false;
-                        return;
-                    }
-
-                    const label = d.label && d.label !== "Topic" ? d.label : "";
-                    if (label) {
-                        window.location.href = `/?q=${encodeURIComponent(label)}&group_id=${groupId}`;
-                    } else {
-                        // fallback if no label, though usually backend returns "Topic"
-                        window.location.href = `/?group_id=${groupId}`;
-                    }
-                })
-                .on("mouseover", function(event, d) {
-                    d3.select(this)
-                        .select("circle")
-                        .style("fill", getNodeHoverFill(d))
-                        .style("stroke", baseWarning)
-                        .style("stroke-width", `${getNodeStrokeWidth(d) + 1.25}px`);
-                })
-                .on("mouseout", function(event, d) {
-                    d3.select(this)
-                        .select("circle")
-                        .style("fill", getNodeFill(d))
-                        .style("stroke", bodyBackground)
-                        .style("stroke-width", `${getNodeStrokeWidth(d)}px`);
-                });
-
-            // Node scaling
-            nodeGroup.append("circle")
-                .attr("r", d => getNodeRadius(d))
-                .style("fill", d => getNodeFill(d))
-                .style("stroke", bodyBackground)
-                .style("stroke-width", d => `${getNodeStrokeWidth(d)}px`);
-
-            nodeGroup.append("title")
-                .text(d => {
-                    const label = d.label || "Tag cluster";
-                    const suffix = d.size === 1 ? "occurrence" : "occurrences";
-                    return `${label}: ${d.size} ${suffix}`;
-                });
-
-            // Labels
-            nodeGroup.append("text")
-                .text(d => d.label || "Topic")
-                .attr("text-anchor", "middle")
-                .attr("dy", ".3em")
-                .attr("font-size", d => `${fontSizeScale(d.size)}px`)
-                .attr("font-weight", "500")
-                .style("fill", "var(--bs-body-color)")
-                .style("pointer-events", "none");
-
-            function ticked() {
-                link
-                    .attr("x1", d => d.source.x)
-                    .attr("y1", d => d.source.y)
-                    .attr("x2", d => d.target.x)
-                    .attr("y2", d => d.target.y);
-
-                nodeGroup
-                    .attr("transform", d => `translate(${d.x},${d.y})`);
-            }
-
-            simulation.on("tick", ticked);
-
-            function dragstarted(event) {
-                if (!event.active) simulation.alphaTarget(0.3).restart();
-                event.subject.wasDragged = false;
-                event.subject.fx = event.subject.x;
-                event.subject.fy = event.subject.y;
-            }
-
-            function dragged(event) {
-                event.subject.wasDragged = true;
-                event.subject.fx = event.x;
-                event.subject.fy = event.y;
-            }
-
-            function dragended(event) {
-                if (!event.active) simulation.alphaTarget(0);
-                event.subject.fx = null;
-                event.subject.fy = null;
-            }
-            
-            // Handle window resize
-            window.addEventListener('resize', () => {
-                svg.attr("width", container.clientWidth);
-                simulation.force("center", d3.forceCenter(container.clientWidth / 2, height / 2));
-                simulation.alpha(0.3).restart();
+        /**
+         * Deterministic community detection (one Louvain level). Edge weights
+         * are converted to cosine similarity so hub tags such as a tag on
+         * every entry do not swallow every cluster.
+         */
+        function detectClusters(data) {
+            clusterOf.clear();
+            clusterInfo.clear();
+            const sizeOf = new Map(data.nodes.map((n) => [n.id, Math.max(1, n.size || 1)]));
+            const neighbors = new Map(data.nodes.map((n) => [n.id, []]));
+            const degree = new Map(data.nodes.map((n) => [n.id, 0]));
+            let totalWeight = 0;
+            data.edges.forEach((e) => {
+                if (!neighbors.has(e.source) || !neighbors.has(e.target)) return;
+                const sa = sizeOf.get(e.source);
+                const sb = sizeOf.get(e.target);
+                const shared = (e.weight || 0) * Math.min(sa, sb);
+                const weight = shared / Math.sqrt(sa * sb);
+                if (weight <= 0) return;
+                neighbors.get(e.source).push([e.target, weight]);
+                neighbors.get(e.target).push([e.source, weight]);
+                degree.set(e.source, degree.get(e.source) + weight);
+                degree.set(e.target, degree.get(e.target) + weight);
+                totalWeight += weight;
             });
+            const order = data.nodes.slice().sort((a, b) => b.size - a.size || String(a.id).localeCompare(String(b.id)));
+            const label = new Map(order.map((n) => [n.id, n.id]));
+            const communityTotal = new Map(order.map((n) => [n.id, degree.get(n.id)]));
+            const twoM = Math.max(1e-9, totalWeight * 2);
+            for (let pass = 0; pass < 20 && totalWeight > 0; pass += 1) {
+                let changed = false;
+                order.forEach((n) => {
+                    const own = label.get(n.id);
+                    const k = degree.get(n.id);
+                    const links = new Map();
+                    neighbors.get(n.id).forEach(([other, weight]) => {
+                        const key = label.get(other);
+                        links.set(key, (links.get(key) || 0) + weight);
+                    });
+                    communityTotal.set(own, communityTotal.get(own) - k);
+                    let best = own;
+                    let bestGain = (links.get(own) || 0) - (communityTotal.get(own) * k) / twoM;
+                    links.forEach((inWeight, key) => {
+                        const gain = inWeight - (communityTotal.get(key) * k) / twoM;
+                        if (gain > bestGain + 1e-9) { best = key; bestGain = gain; }
+                    });
+                    communityTotal.set(best, communityTotal.get(best) + k);
+                    if (best !== own) { label.set(n.id, best); changed = true; }
+                });
+                if (!changed) break;
+            }
+
+            const groups = new Map();
+            data.nodes.forEach((n) => {
+                const key = label.get(n.id);
+                if (!groups.has(key)) groups.set(key, []);
+                groups.get(key).push(n);
+                clusterOf.set(n.id, key);
+            });
+            const ranked = Array.from(groups.entries())
+                .map(([key, members]) => ({
+                    key,
+                    members: members.sort((a, b) => b.size - a.size),
+                    weight: members.reduce((sum, m) => sum + m.size, 0),
+                }))
+                .sort((a, b) => b.weight - a.weight);
+            let paletteIndex = 0;
+            ranked.forEach((cluster) => {
+                const color = cluster.members.length > 1 && paletteIndex < PALETTE.length
+                    ? PALETTE[paletteIndex++]
+                    : NEUTRAL;
+                clusterInfo.set(cluster.key, {
+                    color,
+                    name: cluster.members[0].label || "Topic",
+                    members: cluster.members,
+                });
+            });
+            return ranked;
         }
 
-        // Fetch graph data
-        fetch(`/api/groups/${groupId}/topics`)
-            .then(res => {
+        function renderLegend(ranked) {
+            legendClusters.replaceChildren();
+            const colored = ranked.filter((c) => clusterInfo.get(c.key).color !== NEUTRAL);
+            colored.slice(0, 6).forEach((cluster) => {
+                const info = clusterInfo.get(cluster.key);
+                const swatch = el("span", "eg-legend-swatch");
+                const dot = el("span", "eg-dot");
+                dot.style.background = info.color;
+                dot.style.color = info.color;
+                swatch.appendChild(dot);
+                swatch.appendChild(document.createTextNode(EG.truncate(info.name, 18)));
+                swatch.title = cluster.members.map((m) => m.label).join(", ");
+                legendClusters.appendChild(swatch);
+            });
+            const rest = ranked.length - Math.min(colored.length, 6);
+            if (rest > 0) {
+                const swatch = el("span", "eg-legend-swatch");
+                const dot = el("span", "eg-dot");
+                dot.style.background = NEUTRAL;
+                dot.style.color = NEUTRAL;
+                swatch.appendChild(dot);
+                swatch.appendChild(document.createTextNode(`${rest} more`));
+                legendClusters.appendChild(swatch);
+            }
+        }
+
+        function renderTagPanel(d, api) {
+            const info = clusterInfo.get(clusterOf.get(d.id));
+            api.setKicker("Tag", d.color);
+            api.setTitle(d.label || "Topic");
+
+            const meta = el("div", "eg-meta");
+            meta.appendChild(el("span", "", `${d.size} ${d.size === 1 ? "entry" : "entries"}`));
+            if (info && info.members.length > 1) {
+                meta.appendChild(el("span", "", `Cluster: ${info.name}`));
+            }
+            api.body.appendChild(meta);
+
+            const related = api.linksOf()
+                .map((e) => ({ weight: e.weight || 0, other: e.source.id === d.id ? e.target : e.source }))
+                .sort((a, b) => b.weight - a.weight);
+            if (related.length) {
+                api.body.appendChild(el("h3", "eg-panel-section-title", "Related tags"));
+                const chips = el("div", "eg-chips");
+                related.forEach(({ other, weight }) => {
+                    const chip = el("button", "eg-chip");
+                    chip.type = "button";
+                    const dot = el("span", "eg-dot");
+                    dot.style.background = other.color;
+                    dot.style.color = other.color;
+                    chip.appendChild(dot);
+                    chip.appendChild(document.createTextNode(other.label || "Topic"));
+                    chip.title = `Co-occurrence ${Math.round(weight * 100)}%`;
+                    chip.setAttribute("aria-label", `Show tag ${other.label || "Topic"} in graph`);
+                    chip.addEventListener("click", () => api.select(other.id));
+                    chips.appendChild(chip);
+                });
+                api.body.appendChild(chips);
+            }
+
+            const entries = (d.entry_ids || [])
+                .map((id) => entriesById[String(id)])
+                .filter(Boolean)
+                .sort((a, b) => (b.sort_key || 0) - (a.sort_key || 0));
+            if (entries.length) {
+                api.body.appendChild(el("h3", "eg-panel-section-title", "Entries"));
+                const list = el("ul", "eg-list");
+                entries.forEach((entry) => {
+                    const item = el("li");
+                    const link = el("a", "eg-list-item");
+                    link.href = `/entries/${encodeURIComponent(entry.id)}/view`;
+                    link.appendChild(el("span", "", entry.title));
+                    link.appendChild(el("small", "", entry.display_date || ""));
+                    item.appendChild(link);
+                    list.appendChild(item);
+                });
+                api.body.appendChild(list);
+            }
+
+            const cta = el("a", "eg-cta", "Filter timeline by tag");
+            cta.href = filterUrl(d.label);
+            api.footer.appendChild(cta);
+        }
+
+        graph.loading("Loading tag clusters…");
+        fetch(`/api/groups/${groupId}/topics`, { headers: { Accept: "application/json" } })
+            .then((res) => {
                 if (!res.ok) throw new Error("Failed to load topic clusters");
                 return res.json();
             })
-            .then(data => {
-                renderGraph(data);
+            .then((data) => {
+                data.nodes = data.nodes || [];
+                data.edges = data.edges || [];
+                entriesById = data.entries || {};
+                const sizes = data.nodes.map((n) => n.size || 1);
+                const minSize = sizes.length ? Math.min(...sizes) : 1;
+                const maxSize = sizes.length ? Math.max(...sizes) : 1;
+                radiusScale = minSize === maxSize
+                    ? () => 20
+                    : (size) => 8 + 22 * ((Math.sqrt(size) - Math.sqrt(minSize)) / (Math.sqrt(maxSize) - Math.sqrt(minSize)));
+                const ranked = detectClusters(data);
+                renderLegend(ranked);
+                const entryIds = new Set();
+                data.nodes.forEach((n) => (n.entry_ids || []).forEach((id) => entryIds.add(id)));
+                stats.querySelector("[data-stat-nodes]").textContent = String(data.nodes.length);
+                stats.querySelector("[data-stat-clusters]").textContent =
+                    String(ranked.filter((c) => c.members.length > 1).length);
+                stats.querySelector("[data-stat-entries]").textContent = String(entryIds.size);
+                stats.hidden = data.nodes.length === 0;
+                graph.render(data);
             })
-            .catch(err => {
-                loadingSpinner.style.display = 'none';
-                setZoomButtonsDisabled(true);
-                container.innerHTML = `<p class="text-danger text-center pt-5 mt-5">Error loading tag clusters: ${err.message}</p>`;
+            .catch((err) => {
+                graph.error(`Error loading tag clusters: ${err.message}`);
             });
     });
 </script>

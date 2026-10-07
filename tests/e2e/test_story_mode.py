@@ -444,7 +444,7 @@ def test_saved_story_with_presentation_toggle_shows_iframe(
     presentation_frame = page.locator(".story-presentation-frame")
     expect(presentation_frame).to_be_visible()
     expect(presentation_frame).to_have_attribute(
-        "src", f"/story/{story_id}/presentation"
+        "src", f"/story/{story_id}/deck"
     )
 
 
@@ -484,7 +484,7 @@ def test_saved_story_presentation_navigation_buttons_change_slides(
         compiled_css="section { color: #123456; }",
     )
 
-    page.goto(f"/story/{story_id}/presentation")
+    page.goto(f"/story/{story_id}/deck")
 
     counter = page.locator("[data-deck-counter]")
     expect(counter).to_have_text("1 / 2")
@@ -619,3 +619,113 @@ def test_story_page_year_month_scope_filters_count_correctly(
     # No date filter — should see 2 entries
     page.goto(f"/story?group_id={group_id}")
     expect(page.locator(".story-hero")).to_contain_text("2 scoped entr")
+
+
+_CINEMATIC_NARRATIVE_HTML = (
+    '<section class="story-section mb-4"><h2 class="h5 mb-2">Opening act</h2>'
+    "<p>First chapter body.</p>"
+    '<p class="small text-body-secondary mb-0">Sources '
+    '<a href="#citation-1" class="story-inline-citation">[1]</a></p></section>'
+    '<section class="story-section mb-4"><h2 class="h5 mb-2">Second act</h2>'
+    "<p>Second chapter body with &lt;script&gt;alert(1)&lt;/script&gt; text.</p></section>"
+)
+
+
+def _seed_cinematic_story(e2e_session, suffix: str) -> tuple[int, str]:
+    group_id = _ensure_group(e2e_session.db_path, _group_name(e2e_session, suffix))
+    entry_id = _seed_entry(
+        e2e_session.db_path,
+        group_id=group_id,
+        year=2026,
+        month=4,
+        day=12,
+        title="Cinematic cited entry",
+        final_text="<p>Cinematic cited entry body.</p>",
+    )
+    story_title = f"{e2e_session.run_id} Cinematic Story {suffix}"
+    story_id = _seed_story(
+        e2e_session.db_path,
+        group_id=group_id,
+        title=story_title,
+        narrative_html=_CINEMATIC_NARRATIVE_HTML,
+        entry_id=entry_id,
+    )
+    return story_id, story_title
+
+
+def test_saved_story_present_button_opens_cinematic_presentation(
+    page: Page,
+    e2e_session,
+) -> None:
+    story_id, story_title = _seed_cinematic_story(e2e_session, "present-button")
+
+    page.goto(f"/story/{story_id}")
+    present_link = page.locator("[data-story-present-link]")
+    expect(present_link).to_be_visible()
+    expect(present_link).to_have_attribute("href", f"/story/{story_id}/presentation")
+    present_link.click()
+
+    expect(page).to_have_url(re.compile(rf"/story/{story_id}/presentation#title$"))
+    active = page.locator("[data-cine-slide].is-active")
+    expect(active.locator(".cine-title")).to_have_text(story_title)
+    expect(page.locator("[data-cine-counter]")).to_have_text("1 / 4")
+
+
+def test_cinematic_presentation_keyboard_navigation_and_hash(
+    page: Page,
+    e2e_session,
+) -> None:
+    errors: list[str] = []
+    page.on("pageerror", lambda exc: errors.append(str(exc)))
+    page.on(
+        "console",
+        lambda message: errors.append(message.text)
+        if message.type == "error"
+        and not message.text.startswith("Failed to load resource")
+        else None,
+    )
+    story_id, _ = _seed_cinematic_story(e2e_session, "keyboard")
+
+    page.goto(f"/story/{story_id}/presentation")
+    counter = page.locator("[data-cine-counter]")
+    active = page.locator("[data-cine-slide].is-active")
+    expect(counter).to_have_text("1 / 4")
+
+    page.keyboard.press("ArrowRight")
+    expect(counter).to_have_text("2 / 4")
+    expect(page).to_have_url(re.compile(r"#chapter-1$"))
+    expect(active.locator(".cine-heading")).to_have_text("Opening act")
+    cited_link = active.locator(".cine-cite-card")
+    expect(cited_link).to_contain_text("Cinematic cited entry")
+    expect(cited_link).to_have_attribute("href", re.compile(r"^/entries/\d+/view$"))
+
+    page.keyboard.press("PageDown")
+    expect(counter).to_have_text("3 / 4")
+    expect(active.locator(".cine-heading")).to_have_text("Second act")
+    # AI text is rendered as escaped text, never as markup.
+    expect(active.locator(".cine-body")).to_contain_text("<script>alert(1)</script>")
+
+    page.keyboard.press("Space")
+    expect(counter).to_have_text("4 / 4")
+    expect(page).to_have_url(re.compile(r"#end$"))
+
+    page.keyboard.press("ArrowLeft")
+    expect(counter).to_have_text("3 / 4")
+    page.keyboard.press("Home")
+    expect(counter).to_have_text("1 / 4")
+    page.keyboard.press("End")
+    expect(counter).to_have_text("4 / 4")
+    page.keyboard.press("PageUp")
+    expect(counter).to_have_text("3 / 4")
+    expect(page).to_have_url(re.compile(r"#chapter-2$"))
+
+    page.reload()
+    expect(counter).to_have_text("3 / 4")
+    expect(active.locator(".cine-heading")).to_have_text("Second act")
+
+    page.locator("[data-cine-dot='1']").click()
+    expect(counter).to_have_text("2 / 4")
+
+    page.keyboard.press("Escape")
+    expect(page).to_have_url(re.compile(rf"/story/{story_id}$"))
+    assert errors == []
