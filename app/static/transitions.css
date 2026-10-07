@@ -1,0 +1,54 @@
+/* Cross-document view transitions (Chromium). Other browsers navigate normally. */
+@view-transition {
+    navigation: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    @view-transition {
+        navigation: none;
+    }
+}
+
+/* Keep the sticky navbar fixed in place instead of crossfading with the page. */
+body > .navbar {
+    view-transition-name: site-navbar;
+}
+
+::view-transition-group(site-navbar),
+::view-transition-old(site-navbar),
+::view-transition-new(site-navbar) {
+    animation: none;
+}
+
+::view-transition-old(site-navbar) {
+    display: none;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation-duration: 220ms;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Signature entry morph: the clicked card grows into the detail view and back. */
+::view-transition-group(*.entry-morph) {
+    overflow: clip;
+    border-radius: var(--bs-card-border-radius, 0.5rem);
+    animation-duration: 320ms;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+::view-transition-old(*.entry-morph),
+::view-transition-new(*.entry-morph) {
+    width: auto;
+    height: auto;
+    object-fit: none;
+    object-position: top left;
+    animation-duration: 320ms;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Let the outgoing snapshot fade a little faster so text never double-exposes. */
+::view-transition-old(*.entry-morph) {
+    animation-duration: 180ms;
+}
