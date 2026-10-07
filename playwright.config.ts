@@ -6,9 +6,9 @@ export default defineConfig({
   testMatch: '**/*.spec.ts',
   fullyParallel: true,
   // Each test boots its own isolated server inside the test-scoped e2eSession
-  // fixture (allowed up to 60s by the harness), so the per-test budget must
+  // fixture (allowed up to 120s by the harness), so the per-test budget must
   // cover that boot plus the test body even when workers run in parallel.
-  timeout: 90_000,
+  timeout: 180_000,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,

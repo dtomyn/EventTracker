@@ -211,12 +211,29 @@ test('red string overlay ties connected posters together and springs back when p
 
   // Pluck the Suspect-Witness string: it follows the pointer, then springs home.
   const core = board.string(suspect, witness).locator('.yarn__core');
-  // Strings are drawn in slack and pull taut; wait for the rest shape to settle.
-  await expect.poll(async () => {
-    const before = await core.getAttribute('d');
-    await page.waitForTimeout(250);
-    return before === (await core.getAttribute('d'));
-  }, { timeout: 5000 }).toBe(true);
+  // The yarn stays held (undrawn, its path frozen or empty) until the posters
+  // have landed, then draws in slack and springs taut. Wait in-page until it has
+  // been released and its path has stopped changing for a run of frames; a
+  // frozen path while still held is not the rest shape.
+  await core.evaluate(
+    (path) =>
+      new Promise<void>((resolve, reject) => {
+        const yarnLayer = (path as SVGPathElement).ownerSVGElement as SVGSVGElement;
+        const deadline = performance.now() + 8000;
+        let last: string | null = null;
+        let stableFrames = 0;
+        const tick = () => {
+          const d = path.getAttribute('d');
+          const released = !yarnLayer.classList.contains('held') && !!d;
+          stableFrames = released && d === last ? stableFrames + 1 : 0;
+          last = d;
+          if (stableFrames >= 15) return resolve();
+          if (performance.now() > deadline) return reject(new Error('Red string never settled'));
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+  );
   const restPath = await core.getAttribute('d');
   // The yarn runs behind the posters: grab it where it crosses open cork.
   const grip = await board.string(suspect, witness).locator('.yarn__hit').evaluate((path) => {
