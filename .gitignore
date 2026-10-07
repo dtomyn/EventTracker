@@ -5,16 +5,13 @@ __pycache__/
 # C extensions
 *.so
 # Distribution / packaging
-Python
-env/
-venv/
-ENV/
+.Python
 build/
 develop-eggs/
 dist/
 downloads/
 eggs/
-eggs/
+.eggs/
 lib/
 lib64/
 parts/
@@ -23,7 +20,7 @@ var/
 wheels/
 share/python-wheels/
 *.egg-info/
-installed.cfg
+.installed.cfg
 *.egg
 # PyInstaller
 # Usually these files are written by a python script from a template
@@ -36,15 +33,15 @@ pip-delete-this-directory.txt
 # Unit test / coverage reports
 .pytest_cache/
 htmlcov/
-tox/
-nox/
-coverage
-coverage.*
-cache
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
 nosetests.xml
 coverage.xml
 *.cover
-hypothesis/
+.hypothesis/
 # Translations
 *.mo
 *.pot
@@ -55,32 +52,34 @@ docs/_build/
 # PyBuilder
 target/
 # Jupyter Notebook
-ipynb_checkpoints
+.ipynb_checkpoints
 # IPython
 profile_default/
-# pyenv
-python-version
 # celery beat schedule file
 celerybeat-schedule
 # dotenv
-env
+.env
 # virtualenv
+.venv/
+env/
 venv/
+ENV/
+env.bak/
+venv.bak/
 # Spyder project settings
-spyderproject
+.spyderproject
+.spyproject
 # Rope project settings
-ropeproject
+.ropeproject
 # mkdocs documentation
 /site
 # mypy
-mypy_cache/
-# IDEs and editors specific files:
-idea/
-vscode/
+.mypy_cache/
+# IDEs and editors specific files (.vscode/ is tracked on purpose):
+.idea/
 # macOS specific files:
-DS_Store
+.DS_Store
 
-.env
 .eventtracker-dev-reload.pid
 node_modules/
 playwright-report/
@@ -92,3 +91,8 @@ data/
 gif_frames_story/
 # Demo videos are uploaded to GitHub as attachments, not committed
 demo-output/
+# Claude Code worktrees (local checkouts, never commit)
+.claude/worktrees/
+# Personal agent settings (machine-specific permissions)
+.claude/settings.local.json
+.github/settings.local.json
