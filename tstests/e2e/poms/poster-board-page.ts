@@ -17,6 +17,7 @@ export class PosterBoardPage {
   readonly stringToggle: Locator;
   readonly strings: Locator;
   readonly tacks: Locator;
+  readonly connectionCard: Locator;
 
   constructor(private readonly page: Page) {
     this.heading = page.getByRole('heading', { level: 1 });
@@ -34,6 +35,7 @@ export class PosterBoardPage {
     this.stringToggle = page.getByRole('button', { name: /Red string/ });
     this.strings = page.locator('svg.strings .yarn');
     this.tacks = page.locator('svg.strings .tack');
+    this.connectionCard = page.getByRole('dialog', { name: 'Connection detail' });
   }
 
   /** Opens the poster board for the selected group. */

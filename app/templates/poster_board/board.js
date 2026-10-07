@@ -672,6 +672,7 @@
     var live = str.on && !flowing;
     document.body.classList.toggle("strings-on", live);
     str.edges = live ? edges : [];
+    if(tieKey && !str.edges.some(function(e){ return e.key === tieKey; })) closeTie();
     if(!live){ str.grab = null; str.pluck = {}; strSvg.classList.remove("plucking"); }
     var linked = {};
     str.edges.forEach(function(e){ linked[e.a] = linked[e.b] = 1; });
@@ -760,7 +761,8 @@
     var key = hit.getAttribute("data-key");
     var off = pullOffset(key, e.clientX, e.clientY);
     if(!off) return;
-    str.grab = {key:key, id:e.pointerId, g:hit.parentNode};
+    str.grab = {key:key, id:e.pointerId, g:hit.parentNode,
+                x0:e.clientX, y0:e.clientY, t0:performance.now(), far:false};
     str.pluck[key] = off;
     try { hit.setPointerCapture(e.pointerId); } catch(err){}
     hit.parentNode.classList.add("taut");
@@ -769,6 +771,7 @@
   });
   strSvg.addEventListener("pointermove", function(e){
     if(!str.grab || e.pointerId !== str.grab.id) return;
+    if(Math.abs(e.clientX - str.grab.x0) + Math.abs(e.clientY - str.grab.y0) > 6) str.grab.far = true;
     var off = pullOffset(str.grab.key, e.clientX, e.clientY);
     if(!off) return;
     str.pluck[str.grab.key] = off;
@@ -777,13 +780,138 @@
   function letGo(e){
     if(!str.grab || e.pointerId !== str.grab.id) return;
     var key = str.grab.key;
+    /* a press that never turned into a pull is a click: read the string */
+    var tapped = e.type === "pointerup" && !str.grab.far && performance.now() - str.grab.t0 < 500;
     str.grab.g.classList.remove("taut");
     strSvg.classList.remove("plucking");
     str.grab = null;
+    if(tapped) openTie(key, e.clientX, e.clientY);
     if(reduced){ delete str.pluck[key]; drawStrings(); return; }
     springStep();
   }
   strSvg.addEventListener("pointerup", letGo);
+  strSvg.addEventListener("contextmenu", function(e){
+    var hit = e.target.closest && e.target.closest(".yarn__hit");
+    if(!hit) return;
+    e.preventDefault();
+    openTie(hit.getAttribute("data-key"), e.clientX, e.clientY);
+  });
+
+  /* ---------- what ties two posters together ----------
+     Clicking (or right-clicking) a string opens a small evidence card for that
+     connection: the two events, the note recorded on the link, and whatever
+     else they have in common. Every fact here is already in the payload, so it
+     works in the export too. */
+  var tie = document.getElementById("tie");
+  var tieKey = null;
+
+  function byId(id){ return items.find(function(it){ return it.id === id; }); }
+
+  function connectionNote(a, b){
+    var c = (a.connections || []).find(function(x){ return x.id === b.id; }) ||
+            (b.connections || []).find(function(x){ return x.id === a.id; });
+    return c && c.note ? c.note : "";
+  }
+
+  function apart(a, b){
+    var pa = splitKey(a.sort_key || 0), pb = splitKey(b.sort_key || 0);
+    if(!pa[0] || !pb[0]) return "";
+    var days = Math.round(Math.abs(keyDate(a.sort_key) - keyDate(b.sort_key)) / 86400000);
+    var exact = pa[2] && pb[2];
+    if(days === 0 && exact) return "Same day";
+    if(days < 45 && exact) return days + " day" + (days === 1 ? "" : "s") + " apart";
+    var months = Math.abs((pa[0] - pb[0]) * 12 + (pa[1] - pb[1]));
+    if(months === 0) return "Same month";
+    if(months < 24) return months + " month" + (months === 1 ? "" : "s") + " apart";
+    return Math.round(months / 12) + " years apart";
+  }
+
+  function tieEnd(it){
+    return '<button type="button" class="tie__end" data-act="goto" data-id="' + Number(it.id) +
+      '" data-hue="' + Number(it.hue) + '"><span class="dot"></span><span>' +
+      '<b>' + esc(it.headline) + '</b><small>' + esc(it.date) + ' &middot; ' + esc(it.category) +
+      '</small></span></button>';
+  }
+
+  function tieHTML(a, b){
+    var note = connectionNote(a, b);
+    var bTags = {};
+    (b.tags || []).forEach(function(t){ bTags[t.toLowerCase()] = 1; });
+    var shared = (a.tags || []).filter(function(t){ return bTags[t.toLowerCase()]; });
+    var gap = apart(a, b);
+    return '<div class="tie__band"><span>Connection</span>' +
+        '<button class="x" type="button" data-act="close" aria-label="Close">&times;</button></div>' +
+      '<div class="tie__body">' +
+        tieEnd(a) +
+        '<div class="tie__link" aria-hidden="true"><span></span>' + (gap ? esc(gap) : "") + '</div>' +
+        tieEnd(b) +
+        '<h4>Why they are linked</h4>' +
+        (note ? '<p class="tie__note">' + esc(note) + '</p>'
+              : '<p class="tie__note tie__note--none">No note was recorded for this connection.</p>') +
+        '<dl class="facts">' +
+          '<dt>Group</dt><dd>' + (a.group === b.group ? 'Both in ' + esc(a.group)
+                                   : esc(a.group) + ' / ' + esc(b.group)) + '</dd>' +
+        '</dl>' +
+        (shared.length
+          ? '<h4>Shared tags</h4><div class="tags">' +
+            shared.map(function(t){ return '<span class="tag">' + esc(t) + '</span>'; }).join("") + '</div>'
+          : '') +
+      '</div>';
+  }
+
+  function openTie(key, cx, cy){
+    var e = str.edges.find(function(x){ return x.key === key; });
+    if(!e) return;
+    var a = byId(e.a), b = byId(e.b);
+    if(!a || !b) return;
+    /* read in time order */
+    if((a.sort_key || 0) > (b.sort_key || 0)){ var t = a; a = b; b = t; }
+    tie.innerHTML = tieHTML(a, b);
+    tieKey = key;
+    Array.prototype.forEach.call(strYarns.children, function(g){
+      g.classList.toggle("picked", g === str.paths[key]);
+    });
+    strSvg.classList.add("picking");
+    if(!tie.open) tie.show();
+    var w = tie.offsetWidth, h = tie.offsetHeight, m = 12;
+    var x = cx + 16, y = cy + 16;
+    if(x + w > window.innerWidth - m) x = cx - w - 16;
+    if(y + h > window.innerHeight - m) y = window.innerHeight - h - m;
+    tie.style.left = Math.max(m, x) + "px";
+    tie.style.top = Math.max(m, y) + "px";
+    var x0 = tie.querySelector('[data-act="close"]');
+    if(x0) x0.focus({preventScroll:true});
+  }
+
+  function closeTie(){
+    if(!tie.open) return;
+    tie.close();
+  }
+  tie.addEventListener("close", function(){
+    tieKey = null;
+    strSvg.classList.remove("picking");
+    Array.prototype.forEach.call(strYarns.children, function(g){ g.classList.remove("picked"); });
+  });
+  tie.addEventListener("click", function(e){
+    var act = e.target.closest("[data-act]");
+    if(!act) return;
+    if(act.dataset.act === "close"){ closeTie(); return; }
+    if(act.dataset.act === "goto"){
+      var id = Number(act.dataset.id);
+      var idx = shown.findIndex(function(it){ return it.id === id; });
+      closeTie();
+      if(idx < 0) return;
+      if(nodes[id]) lastFocus = nodes[id].parts.paper;
+      show(idx, 0);
+    }
+  });
+  tie.addEventListener("keydown", function(e){
+    if(e.key === "Escape"){ e.preventDefault(); e.stopPropagation(); closeTie(); }
+  });
+  /* any press elsewhere dismisses it; a press on another string re-targets it */
+  document.addEventListener("pointerdown", function(e){
+    if(tie.open && !tie.contains(e.target)) closeTie();
+  }, true);
   strSvg.addEventListener("pointercancel", letGo);
   strSvg.addEventListener("lostpointercapture", letGo);
 

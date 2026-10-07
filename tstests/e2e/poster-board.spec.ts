@@ -221,6 +221,27 @@ test('red string overlay ties connected posters together and springs back when p
   await expect(core).not.toHaveAttribute('d', restPath ?? '');
   await page.mouse.up();
   await expect.poll(() => core.getAttribute('d'), { timeout: 4000 }).toBe(restPath);
+  // A pluck is not a click: the connection card stays shut.
+  await expect(board.connectionCard).toBeHidden();
+
+  // Clicking a string explains the connection.
+  await page.mouse.click(grip.x, grip.y);
+  await expect(board.connectionCard).toBeVisible();
+  await expect(board.connectionCard).toContainText(titles[0]);
+  await expect(board.connectionCard).toContainText(titles[1]);
+  await expect(board.connectionCard).toContainText('linked');
+  await expect(board.connectionCard).toContainText('1 day apart');
+  await page.keyboard.press('Escape');
+  await expect(board.connectionCard).toBeHidden();
+
+  // Right-click works too, and an end of the string opens that poster.
+  await page.mouse.click(grip.x, grip.y, { button: 'right' });
+  await expect(board.connectionCard).toBeVisible();
+  await board.connectionCard.getByRole('button', { name: new RegExp(titles[1]) }).click();
+  await expect(board.connectionCard).toBeHidden();
+  await expect(board.dialogHeading).toHaveText(titles[1]);
+  await board.closeButton.click();
+  await expect(board.dialog).toBeHidden();
 
   // Filtering out the hub poster leaves nothing to tie together.
   await board.search(titles[3]);

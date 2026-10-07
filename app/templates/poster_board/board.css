@@ -258,6 +258,10 @@
   .strings.focusing .yarn.hot .yarn__core{stroke-width:3.2}
   .yarn.draw .yarn__core{stroke-dasharray:1; stroke-dashoffset:1; animation:yarnDraw .75s var(--ease) forwards}
   .yarn.draw .yarn__twist{opacity:0; animation:fadeIn .3s .55s ease forwards}
+  /* the string whose connection card is open stays lit */
+  .strings.picking .yarn{opacity:.22}
+  .strings .yarn.picked{opacity:1}
+  .yarn.picked .yarn__core{stroke-width:3.4}
   .tack__pin{animation:tackIn .32s var(--ease) both}
   .tack__head{fill:url(#tack-head); stroke:rgba(70,8,6,.55); stroke-width:.6}
   .tack__shadow{fill:rgba(58,22,8,.32)}
@@ -347,6 +351,52 @@
   .sheet__nav button:hover:not(:disabled){transform:translateY(-2px); border-color:var(--ink)}
   .sheet__nav button:disabled{opacity:.35; cursor:default}
   .sheet__nav .of{margin-left:auto; font:700 11px/1 var(--mono); letter-spacing:.08em; color:var(--ink-3)}
+
+  /* ---------------- connection card: what a red string means ---------------- */
+  dialog#tie{
+    position:fixed; inset:auto; margin:0; padding:0; z-index:40;
+    width:min(340px,calc(100vw - 24px)); max-height:calc(100vh - 24px); overflow:auto;
+    border:0; border-radius:3px; background:var(--card); color:var(--ink);
+    box-shadow:0 22px 48px -16px rgba(40,26,8,.65), 0 3px 8px rgba(40,26,8,.28);
+    animation:popIn .22s var(--ease) both;
+  }
+  .tie__band{
+    background:#B3141B; color:#FFF6F0; padding:10px 10px 10px 16px; display:flex; align-items:center;
+    font:800 10.5px/1 var(--sans); letter-spacing:.14em; text-transform:uppercase;
+    position:sticky; top:0;
+  }
+  .tie__band .x{
+    margin-left:auto; appearance:none; cursor:pointer; background:rgba(255,255,255,.18);
+    border:0; color:#fff; width:26px; height:26px; border-radius:50%; font:400 15px/1 var(--sans);
+    transition:background .16s, transform .16s var(--ease);
+  }
+  .tie__band .x:hover{background:rgba(255,255,255,.34); transform:rotate(90deg)}
+  .tie__body{padding:14px 16px 4px}
+  .tie__body h4{
+    font:800 9.5px/1 var(--sans); letter-spacing:.16em; text-transform:uppercase;
+    color:#B3141B; margin:14px 0 6px;
+  }
+  .tie__end{
+    display:flex; align-items:flex-start; gap:9px; width:100%; text-align:left; cursor:pointer;
+    appearance:none; background:var(--paper); border:1px solid rgba(44,36,24,.14); border-radius:3px;
+    padding:9px 11px; color:var(--ink); transition:transform .16s var(--ease), border-color .16s;
+  }
+  .tie__end:hover, .tie__end:focus-visible{transform:translateY(-1px); border-color:var(--accent); outline:none}
+  .tie__end .dot{flex:none; width:8px; height:8px; border-radius:50%; background:var(--pin); margin-top:4px}
+  .tie__end b{display:block; font:800 13px/1.25 var(--sans); color:var(--ink)}
+  .tie__end small{display:block; margin-top:3px; font:600 11px/1.3 var(--sans); color:var(--ink-3)}
+  .tie__link{
+    display:flex; align-items:center; gap:8px; padding:5px 0 5px 14px;
+    font:700 10px/1 var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3);
+  }
+  .tie__link span{width:2px; height:18px; background:#C8161D; border-radius:2px}
+  .tie__note{margin:0; font-size:13.5px; line-height:1.5; color:var(--ink); white-space:pre-wrap}
+  .tie__note--none{color:var(--ink-3); font-style:italic}
+  dialog#tie .facts{display:grid; grid-template-columns:auto 1fr; gap:5px 12px; margin:14px 0 0; font-size:12.5px}
+  dialog#tie .facts dt{font:800 9.5px/1.5 var(--sans); letter-spacing:.14em; text-transform:uppercase; color:var(--ink-3)}
+  dialog#tie .facts dd{margin:0}
+  dialog#tie .tags{margin-bottom:12px}
+  dialog#tie .facts:last-child{margin-bottom:12px}
 
   /* ---------------- animations ---------------- */
   @keyframes drop{from{opacity:0; transform:translateY(-22px) rotate(-1.5deg)}to{opacity:1; transform:translateY(0) rotate(-.15deg)}}
