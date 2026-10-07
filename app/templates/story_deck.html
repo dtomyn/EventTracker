@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page_title }}</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            background: #0f172a;
+            color: #e2e8f0;
+        }
+
+        /* ---------- toolbar ---------- */
+        .deck-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem 1.25rem;
+            background: #1e293b;
+            border-bottom: 1px solid #334155;
+            flex-shrink: 0;
+            z-index: 10;
+        }
+
+        .deck-toolbar-title {
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: #94a3b8;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            min-width: 0;
+        }
+
+        .deck-toolbar-spacer { flex: 1; }
+
+        .deck-toolbar-counter {
+            font-size: 0.75rem;
+            color: #64748b;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+
+        .deck-toolbar-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2rem;
+            height: 2rem;
+            border: 1px solid #475569;
+            border-radius: 0.375rem;
+            background: transparent;
+            color: #cbd5e1;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+        }
+
+        .deck-toolbar-btn:hover,
+        .deck-toolbar-btn:focus-visible {
+            background: #334155;
+            color: #f1f5f9;
+            border-color: #64748b;
+            outline: none;
+        }
+
+        .deck-toolbar-btn:disabled {
+            opacity: 0.35;
+            cursor: default;
+        }
+
+        .deck-toolbar-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* ---------- slide viewport ---------- */
+        .deck-viewport {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .deck-slide-container {
+            position: relative;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            box-shadow:
+                0 0 0 1px rgba(255, 255, 255, 0.06),
+                0 20px 60px rgba(0, 0, 0, 0.5),
+                0 8px 24px rgba(0, 0, 0, 0.3);
+        }
+
+        .deck-slide-scaler {
+            width: 1280px;
+            height: 720px;
+            transform-origin: top left;
+        }
+
+        .deck-slide-scaler > .marpit {
+            width: 1280px;
+            height: 720px;
+        }
+
+        /* ---------- slide content (Marpit sections) ---------- */
+        .deck-slide-scaler > .marpit > section,
+        .deck-slide-scaler > section {
+            display: none;
+            width: 1280px;
+            height: 720px;
+        }
+
+        .deck-slide-scaler > .marpit > section.is-active,
+        .deck-slide-scaler > section.is-active {
+            display: block;
+        }
+
+        /* ---------- progress bar ---------- */
+        .deck-progress {
+            height: 3px;
+            background: #1e293b;
+            flex-shrink: 0;
+        }
+
+        .deck-progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #0ea5e9, #38bdf8);
+            transition: width 0.3s ease;
+            border-radius: 0 2px 2px 0;
+        }
+
+        /* ---------- keyboard hint ---------- */
+        .deck-hint {
+            position: absolute;
+            bottom: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.6875rem;
+            color: #475569;
+            pointer-events: none;
+            opacity: 1;
+            transition: opacity 0.5s;
+        }
+
+        .deck-hint.is-hidden { opacity: 0; }
+
+        .deck-hint kbd {
+            display: inline-block;
+            padding: 0.1em 0.45em;
+            font-size: 0.625rem;
+            font-family: inherit;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 0.25rem;
+            color: #94a3b8;
+        }
+    </style>
+    <style>{{ compiled_css }}</style>
+    <style>
+        .et-slide--thank_you .et-slide-subtitle,
+        .et-slide--thank_you .et-point-list,
+        .et-slide--thank_you .et-point-list li,
+        .et-slide--thank_you .et-callout,
+        .et-slide--thank_you .et-pull-quote p,
+        .et-slide--thank_you .et-phase-timeline li,
+        .et-slide--thank_you .et-bar-label,
+        .et-slide--thank_you .et-icon-label {
+            color: #e2e8f0 !important;
+        }
+
+        .et-slide--thank_you .et-point-list li::marker,
+        .et-slide--thank_you .et-phase-timeline li::marker {
+            color: #7dd3fc !important;
+        }
+
+        .et-slide--thank_you .et-callout,
+        .et-slide--thank_you .et-pull-quote,
+        .et-slide--thank_you .et-phase-timeline,
+        .et-slide--thank_you .et-bar-chart,
+        .et-slide--thank_you .et-icon-item {
+            background: rgba(15, 23, 42, 0.28) !important;
+            border-color: rgba(125, 211, 252, 0.35) !important;
+            box-shadow: none !important;
+        }
+
+        .et-slide--thank_you .et-slide-sources {
+            color: #94a3b8 !important;
+        }
+
+        .et-slide--thank_you .et-source-link {
+            color: #7dd3fc !important;
+        }
+    </style>
+</head>
+<body>
+    <header class="deck-toolbar">
+        <span class="deck-toolbar-title">{{ story.title }}</span>
+        <span class="deck-toolbar-spacer"></span>
+        <span class="deck-toolbar-counter" data-deck-counter></span>
+        <button class="deck-toolbar-btn" data-deck-prev title="Previous slide" aria-label="Previous slide">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <button class="deck-toolbar-btn" data-deck-next title="Next slide" aria-label="Next slide">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
+    </header>
+
+    <div class="deck-progress"><div class="deck-progress-bar" data-deck-progress></div></div>
+
+    <main class="deck-viewport" data-deck-viewport>
+        <div class="deck-slide-container">
+            <div class="deck-slide-scaler" data-deck-scaler>
+                {{ compiled_html }}
+            </div>
+        </div>
+        <div class="deck-hint" data-deck-hint>
+            <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or click to navigate
+        </div>
+    </main>
+
+    <script>
+        (function () {
+            var BASE_WIDTH = 1280;
+            var BASE_HEIGHT = 720;
+            var scaler = document.querySelector('[data-deck-scaler]');
+            var counter = document.querySelector('[data-deck-counter]');
+            var progress = document.querySelector('[data-deck-progress]');
+            var prevBtn = document.querySelector('[data-deck-prev]');
+            var nextBtn = document.querySelector('[data-deck-next]');
+            var viewport = document.querySelector('[data-deck-viewport]');
+            var hint = document.querySelector('[data-deck-hint]');
+            var container = scaler ? scaler.parentElement : null;
+            var currentIndex = 0;
+            var hintTimer = null;
+
+            function isSectionElement(element) {
+                return Boolean(element && element.tagName === 'SECTION');
+            }
+
+            function resolveSlides(root) {
+                if (!root) {
+                    return [];
+                }
+                var marpitRoot = null;
+                try {
+                    marpitRoot = root.querySelector(':scope > .marpit');
+                } catch (error) {
+                    marpitRoot = root.querySelector('.marpit');
+                }
+                if (marpitRoot) {
+                    return Array.prototype.filter.call(
+                        marpitRoot.children,
+                        isSectionElement
+                    );
+                }
+                return Array.prototype.filter.call(root.children, isSectionElement);
+            }
+
+            var slides = resolveSlides(scaler);
+            var total = slides.length;
+
+            if (!scaler || !container || !counter || !progress || !prevBtn || !nextBtn || !viewport) {
+                return;
+            }
+
+            function updateControls() {
+                if (!total) {
+                    counter.textContent = '0 / 0';
+                    progress.style.width = '0%';
+                    prevBtn.disabled = true;
+                    nextBtn.disabled = true;
+                    return;
+                }
+
+                counter.textContent = (currentIndex + 1) + ' / ' + total;
+                progress.style.width = ((currentIndex + 1) / total * 100) + '%';
+                prevBtn.disabled = currentIndex === 0;
+                nextBtn.disabled = currentIndex === total - 1;
+            }
+
+            function showSlide(index) {
+                if (!total || index < 0 || index >= total) return;
+                currentIndex = index;
+                slides.forEach(function (s, i) {
+                    s.classList.toggle('is-active', i === index);
+                });
+                updateControls();
+
+                if (hint && !hint.classList.contains('is-hidden')) {
+                    clearTimeout(hintTimer);
+                    hintTimer = setTimeout(function () { hint.classList.add('is-hidden'); }, 400);
+                }
+            }
+
+            function fitScale() {
+                var viewportStyles = window.getComputedStyle(viewport);
+                var availableWidth = viewport.clientWidth
+                    - parseFloat(viewportStyles.paddingLeft)
+                    - parseFloat(viewportStyles.paddingRight);
+                var availableHeight = viewport.clientHeight
+                    - parseFloat(viewportStyles.paddingTop)
+                    - parseFloat(viewportStyles.paddingBottom);
+                var scale = Math.min(availableWidth / BASE_WIDTH, availableHeight / BASE_HEIGHT);
+
+                if (!Number.isFinite(scale) || scale <= 0) {
+                    scale = 1;
+                }
+
+                scaler.style.transform = 'scale(' + scale + ')';
+                container.style.width = (BASE_WIDTH * scale) + 'px';
+                container.style.height = (BASE_HEIGHT * scale) + 'px';
+            }
+
+            prevBtn.addEventListener('click', function () { showSlide(currentIndex - 1); });
+            nextBtn.addEventListener('click', function () { showSlide(currentIndex + 1); });
+
+            viewport.addEventListener('click', function (e) {
+                if (e.target.closest('a')) return;
+                if (e.target.closest('button')) return;
+                var rect = viewport.getBoundingClientRect();
+                var x = e.clientX - rect.left;
+                if (x < rect.width / 3) {
+                    showSlide(currentIndex - 1);
+                } else {
+                    showSlide(currentIndex + 1);
+                }
+            });
+
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+                    e.preventDefault();
+                    showSlide(currentIndex + 1);
+                } else if (e.key === 'ArrowLeft' || e.key === 'Backspace' || e.key === 'PageUp') {
+                    e.preventDefault();
+                    showSlide(currentIndex - 1);
+                } else if (e.key === 'Home') {
+                    e.preventDefault();
+                    showSlide(0);
+                } else if (e.key === 'End') {
+                    e.preventDefault();
+                    showSlide(total - 1);
+                }
+            });
+
+            window.addEventListener('resize', fitScale);
+            fitScale();
+            updateControls();
+            showSlide(0);
+        })();
+    </script>
+</body>
+</html>
