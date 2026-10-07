@@ -519,18 +519,26 @@ class TestStoryRoutes(unittest.TestCase):
 
             saved_response = client.get(location)
             presentation_view_response = client.get(f"{location}?view=presentation")
-            presentation_response = client.get(f"/story/{story_id}/presentation")
+            presentation_response = client.get(f"/story/{story_id}/deck")
+            cinematic_response = client.get(f"/story/{story_id}/presentation")
 
         self.assertEqual(saved_response.status_code, 200)
         self.assertIn("Deck ready", saved_response.text)
         self.assertIn(
             f'href="/story/{story_id}?view=presentation"', saved_response.text
         )
+        self.assertIn(
+            f'href="/story/{story_id}/presentation" data-story-present-link',
+            saved_response.text,
+        )
 
         self.assertEqual(presentation_view_response.status_code, 200)
         self.assertIn(
-            f'src="/story/{story_id}/presentation"', presentation_view_response.text
+            f'src="/story/{story_id}/deck"', presentation_view_response.text
         )
+
+        self.assertEqual(cinematic_response.status_code, 200)
+        self.assertIn("data-cine-stage", cinematic_response.text)
 
         self.assertEqual(presentation_response.status_code, 200)
         self.assertIn('<div class="marpit">', presentation_response.text)

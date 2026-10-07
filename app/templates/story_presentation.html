@@ -1,365 +1,150 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-presentation-theme="dark">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="dark light">
     <title>{{ page_title }}</title>
-    <style>
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-        html, body {
-            height: 100%;
-            overflow: hidden;
-            font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
-        }
-
-        body {
-            display: flex;
-            flex-direction: column;
-            background: #0f172a;
-            color: #e2e8f0;
-        }
-
-        /* ---------- toolbar ---------- */
-        .deck-toolbar {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            padding: 0.5rem 1.25rem;
-            background: #1e293b;
-            border-bottom: 1px solid #334155;
-            flex-shrink: 0;
-            z-index: 10;
-        }
-
-        .deck-toolbar-title {
-            font-size: 0.8125rem;
-            font-weight: 600;
-            color: #94a3b8;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            min-width: 0;
-        }
-
-        .deck-toolbar-spacer { flex: 1; }
-
-        .deck-toolbar-counter {
-            font-size: 0.75rem;
-            color: #64748b;
-            font-variant-numeric: tabular-nums;
-            white-space: nowrap;
-        }
-
-        .deck-toolbar-btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 2rem;
-            height: 2rem;
-            border: 1px solid #475569;
-            border-radius: 0.375rem;
-            background: transparent;
-            color: #cbd5e1;
-            cursor: pointer;
-            transition: background 0.15s, color 0.15s, border-color 0.15s;
-        }
-
-        .deck-toolbar-btn:hover,
-        .deck-toolbar-btn:focus-visible {
-            background: #334155;
-            color: #f1f5f9;
-            border-color: #64748b;
-            outline: none;
-        }
-
-        .deck-toolbar-btn:disabled {
-            opacity: 0.35;
-            cursor: default;
-        }
-
-        .deck-toolbar-btn svg {
-            width: 16px;
-            height: 16px;
-        }
-
-        /* ---------- slide viewport ---------- */
-        .deck-viewport {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 1.5rem;
-            overflow: hidden;
-            position: relative;
-        }
-
-        .deck-slide-container {
-            position: relative;
-            border-radius: 0.5rem;
-            overflow: hidden;
-            box-shadow:
-                0 0 0 1px rgba(255, 255, 255, 0.06),
-                0 20px 60px rgba(0, 0, 0, 0.5),
-                0 8px 24px rgba(0, 0, 0, 0.3);
-        }
-
-        .deck-slide-scaler {
-            width: 1280px;
-            height: 720px;
-            transform-origin: top left;
-        }
-
-        .deck-slide-scaler > .marpit {
-            width: 1280px;
-            height: 720px;
-        }
-
-        /* ---------- slide content (Marpit sections) ---------- */
-        .deck-slide-scaler > .marpit > section,
-        .deck-slide-scaler > section {
-            display: none;
-            width: 1280px;
-            height: 720px;
-        }
-
-        .deck-slide-scaler > .marpit > section.is-active,
-        .deck-slide-scaler > section.is-active {
-            display: block;
-        }
-
-        /* ---------- progress bar ---------- */
-        .deck-progress {
-            height: 3px;
-            background: #1e293b;
-            flex-shrink: 0;
-        }
-
-        .deck-progress-bar {
-            height: 100%;
-            background: linear-gradient(90deg, #0ea5e9, #38bdf8);
-            transition: width 0.3s ease;
-            border-radius: 0 2px 2px 0;
-        }
-
-        /* ---------- keyboard hint ---------- */
-        .deck-hint {
-            position: absolute;
-            bottom: 1rem;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 0.6875rem;
-            color: #475569;
-            pointer-events: none;
-            opacity: 1;
-            transition: opacity 0.5s;
-        }
-
-        .deck-hint.is-hidden { opacity: 0; }
-
-        .deck-hint kbd {
-            display: inline-block;
-            padding: 0.1em 0.45em;
-            font-size: 0.625rem;
-            font-family: inherit;
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 0.25rem;
-            color: #94a3b8;
-        }
-    </style>
-    <style>{{ compiled_css }}</style>
-    <style>
-        .et-slide--thank_you .et-slide-subtitle,
-        .et-slide--thank_you .et-point-list,
-        .et-slide--thank_you .et-point-list li,
-        .et-slide--thank_you .et-callout,
-        .et-slide--thank_you .et-pull-quote p,
-        .et-slide--thank_you .et-phase-timeline li,
-        .et-slide--thank_you .et-bar-label,
-        .et-slide--thank_you .et-icon-label {
-            color: #e2e8f0 !important;
-        }
-
-        .et-slide--thank_you .et-point-list li::marker,
-        .et-slide--thank_you .et-phase-timeline li::marker {
-            color: #7dd3fc !important;
-        }
-
-        .et-slide--thank_you .et-callout,
-        .et-slide--thank_you .et-pull-quote,
-        .et-slide--thank_you .et-phase-timeline,
-        .et-slide--thank_you .et-bar-chart,
-        .et-slide--thank_you .et-icon-item {
-            background: rgba(15, 23, 42, 0.28) !important;
-            border-color: rgba(125, 211, 252, 0.35) !important;
-            box-shadow: none !important;
-        }
-
-        .et-slide--thank_you .et-slide-sources {
-            color: #94a3b8 !important;
-        }
-
-        .et-slide--thank_you .et-source-link {
-            color: #7dd3fc !important;
-        }
-    </style>
-</head>
-<body>
-    <header class="deck-toolbar">
-        <span class="deck-toolbar-title">{{ story.title }}</span>
-        <span class="deck-toolbar-spacer"></span>
-        <span class="deck-toolbar-counter" data-deck-counter></span>
-        <button class="deck-toolbar-btn" data-deck-prev title="Previous slide" aria-label="Previous slide">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-        </button>
-        <button class="deck-toolbar-btn" data-deck-next title="Next slide" aria-label="Next slide">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-        </button>
-    </header>
-
-    <div class="deck-progress"><div class="deck-progress-bar" data-deck-progress></div></div>
-
-    <main class="deck-viewport" data-deck-viewport>
-        <div class="deck-slide-container">
-            <div class="deck-slide-scaler" data-deck-scaler>
-                {{ compiled_html }}
-            </div>
-        </div>
-        <div class="deck-hint" data-deck-hint>
-            <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or click to navigate
-        </div>
-    </main>
-
     <script>
         (function () {
-            var BASE_WIDTH = 1280;
-            var BASE_HEIGHT = 720;
-            var scaler = document.querySelector('[data-deck-scaler]');
-            var counter = document.querySelector('[data-deck-counter]');
-            var progress = document.querySelector('[data-deck-progress]');
-            var prevBtn = document.querySelector('[data-deck-prev]');
-            var nextBtn = document.querySelector('[data-deck-next]');
-            var viewport = document.querySelector('[data-deck-viewport]');
-            var hint = document.querySelector('[data-deck-hint]');
-            var container = scaler ? scaler.parentElement : null;
-            var currentIndex = 0;
-            var hintTimer = null;
-
-            function isSectionElement(element) {
-                return Boolean(element && element.tagName === 'SECTION');
+            try {
+                var stored = localStorage.getItem('eventtracker-presentation-theme');
+                if (stored === 'light' || stored === 'dark') {
+                    document.documentElement.setAttribute('data-presentation-theme', stored);
+                }
+            } catch (error) {
+                /* storage unavailable: keep the dark default */
             }
-
-            function resolveSlides(root) {
-                if (!root) {
-                    return [];
-                }
-                var marpitRoot = null;
-                try {
-                    marpitRoot = root.querySelector(':scope > .marpit');
-                } catch (error) {
-                    marpitRoot = root.querySelector('.marpit');
-                }
-                if (marpitRoot) {
-                    return Array.prototype.filter.call(
-                        marpitRoot.children,
-                        isSectionElement
-                    );
-                }
-                return Array.prototype.filter.call(root.children, isSectionElement);
-            }
-
-            var slides = resolveSlides(scaler);
-            var total = slides.length;
-
-            if (!scaler || !container || !counter || !progress || !prevBtn || !nextBtn || !viewport) {
-                return;
-            }
-
-            function updateControls() {
-                if (!total) {
-                    counter.textContent = '0 / 0';
-                    progress.style.width = '0%';
-                    prevBtn.disabled = true;
-                    nextBtn.disabled = true;
-                    return;
-                }
-
-                counter.textContent = (currentIndex + 1) + ' / ' + total;
-                progress.style.width = ((currentIndex + 1) / total * 100) + '%';
-                prevBtn.disabled = currentIndex === 0;
-                nextBtn.disabled = currentIndex === total - 1;
-            }
-
-            function showSlide(index) {
-                if (!total || index < 0 || index >= total) return;
-                currentIndex = index;
-                slides.forEach(function (s, i) {
-                    s.classList.toggle('is-active', i === index);
-                });
-                updateControls();
-
-                if (hint && !hint.classList.contains('is-hidden')) {
-                    clearTimeout(hintTimer);
-                    hintTimer = setTimeout(function () { hint.classList.add('is-hidden'); }, 400);
-                }
-            }
-
-            function fitScale() {
-                var viewportStyles = window.getComputedStyle(viewport);
-                var availableWidth = viewport.clientWidth
-                    - parseFloat(viewportStyles.paddingLeft)
-                    - parseFloat(viewportStyles.paddingRight);
-                var availableHeight = viewport.clientHeight
-                    - parseFloat(viewportStyles.paddingTop)
-                    - parseFloat(viewportStyles.paddingBottom);
-                var scale = Math.min(availableWidth / BASE_WIDTH, availableHeight / BASE_HEIGHT);
-
-                if (!Number.isFinite(scale) || scale <= 0) {
-                    scale = 1;
-                }
-
-                scaler.style.transform = 'scale(' + scale + ')';
-                container.style.width = (BASE_WIDTH * scale) + 'px';
-                container.style.height = (BASE_HEIGHT * scale) + 'px';
-            }
-
-            prevBtn.addEventListener('click', function () { showSlide(currentIndex - 1); });
-            nextBtn.addEventListener('click', function () { showSlide(currentIndex + 1); });
-
-            viewport.addEventListener('click', function (e) {
-                if (e.target.closest('a')) return;
-                if (e.target.closest('button')) return;
-                var rect = viewport.getBoundingClientRect();
-                var x = e.clientX - rect.left;
-                if (x < rect.width / 3) {
-                    showSlide(currentIndex - 1);
-                } else {
-                    showSlide(currentIndex + 1);
-                }
-            });
-
-            document.addEventListener('keydown', function (e) {
-                if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
-                    e.preventDefault();
-                    showSlide(currentIndex + 1);
-                } else if (e.key === 'ArrowLeft' || e.key === 'Backspace' || e.key === 'PageUp') {
-                    e.preventDefault();
-                    showSlide(currentIndex - 1);
-                } else if (e.key === 'Home') {
-                    e.preventDefault();
-                    showSlide(0);
-                } else if (e.key === 'End') {
-                    e.preventDefault();
-                    showSlide(total - 1);
-                }
-            });
-
-            window.addEventListener('resize', fitScale);
-            fitScale();
-            updateControls();
-            showSlide(0);
         })();
     </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/presentation.css">
+</head>
+{% set total_slides = chapters | length + 2 %}
+<body class="cine" data-cine data-story-url="{{ story_url }}" data-total="{{ total_slides }}">
+    <a class="cine-skip" href="{{ story_url }}">Exit presentation</a>
+
+    <header class="cine-topbar" data-cine-chrome>
+        <a class="cine-icon-btn cine-exit" href="{{ story_url }}" data-cine-exit title="Exit presentation (Esc)" aria-label="Exit presentation">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </a>
+        <div class="cine-topbar-title">
+            <span class="cine-topbar-kicker">Story Mode</span>
+            <span class="cine-topbar-name">{{ story.title }}</span>
+        </div>
+        <div class="cine-topbar-actions">
+            <span class="cine-counter" data-cine-counter aria-live="polite">1 / {{ total_slides }}</span>
+            <button type="button" class="cine-icon-btn" data-cine-autoplay aria-pressed="false" title="Autoplay (P)" aria-label="Start autoplay">
+                <svg class="cine-icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" class="is-filled"/></svg>
+                <svg class="cine-icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg>
+            </button>
+            <button type="button" class="cine-icon-btn" data-cine-theme title="Toggle light or dark (T)" aria-label="Toggle light or dark theme">
+                <svg class="cine-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+                <svg class="cine-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+            </button>
+            <button type="button" class="cine-icon-btn" data-cine-fullscreen title="Fullscreen (F)" aria-label="Enter fullscreen" aria-pressed="false">
+                <svg class="cine-icon-expand" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+                <svg class="cine-icon-collapse" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
+            </button>
+        </div>
+    </header>
+
+    <main class="cine-stage" data-cine-stage aria-roledescription="presentation" aria-label="{{ story.title }}">
+        <section class="cine-slide cine-slide--title is-active" data-cine-slide data-slide-name="title" style="--hue: 262; --hue-2: 200;" aria-roledescription="slide" aria-label="Title">
+            <div class="cine-bg" aria-hidden="true"><span class="cine-orb cine-orb--a"></span><span class="cine-orb cine-orb--b"></span><span class="cine-orb cine-orb--c"></span></div>
+            <div class="cine-content cine-content--center">
+                <p class="cine-kicker cine-reveal" style="--i: 0;">{{ format_label }}</p>
+                <h1 class="cine-title cine-reveal" style="--i: 1;">{{ story.title }}</h1>
+                <div class="cine-rule cine-reveal" style="--i: 2;" aria-hidden="true"></div>
+                <dl class="cine-facts cine-reveal" style="--i: 3;">
+                    <div class="cine-fact"><dt>Group</dt><dd>{{ group_name }}</dd></div>
+                    <div class="cine-fact"><dt>Scope</dt><dd>{{ scope_label }}</dd></div>
+                    {% if date_span %}<div class="cine-fact"><dt>Span</dt><dd>{{ date_span }}</dd></div>{% endif %}
+                    <div class="cine-fact"><dt>Entries</dt><dd>{{ story.source_entry_count }}</dd></div>
+                </dl>
+                <p class="cine-hint cine-reveal" style="--i: 4;">
+                    <span class="cine-hint-touch">Swipe or tap to begin</span>
+                    <span class="cine-hint-keys">Press <kbd>&rarr;</kbd> to begin, <kbd>F</kbd> for fullscreen</span>
+                </p>
+            </div>
+        </section>
+
+        {% for chapter in chapters %}
+        {% set hue = (200 + loop.index0 * 47) % 360 %}
+        <section class="cine-slide cine-slide--chapter" data-cine-slide data-slide-name="chapter-{{ loop.index }}" style="--hue: {{ hue }}; --hue-2: {{ (hue + 64) % 360 }};" aria-roledescription="slide" aria-label="Chapter {{ loop.index }}: {{ chapter.heading }}">
+            <div class="cine-bg cine-bg--{{ loop.index0 % 3 }}" aria-hidden="true"><span class="cine-orb cine-orb--a"></span><span class="cine-orb cine-orb--b"></span><span class="cine-orb cine-orb--c"></span></div>
+            <div class="cine-content cine-content--chapter{% if not chapter.citations %} has-no-cites{% endif %}">
+                <div class="cine-chapter-main">
+                    <p class="cine-chapter-label cine-reveal" style="--i: 0;">
+                        <span class="cine-chapter-num">{{ '%02d' | format(loop.index) }}</span>
+                        <span class="cine-chapter-of">Chapter {{ loop.index }} of {{ chapters | length }}</span>
+                    </p>
+                    <h2 class="cine-heading cine-reveal" style="--i: 1;">{{ chapter.heading }}</h2>
+                    <div class="cine-body" data-cine-scroll>
+                        {% for paragraph in chapter.paragraphs %}
+                        <p class="cine-reveal{% if loop.first %} cine-lede{% endif %}" style="--i: {{ loop.index0 + 2 }};">{{ paragraph }}</p>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% if chapter.citations %}
+                <aside class="cine-cites cine-reveal" style="--i: {{ chapter.paragraphs | length + 2 }};" aria-label="Cited events">
+                    <p class="cine-cites-label">Cited events</p>
+                    <ol class="cine-cite-strip">
+                        {% for citation in chapter.citations %}
+                        <li class="cine-cite">
+                            {% if citation.entry_url %}<a class="cine-cite-card" href="{{ citation.entry_url }}">{% else %}<div class="cine-cite-card">{% endif %}
+                                <span class="cine-cite-dot" aria-hidden="true"></span>
+                                <span class="cine-cite-meta"><span class="cine-cite-order">[{{ citation.citation_order }}]</span>{% if citation.entry_date %} {{ citation.entry_date }}{% endif %}</span>
+                                <span class="cine-cite-title">{{ citation.entry_title }}</span>
+                                {% if citation.quote_text %}<span class="cine-cite-quote">{{ citation.quote_text }}</span>{% endif %}
+                            {% if citation.entry_url %}</a>{% else %}</div>{% endif %}
+                        </li>
+                        {% endfor %}
+                    </ol>
+                </aside>
+                {% endif %}
+            </div>
+        </section>
+        {% endfor %}
+
+        <section class="cine-slide cine-slide--closing" data-cine-slide data-slide-name="end" style="--hue: 318; --hue-2: 262;" aria-roledescription="slide" aria-label="Closing">
+            <div class="cine-bg" aria-hidden="true"><span class="cine-orb cine-orb--a"></span><span class="cine-orb cine-orb--b"></span><span class="cine-orb cine-orb--c"></span></div>
+            <div class="cine-content cine-content--center">
+                <p class="cine-kicker cine-reveal" style="--i: 0;">Fin</p>
+                <h2 class="cine-title cine-title--closing cine-reveal" style="--i: 1;">{{ story.title }}</h2>
+                <div class="cine-rule cine-reveal" style="--i: 2;" aria-hidden="true"></div>
+                <p class="cine-closing-stats cine-reveal" style="--i: 3;">
+                    <span class="cine-stat">{{ chapters | length }} chapter{% if chapters | length != 1 %}s{% endif %}</span>
+                    <span class="cine-stat">{{ citation_count }} cited event{% if citation_count != 1 %}s{% endif %}</span>
+                    <span class="cine-stat">{{ story.source_entry_count }} entr{% if story.source_entry_count == 1 %}y{% else %}ies{% endif %} in scope</span>
+                </p>
+                <div class="cine-closing-actions cine-reveal" style="--i: 4;">
+                    <button type="button" class="cine-btn cine-btn--primary" data-cine-restart>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+                        Watch again
+                    </button>
+                    <a class="cine-btn" href="{{ story_url }}">Back to story</a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="cine-footer" data-cine-chrome>
+        <nav class="cine-dots" aria-label="Slides">
+            <button type="button" class="cine-dot is-active" data-cine-dot="0" aria-label="Title" aria-current="step"></button>
+            {% for chapter in chapters %}
+            <button type="button" class="cine-dot" data-cine-dot="{{ loop.index }}" aria-label="Chapter {{ loop.index }}: {{ chapter.heading }}" title="{{ chapter.heading }}"></button>
+            {% endfor %}
+            <button type="button" class="cine-dot" data-cine-dot="{{ total_slides - 1 }}" aria-label="Closing"></button>
+        </nav>
+        <div class="cine-progress" role="progressbar" aria-label="Presentation progress" aria-valuemin="1" aria-valuemax="{{ total_slides }}" aria-valuenow="1" data-cine-progress>
+            <div class="cine-progress-fill" data-cine-progress-fill></div>
+            <div class="cine-progress-autoplay" data-cine-autoplay-fill></div>
+        </div>
+    </footer>
+
+    <script src="/static/presentation.js" defer></script>
 </body>
 </html>

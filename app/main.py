@@ -59,6 +59,7 @@ from app.services.ai_story_mode import (
     generate_timeline_story,
 )
 from app.services.story_deck import StoryDeckError, build_executive_deck_artifact
+from app.services.story_presentation import build_presentation_chapters
 from app.services.entries import (
     blank_form_state,
     build_connection_graph,
@@ -1957,7 +1958,7 @@ def saved_story_page(
         )
 
     presentation_url = (
-        f"/story/{story_id}/presentation" if story_artifact is not None else None
+        f"/story/{story_id}/deck" if story_artifact is not None else None
     )
     story_view_mode = _parse_story_view_mode(
         view,
@@ -2039,6 +2040,88 @@ def saved_story_page(
 
 @app.get("/story/{story_id:int}/presentation", response_class=HTMLResponse)
 def saved_story_presentation_page(request: Request, story_id: int) -> HTMLResponse:
+    """Render the cinematic, full-screen chapter presentation of a saved story."""
+    with connection_context() as connection:
+        story = get_story(connection, story_id)
+        if story is None:
+            raise HTTPException(status_code=404, detail="Story not found")
+        selected_group = (
+            get_timeline_group(connection, story.group_id)
+            if story.group_id is not None
+            else None
+        )
+        cited_entries = {
+            citation.entry_id: get_entry(connection, citation.entry_id)
+            for citation in story.citations
+        }
+
+    group_name = (
+        selected_group.name
+        if selected_group is not None
+        else (f"Group {story.group_id}" if story.group_id is not None else "All groups")
+    )
+    citations = _build_story_citation_contexts(story.citations, cited_entries)
+    citation_lookup = {citation["citation_order"]: citation for citation in citations}
+    chapters = build_presentation_chapters(
+        story.narrative_html,
+        fallback_heading=story.title or "The story",
+        narrative_text=story.narrative_text,
+    )
+    chapter_contexts = [
+        {
+            "heading": chapter.heading,
+            "paragraphs": chapter.paragraphs,
+            "citations": [
+                citation_lookup[order]
+                for order in chapter.citation_orders
+                if order in citation_lookup
+            ],
+        }
+        for chapter in chapters
+    ]
+    dated_entries = sorted(
+        (entry for entry in cited_entries.values() if entry is not None),
+        key=lambda entry: entry.sort_key,
+    )
+    date_span = ""
+    if dated_entries:
+        first_date = dated_entries[0].display_date
+        last_date = dated_entries[-1].display_date
+        date_span = (
+            first_date if first_date == last_date else f"{first_date} - {last_date}"
+        )
+    scope_parts: list[str] = []
+    if story.query_text:
+        scope_parts.append(f'Search "{story.query_text}"')
+    if story.year is not None and story.month is not None:
+        scope_parts.append(f"{story.year}-{story.month:02d}")
+    elif story.year is not None:
+        scope_parts.append(str(story.year))
+    if not scope_parts:
+        scope_parts.append("Full timeline")
+
+    context = {
+        "request": request,
+        "page_title": f"{story.title} Presentation",
+        "story": story,
+        "story_url": f"/story/{story_id}",
+        "group_name": group_name,
+        "scope_label": " | ".join(scope_parts),
+        "format_label": _STORY_FORMAT_LABELS.get(story.format, story.format),
+        "date_span": date_span,
+        "chapters": chapter_contexts,
+        "citation_count": len(citations),
+    }
+    return templates.TemplateResponse(
+        request,
+        "story_presentation.html",
+        cast(dict[str, object], context),
+    )
+
+
+@app.get("/story/{story_id:int}/deck", response_class=HTMLResponse)
+def saved_story_deck_page(request: Request, story_id: int) -> HTMLResponse:
+    """Render the compiled executive deck artifact of a saved story."""
     with connection_context() as connection:
         story = get_story(connection, story_id)
         if story is None:
@@ -2056,7 +2139,7 @@ def saved_story_presentation_page(request: Request, story_id: int) -> HTMLRespon
     }
     return templates.TemplateResponse(
         request,
-        "story_presentation.html",
+        "story_deck.html",
         cast(dict[str, object], context),
     )
 
@@ -2090,7 +2173,7 @@ def preview_story_presentation_page(
     }
     return templates.TemplateResponse(
         request,
-        "story_presentation.html",
+        "story_deck.html",
         cast(dict[str, object], context),
     )
 
