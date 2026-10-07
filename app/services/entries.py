@@ -1005,7 +1005,7 @@ def build_connection_graph(
     entry_rows = connection.execute(
         """
         SELECT e.id, e.title, e.event_year, e.event_month, e.event_day,
-               tg.name AS group_name
+               e.sort_key, e.final_text, tg.name AS group_name
         FROM entries e
         JOIN timeline_groups tg ON tg.id = e.group_id
         WHERE e.group_id = ?
@@ -1023,6 +1023,20 @@ def build_connection_graph(
         return {"nodes": [], "edges": []}
 
     conn_rows = list_connections_within(connection, entry_ids)
+
+    tag_map: dict[int, list[str]] = {}
+    placeholders = ",".join("?" for _ in entry_ids)
+    for tag_row in connection.execute(
+        f"""
+        SELECT et.entry_id, t.name
+        FROM entry_tags et
+        JOIN tags t ON t.id = et.tag_id
+        WHERE et.entry_id IN ({placeholders})
+        ORDER BY t.name COLLATE NOCASE
+        """,
+        list(entry_ids),
+    ).fetchall():
+        tag_map.setdefault(tag_row["entry_id"], []).append(tag_row["name"])
 
     count_map: dict[int, int] = {}
     for cr in conn_rows:
@@ -1045,6 +1059,13 @@ def build_connection_graph(
                 "label": row["title"] or f"Entry #{row['id']}",
                 "size": count_map.get(row["id"], 1),
                 "display_date": display_date,
+                "date": (
+                    f"{row['event_year']:04d}-{row['event_month']:02d}-"
+                    f"{(day or 1):02d}"
+                ),
+                "sort_key": row["sort_key"],
+                "tags": tag_map.get(row["id"], []),
+                "excerpt": preview_text(row["final_text"] or "", 240),
                 "group_name": row["group_name"],
             }
         )
