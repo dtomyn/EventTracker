@@ -29,7 +29,7 @@
             <ol class="visualization-list list-unstyled mb-0">
                 {% for entry in group.entries %}
                     <li
-                        class="visualization-item"
+                        class="visualization-item {% if entry.tags %}tag-tone-{{ entry.tags[0] | tag_tone }}{% else %}tag-tone-none{% endif %}"
                         data-playback-entry
                         data-entry-label="{{ entry.title or entry.display_date }}"
                         data-entry-date="{{ entry.display_date }}"

@@ -1,15 +1,24 @@
 {% extends "base.html" %}
 {% from "partials/story_links.html" import board_href, story_href %}
 
+{% block head %}
+    <link rel="stylesheet" href="{{ url_for('static', path='/timeline.css') }}">{# timeline #}
+{% endblock %}
+
 {% block content %}
-    <div class="timeline-hero mb-4">
+    <div class="timeline-hero tl-hero mb-4">
         <div class="timeline-hero-header">
             <div class="timeline-hero-copy">
                 {% if is_filtered %}
-                    <h1 class="h3 mb-1">Filtered Timeline</h1>
-                    <p class="text-body-secondary mb-0">Showing {{ match_count }} matching entr{% if match_count == 1 %}y{% else %}ies{% endif %} for "{{ query }}" in {{ selected_group_name }}.</p>
+                    <p class="tl-hero-eyebrow">Filtered view</p>
+                    <h1 class="tl-hero-title">Filtered Timeline</h1>
+                    <p class="tl-hero-subtitle">Showing {{ match_count }} matching entr{% if match_count == 1 %}y{% else %}ies{% endif %} for "{{ query }}" in {{ selected_group_name }}.</p>
                 {% else %}
-                    <h1 class="h3 mb-1">{{ selected_group_name }} Timeline</h1>
+                    <p class="tl-hero-eyebrow">{% if selected_group_id %}Timeline group{% else %}Every group{% endif %}</p>
+                    <h1 class="tl-hero-title">{{ selected_group_name }} Timeline</h1>
+                    {% if timeline_stats.total %}
+                        <p class="tl-hero-subtitle">{% if timeline_stats.first_label == timeline_stats.last_label %}{{ timeline_stats.first_label }}{% else %}{{ timeline_stats.first_label }} to {{ timeline_stats.last_label }}{% endif %}</p>
+                    {% endif %}
                 {% endif %}
             </div>
 
@@ -30,7 +39,51 @@
             {% endif %}
         </div>
 
-        <div class="timeline-hero-actions mt-3">
+        {% if timeline_stats.total %}
+            <section class="tl-stats" aria-label="Timeline at a glance" data-tl-stats>
+                <div class="tl-stat">
+                    <div class="tl-stat-label">Events</div>
+                    <div class="tl-stat-value"><span data-tl-count="{{ timeline_stats.total }}">{{ timeline_stats.total }}</span></div>
+                    <div class="tl-stat-meta">{% if is_filtered %}in {{ selected_group_name }}{% else %}captured so far{% endif %}</div>
+                </div>
+                <div class="tl-stat">
+                    <div class="tl-stat-label">Date span</div>
+                    <div class="tl-stat-value"><span data-tl-count="{{ timeline_stats.span_value }}">{{ timeline_stats.span_value }}</span><span class="tl-stat-unit">{{ timeline_stats.span_unit }}</span></div>
+                    <div class="tl-stat-meta">{% if timeline_stats.first_label == timeline_stats.last_label %}{{ timeline_stats.first_label }}{% else %}{{ timeline_stats.first_label }} - {{ timeline_stats.last_label }}{% endif %}</div>
+                </div>
+                <div class="tl-stat tl-stat-tags">
+                    <div class="tl-stat-label">Top tags</div>
+                    {% if timeline_stats.top_tags %}
+                        <ul class="tl-stat-tag-list list-unstyled mb-0">
+                            {% for tag in timeline_stats.top_tags %}
+                                <li><span class="tag-pill tag-tone-{{ tag.tone }}">{{ tag.name }}</span><span class="tl-stat-tag-count">{{ tag.count }}</span></li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <div class="tl-stat-meta">No tags yet</div>
+                    {% endif %}
+                </div>
+                {% if timeline_stats.sparkline %}
+                    {% set spark = timeline_stats.sparkline %}
+                    <div class="tl-stat tl-stat-activity">
+                        <div class="tl-stat-label">Activity</div>
+                        <svg class="tl-sparkline" viewBox="0 0 160 40" preserveAspectRatio="none" role="img" aria-label="{% if spark.bucket_unit == 'week' %}Weekly{% else %}Monthly{% endif %} activity from {{ spark.start_label }} to {{ spark.end_label }}, peak of {{ spark.peak_count }} in the {{ spark.bucket_unit }} of {{ spark.peak_label }}">
+                            <defs>
+                                <linearGradient id="tl-sparkline-fill" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stop-color="currentColor" stop-opacity="0.28"></stop>
+                                    <stop offset="100%" stop-color="currentColor" stop-opacity="0"></stop>
+                                </linearGradient>
+                            </defs>
+                            <polygon class="tl-sparkline-area" points="{{ spark.area_points }}" fill="url(#tl-sparkline-fill)"></polygon>
+                            <polyline class="tl-sparkline-line" points="{{ spark.line_points }}" fill="none" stroke="currentColor" vector-effect="non-scaling-stroke"></polyline>
+                        </svg>
+                        <div class="tl-stat-meta">Peak {{ spark.bucket_unit }} {{ spark.peak_label }} - {{ spark.peak_count }} event{{ 's' if spark.peak_count != 1 else '' }}</div>
+                    </div>
+                {% endif %}
+            </section>
+        {% endif %}
+
+        <div class="timeline-hero-actions">
             <a class="btn btn-primary" href="{{ story_href(selected_group_query_value, query) }}">Story Mode</a>
             <a class="btn btn-outline-primary ms-2" href="{{ board_href(selected_group_query_value, query) }}" data-poster-board-link>Poster Board</a>
             {% if selected_group_id and embeddings_enabled %}
@@ -1953,4 +2006,8 @@
             </div>
         </div>
     {% endif %}
+{% endblock %}
+
+{% block scripts %}
+    <script src="{{ url_for('static', path='/timeline.js') }}"></script>{# timeline #}
 {% endblock %}
