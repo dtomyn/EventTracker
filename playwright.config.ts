@@ -16,6 +16,10 @@ export default defineConfig({
   reporter: process.env.CI
     ? [['list'], ['html', { open: 'never' }], ['junit', { outputFile: 'test-results/playwright/results.xml' }]]
     : [['list'], ['html', { open: 'never' }]],
+  // Match the harness default action timeout (page.setDefaultTimeout(10_000)). The 5s
+  // Playwright default proved too short when the machine is saturated (8 workers, each
+  // with its own uvicorn + Chromium): a failing assertion was polled only 3 times in 5s.
+  expect: { timeout: 10_000 },
   use: {
     headless: process.env.PLAYWRIGHT_HEADLESS !== '0',
     trace: 'on-first-retry',
