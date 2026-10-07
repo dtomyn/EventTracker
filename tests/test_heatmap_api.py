@@ -88,6 +88,26 @@ class TestHeatmapAPI(unittest.TestCase):
         self.assertEqual(data["total"], 0)
         self.assertEqual(data["counts"], {})
 
+    def test_heatmap_includes_tooltip_titles(self) -> None:
+        resp = self.client.get("/api/heatmap?year=2025")
+        data = resp.json()
+        self.assertEqual(data["titles"]["2025-03-15"], ["A", "B"])
+        self.assertEqual(data["titles"]["2025-06-01"], ["C"])
+
+    def test_heatmap_tooltip_titles_are_capped_and_group_scoped(self) -> None:
+        with connection_context() as conn:
+            conn.execute("INSERT OR IGNORE INTO timeline_groups (id, name) VALUES (2, 'Other')")
+            for title, group_id in (("D", 1), ("E", 1), ("Other group", 2)):
+                conn.execute(
+                    "INSERT INTO entries (event_year, event_month, event_day, sort_key, group_id, title, final_text, created_utc, updated_utc) "
+                    "VALUES (2025, 3, 15, 20250315, ?, ?, '<p>x</p>', '2025-03-15T00:00:00+00:00', '2025-03-15T00:00:00+00:00')",
+                    (group_id, title),
+                )
+            conn.commit()
+        data = self.client.get("/api/heatmap?year=2025&group_id=1").json()
+        self.assertEqual(data["titles"]["2025-03-15"], ["A", "B", "D"])
+        self.assertEqual(data["counts"]["2025-03-15"], 4)
+
     def test_heatmap_includes_years_available(self) -> None:
         resp = self.client.get("/api/heatmap?year=2025")
         data = resp.json()

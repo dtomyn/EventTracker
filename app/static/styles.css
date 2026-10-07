@@ -1489,13 +1489,51 @@ h3, .h3 { font-size: 1rem; font-weight: 600; line-height: 1.3; }
     color: var(--et-text);
     font-weight: 600;
     padding: 0.6rem 1rem;
-    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    /* No color transition: a mid-transition dark-to-white label on teal reads as disabled. */
+    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.visualization-view-button[aria-pressed="true"] {
+.visualization-view-button:hover {
+    border-color: var(--et-primary);
+    color: var(--et-primary);
+}
+
+.visualization-view-button:focus-visible {
+    outline: 2px solid var(--et-primary);
+    outline-offset: 2px;
+}
+
+.visualization-view-button[aria-pressed="true"],
+.visualization-view-button[aria-pressed="true"]:hover {
     background: var(--et-primary);
     border-color: var(--et-primary);
     color: #fff;
+    box-shadow: 0 0.35rem 0.9rem rgba(8, 145, 178, 0.28);
+    opacity: 1;
+}
+
+/* Loading keeps the active look and adds a soft pulsing dot instead of fading. */
+.visualization-view-button[aria-busy="true"]::after {
+    content: "";
+    display: inline-block;
+    width: 0.4rem;
+    height: 0.4rem;
+    margin-left: 0.45rem;
+    border-radius: 50%;
+    background: currentColor;
+    vertical-align: middle;
+    animation: et-view-busy 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes et-view-busy {
+    from { opacity: 0.35; }
+    to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .visualization-view-button[aria-busy="true"]::after {
+        animation: none;
+    }
 }
 
 .visualization-surface {
@@ -2065,40 +2103,6 @@ textarea {
 }
 
 /* ── Heatmap ──────────────────────────────────────────────── */
-
-.heatmap-container {
-    position: relative;
-    padding: 0.5rem 0;
-}
-
-.heatmap-svg {
-    display: block;
-    margin: 0 auto;
-}
-
-.heatmap-cell-selected {
-    stroke: var(--et-primary);
-    stroke-width: 2;
-}
-
-.heatmap-tooltip {
-    position: absolute;
-    padding: 0.4rem 0.7rem;
-    background: var(--et-card-bg);
-    border: 1px solid var(--et-border);
-    border-radius: 6px;
-    font-size: 0.75rem;
-    color: var(--et-text);
-    pointer-events: none;
-    white-space: nowrap;
-    transform: translateX(-50%);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    z-index: 10;
-}
-
-.heatmap-nav-arrow:hover {
-    fill: var(--et-primary) !important;
-}
 
 .heatmap-entries-header {
     display: flex;

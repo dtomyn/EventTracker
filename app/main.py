@@ -377,6 +377,36 @@ class HeatmapPayload(TypedDict):
     total: int
     year: int
     years_available: list[int]
+    titles: dict[str, list[str]]
+
+
+HEATMAP_TOOLTIP_TITLE_LIMIT = 3
+
+
+def _heatmap_top_titles(
+    connection: sqlite3.Connection,
+    year: int,
+    group_id: int | None,
+) -> dict[str, list[str]]:
+    """Return up to three entry titles per day for heatmap tooltips.
+
+    Day-less entries map to the first of their month, matching ``get_heatmap_counts``.
+    """
+    query = (
+        "SELECT event_month, COALESCE(event_day, 1), title FROM entries "
+        "WHERE event_year = ? AND TRIM(title) != ''"
+    )
+    params: tuple[object, ...] = (year,)
+    if group_id is not None:
+        query += " AND group_id = ?"
+        params = (year, group_id)
+    query += " ORDER BY event_month, COALESCE(event_day, 1), sort_key, id"
+    titles: dict[str, list[str]] = {}
+    for month, day, title in connection.execute(query, params).fetchall():
+        bucket = titles.setdefault(f"{year}-{int(month):02d}-{int(day):02d}", [])
+        if len(bucket) < HEATMAP_TOOLTIP_TITLE_LIMIT:
+            bucket.append(str(title).strip())
+    return titles
 
 
 class SearchResultsPayload(TypedDict):
@@ -2213,12 +2243,14 @@ def api_heatmap(year: int | None = None, group_id: int | None = None) -> JSONRes
             resolved_year = year
 
         data = get_heatmap_counts(connection, year=resolved_year, group_id=group_id)
+        titles = _heatmap_top_titles(connection, data.year, group_id)
 
     payload: HeatmapPayload = {
         "counts": data.counts,
         "total": data.total,
         "year": data.year,
         "years_available": data.years_available,
+        "titles": titles,
     }
     return JSONResponse(payload)
 
