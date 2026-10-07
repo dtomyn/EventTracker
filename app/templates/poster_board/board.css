@@ -14,7 +14,7 @@
     --display:"Arial Black","Segoe UI Black","Helvetica Neue",Impact,system-ui,sans-serif;
     --sans:ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
     --mono:ui-monospace,"SF Mono","Cascadia Mono",Consolas,"Liberation Mono",monospace;
-    --lift:0 1px 1px rgba(74,52,22,.20), 0 5px 12px -5px rgba(74,52,22,.34);
+    --lift:0 1px 1px rgba(74,52,22,.18), 0 3px 6px -2px rgba(74,52,22,.18), 0 12px 18px -10px rgba(74,52,22,.40);
     --lift-hi:0 2px 3px rgba(74,52,22,.22), 0 22px 36px -12px rgba(74,52,22,.48);
     --ease:cubic-bezier(.2,.8,.2,1);
     --move:.58s;
@@ -78,7 +78,18 @@
   }
   .brand .meta b{color:var(--ink); font-size:12px}
 
-  .chips{display:flex; flex-wrap:wrap; gap:4px; min-width:0}
+  .chips{display:flex; flex-wrap:wrap; gap:4px; min-width:0; flex:1 1 auto}
+  .tools{display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:6px; flex:none; margin-left:auto}
+  /* too narrow for one line: title and tools on top, the category chips below */
+  @media (max-width:1760px){
+    body:not(.flowing) .topbar{
+      display:grid; grid-template-columns:auto minmax(0,1fr); grid-template-areas:"brand tools" "chips chips";
+      row-gap:8px; column-gap:16px;
+    }
+    body:not(.flowing) .brand{grid-area:brand; align-self:center}
+    body:not(.flowing) .tools{grid-area:tools}
+    body:not(.flowing) .chips{grid-area:chips}
+  }
   .chip{
     appearance:none; cursor:pointer; border:1.5px solid rgba(44,36,24,.16); background:#fff;
     color:var(--ink-2); font:700 10.5px/1 var(--sans); letter-spacing:.03em; text-transform:uppercase;
@@ -93,7 +104,7 @@
   }
   .chip .n{opacity:.5; margin-left:5px; font-family:var(--mono)}
   .search{
-    margin-left:auto; flex:none; background:#fff; border:1.5px solid rgba(44,36,24,.16);
+    flex:none; background:#fff; border:1.5px solid rgba(44,36,24,.16);
     color:var(--ink); font:500 12.5px/1 var(--sans); padding:8px 12px; border-radius:100px; width:148px;
   }
   .controls{display:flex; align-items:center; gap:6px; flex:none}
@@ -129,7 +140,7 @@
   .empty[hidden]{display:none}
 
   .poster{
-    position:absolute; top:0; left:0; will-change:transform;
+    position:absolute; top:0; left:0; z-index:3;
     transition:transform var(--move) var(--ease), width var(--move) var(--ease), height var(--move) var(--ease);
   }
   .paper{
@@ -137,13 +148,17 @@
     padding:var(--pad,12px); border-radius:2px; cursor:pointer;
     color:var(--ink); box-shadow:var(--lift);
     background-color:var(--paper);
-    background-image:repeating-linear-gradient(112deg, rgba(255,255,255,.42) 0 2px, rgba(255,255,255,0) 2px 5px);
+    /* paper: a soft top light and a faint laid-paper grain */
+    background-image:
+      linear-gradient(180deg, rgba(255,255,255,.34), rgba(255,255,255,0) 38%, rgba(74,52,22,.035)),
+      repeating-linear-gradient(112deg, rgba(255,255,255,.30) 0 1px, rgba(255,255,255,0) 1px 4px);
+    -webkit-font-smoothing:antialiased; backface-visibility:hidden;
     transform:rotate(var(--rot,0deg)) scale(.88); opacity:0;
-    transition:transform .42s var(--ease), box-shadow .26s var(--ease), opacity .34s ease;
+    transition:transform .42s var(--ease), box-shadow .26s var(--ease), opacity .34s ease, filter .26s ease;
   }
   .poster.in .paper{transform:rotate(var(--rot,0deg)) scale(1); opacity:1}
   .poster.out .paper{transform:rotate(var(--rot,0deg)) scale(.86); opacity:0}
-  .poster:hover{z-index:20}
+  .poster:hover, .poster:focus-within{z-index:20}
   .poster.in:hover .paper{transform:rotate(0deg) translateY(-6px) scale(1.035); box-shadow:var(--lift-hi)}
   .paper:focus-visible{outline:3px solid var(--accent); outline-offset:3px}
 
@@ -153,18 +168,17 @@
     background:radial-gradient(circle at 34% 30%, #fff 0 14%, var(--pin) 38%, rgba(0,0,0,.42) 130%);
     box-shadow:0 2px 3px rgba(74,52,22,.42); z-index:3; transition:transform .26s var(--ease);
   }
-  .poster:hover .pin{transform:scale(1.2)}
-  /* tape sits on the poster wrapper, not the paper, so it can overhang the edge */
+  .poster.in:hover .pin{transform:scale(1.2)}
+  /* tape rides on the paper, so it tilts with the sheet, and overhangs the
+     corner symmetrically: centred on the corner, at 45 degrees */
   .tape{
-    position:absolute; top:-8px; width:52px; height:17px; z-index:3; pointer-events:none;
-    background:rgba(255,255,255,.5); border-left:1px solid rgba(255,255,255,.75);
-    border-right:1px solid rgba(255,255,255,.75); box-shadow:0 1px 2px rgba(74,52,22,.2);
-    transition:transform .26s var(--ease);
+    position:absolute; top:-4px; width:58px; height:18px; z-index:3; pointer-events:none;
+    background:linear-gradient(180deg, rgba(255,253,240,.62), rgba(246,240,220,.5));
+    border-left:1px dashed rgba(255,255,255,.7); border-right:1px dashed rgba(255,255,255,.7);
+    box-shadow:0 1px 2px rgba(74,52,22,.16);
   }
-  .tape.l{left:-12px; transform:rotate(-28deg)}
-  .tape.r{right:-12px; transform:rotate(28deg)}
-  .poster.in:hover .tape.l{transform:rotate(-28deg) translateY(-5px)}
-  .poster.in:hover .tape.r{transform:rotate(28deg) translateY(-5px)}
+  .tape.l{left:-19px; transform:rotate(-45deg)}
+  .tape.r{right:-19px; transform:rotate(45deg)}
 
   .row{display:flex; align-items:center; gap:6px; flex:none; min-height:0; padding-right:var(--pinpad,0)}
   .cat{
@@ -197,7 +211,7 @@
   .sticker{
     position:absolute; top:0; left:0; display:grid; place-items:center;
     pointer-events:none; user-select:none; z-index:1;
-    transition:transform var(--move) var(--ease), width var(--move) var(--ease), height var(--move) var(--ease);
+    transition:opacity .22s ease, transform var(--move) var(--ease), width var(--move) var(--ease), height var(--move) var(--ease);
   }
   /* the tilt lives on the child and the bob uses the separate `translate`
      property, so the two never overwrite each other */
@@ -205,10 +219,11 @@
     transform:rotate(var(--rot,0deg));
     animation:bob 6.5s ease-in-out infinite; animation-delay:var(--delay,0s);
   }
-  .s-emoji{
-    font-size:var(--efs,40px); line-height:1; opacity:.9;
-    filter:drop-shadow(0 3px 4px rgba(74,52,22,.35));
+  .s-object{
+    width:var(--efs,56px); height:var(--efs,56px); overflow:visible;
+    filter:drop-shadow(0 3px 3px rgba(74,52,22,.30));
   }
+  .s-object--ring{filter:none}
   .s-stamp{
     font:900 var(--tfs,15px)/1.05 var(--display); letter-spacing:.03em; text-transform:uppercase;
     color:var(--tint,#C4342B); border:3px double var(--tint,#C4342B); border-radius:3px;
@@ -220,11 +235,10 @@
     box-shadow:0 1px 1px rgba(74,52,22,.22), 0 5px 10px -5px rgba(74,52,22,.32);
   }
   @keyframes bob{0%,100%{translate:0 0}50%{translate:0 -5px}}
+  .sticker.late{opacity:0; transition:none}
   body.flowing .sticker{display:none}
 
   /* ---------------- red string: the detective-board overlay ---------------- */
-  .string-toggle{margin-left:auto}
-  .string-toggle:not([hidden]) + .search{margin-left:0}
   .string-toggle .yarn{
     display:inline-block; width:16px; height:9px; margin-right:1px; flex:none;
     border-bottom:2px solid #C8161D; border-radius:0 0 50% 50%; position:relative; top:-2px;
@@ -236,41 +250,60 @@
   .string-toggle:disabled{opacity:.45; cursor:default; transform:none}
   body.flowing .string-toggle{display:none}
 
-  /* above the posters, hovered ones included: the yarn is pinned on top of the paper */
+  /* The yarn layer sits on the cork BEHIND the posters (so it never crosses
+     a headline); the tack layer sits above them, pinned through the edges. */
   .strings{
-    position:absolute; inset:0; width:100%; height:100%; overflow:visible;
-    pointer-events:none; z-index:25;
+    position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none;
   }
+  .strings--yarn{z-index:2}
+  .strings--tacks{z-index:25}
+  .strings.held{visibility:hidden}
   body:not(.strings-on) .strings, body.flowing .strings{display:none}
-  .yarns{filter:drop-shadow(0 2.5px 1.6px rgba(58,22,8,.38))}
+  .yarns{filter:drop-shadow(0 3px 1.8px rgba(58,22,8,.40))}
   .yarn path{fill:none; stroke-linecap:round}
-  .yarn__core{stroke:#C8161D; stroke-width:2.6}
+  .yarn__core{stroke:#C8161D; stroke-width:2.6; transition:stroke .2s ease, stroke-width .2s ease}
   /* a faint broken highlight reads as twisted wool rather than a vector line */
   .yarn__twist{stroke:rgba(255,214,200,.55); stroke-width:.9; stroke-dasharray:2.2 3.4}
-  .yarn{transition:opacity .2s ease}
+  .yarn{transition:opacity .22s ease}
   /* the only interactive part of the overlay: grab a string to pluck it */
   .yarn__hit{stroke:transparent; stroke-width:14; pointer-events:stroke; cursor:grab; touch-action:none}
   .strings.plucking, .strings.plucking .yarn__hit{cursor:grabbing}
   .yarn.taut .yarn__core{stroke-width:3}
-  .strings.focusing .yarn.taut{opacity:1}
-  .strings.focusing .yarn{opacity:.22}
-  .strings.focusing .yarn.hot{opacity:1}
-  .strings.focusing .yarn.hot .yarn__core{stroke-width:3.2}
-  .yarn.draw .yarn__core{stroke-dasharray:1; stroke-dashoffset:1; animation:yarnDraw .75s var(--ease) forwards}
-  .yarn.draw .yarn__twist{opacity:0; animation:fadeIn .3s .55s ease forwards}
+  /* stringing up: each yarn draws out from its first tack, staggered by --d */
+  .yarn.draw .yarn__core{
+    stroke-dasharray:1; stroke-dashoffset:1;
+    animation:yarnDraw .62s var(--d,0ms) cubic-bezier(.45,.05,.3,1) forwards;
+  }
+  .yarn.draw .yarn__twist{opacity:0; animation:fadeIn .3s calc(var(--d,0ms) + .5s) ease forwards}
+  /* a hot poster's strings: taut (done in JS), brighter, glowing; the rest step back */
+  .strings.focusing .yarn{opacity:.16}
+  .strings.focusing .yarn.hot, .strings.focusing .yarn.taut{opacity:1}
+  .yarn.hot .yarn__core{stroke:#EE1E26; stroke-width:3.1; filter:drop-shadow(0 0 3px rgba(255,64,48,.75))}
   /* the string whose connection card is open stays lit */
   .strings.picking .yarn{opacity:.22}
   .strings .yarn.picked{opacity:1}
   .yarn.picked .yarn__core{stroke-width:3.4}
-  .tack__pin{animation:tackIn .32s var(--ease) both}
+  .tack{transition:opacity .22s ease}
+  .tack__pin{animation:tackIn .3s var(--ease) both}
   .tack__head{fill:url(#tack-head); stroke:rgba(70,8,6,.55); stroke-width:.6}
   .tack__shadow{fill:rgba(58,22,8,.32)}
   .tack__shine{fill:rgba(255,255,255,.85)}
+  .strings--tacks.focusing .tack{opacity:.3}
+  .strings--tacks.focusing .tack.hot{opacity:1}
   .tack.hot .tack__head{stroke:#3A0504; stroke-width:1.1}
-  /* posters with no string to anything on the board step back */
-  body.strings-on .poster.in:not(.linked) .paper{opacity:.5}
+  /* posters with no string to anything on the board step back. A filter, not
+     opacity: the sheet must stay opaque so the yarn behind it never shows
+     through its text. */
+  body.strings-on .poster.in:not(.linked) .paper{filter:saturate(.45) contrast(.72) brightness(1.06)}
   body.strings-on .poster.in:not(.linked):hover .paper,
-  body.strings-on .poster.in:not(.linked) .paper:focus-visible{opacity:1}
+  body.strings-on .poster.in:not(.linked) .paper:focus-visible{opacity:1; filter:none}
+  /* a pinned poster cannot float off the board: it brightens instead of lifting */
+  body.strings-on .poster.in.linked:hover .paper{transform:rotate(var(--rot,0deg)) scale(1); box-shadow:var(--lift-hi)}
+  body.strings-on .poster.in.linked:hover .pin{transform:none}
+  /* while one poster is hot, everything not tied to it fades back */
+  body.board-focus .poster.in:not(.kin) .paper,
+  body.board-focus.strings-on .poster.in:not(.linked):not(.kin) .paper{opacity:.34; filter:saturate(.55)}
+  body.board-focus .sticker{opacity:.4}
   @keyframes yarnDraw{to{stroke-dashoffset:0}}
   @keyframes tackIn{from{opacity:0; scale:1.8}to{opacity:1; scale:1}}
 
@@ -413,13 +446,18 @@
     position:static; width:auto !important; height:auto !important;
     transform:none !important; margin-bottom:12px; min-height:120px;
   }
-  body.flowing .paper{--pad:14px; --fs:16px; --dfs:13px; --hl:3; --dl:3}
+  body.flowing .paper{--pad:14px; --fs:16px; --dfs:13px; --hl:3; --dl:3; --pinpad:20px}
   body.flowing .topbar{position:sticky; top:0; z-index:30}
-  body.flowing .search{margin-left:0; flex:1; width:auto; min-width:120px}
+  body.flowing .tools{flex:1 1 100%; justify-content:flex-start; margin-left:0}
+  body.flowing .search{flex:1; width:auto; min-width:120px}
   body.flowing .brand{flex-wrap:wrap; row-gap:6px; flex:1 1 100%}
   body.flowing .brand .meta{white-space:normal; line-height:1.4}
   body.flowing .controls{flex:1 1 100%; flex-wrap:wrap}
 
   @media (prefers-reduced-motion:reduce){
     *,*::before,*::after{animation-duration:.001ms !important; animation-delay:0ms !important; transition-duration:.001ms !important}
+    /* no hover motion: posters and chips change state in place */
+    .poster.in:hover .paper{transform:rotate(var(--rot,0deg)) scale(1)}
+    .poster.in:hover .pin, .chip:hover, .act:hover, .sheet__nav button:hover:not(:disabled){transform:none}
+    .sticker > *{animation:none}
   }
