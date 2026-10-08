@@ -1,0 +1,170 @@
+Build a simple, visual "software factory" in this repo using a Claude Code skill, subagents, and markdown files.
+Keep it small: a viewer should understand the whole thing in a few minutes.
+Inspect the repo first so the agents know its language, test command, and conventions, and write those facts directly into the agent files that need them (builder, reviewers, approver).
+
+## The orchestrator
+
+The factory is one skill, /my-factory.
+Whichever Claude Code session runs it becomes the orchestrator: it runs the loop below, spawns every agent, and is the only writer of my-factory/board.json.
+Set `disable-model-invocation: true` in the skill frontmatter so it only runs when the user types the command (it merges into main).
+
+## The loop (edit this to change the factory)
+
+```text
+                   ┌──────────────────┐
+                   │     feature      │
+                   └─────────┬────────┘
+                             ▼
+                   ┌──────────────────┐
+                   │   spec-writer    │
+                   │       opus       │
+                   └─────────┬────────┘
+                             ▼
+                   ┌──────────────────┐
+                   │     builder      │◄────────────────────┐
+                   │       opus       │                     │
+                   └─────────┬────────┘                     │
+        ┌─────────────┬──────┴──────┬─────────────┐         │
+        ▼             ▼             ▼             ▼         │
+  ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐   │
+  │  security │ │     ux    │ │ ui design │ │    code   │   │
+  │    opus   │ │   sonnet  │ │   sonnet  │ │   sonnet  │   │
+  └─────┬─────┘ └─────┬─────┘ └─────┬─────┘ └─────┬─────┘   │
+        └─────────────┴──────┬──────┴─────────────┘         │
+                             ▼                              │
+                   ┌──────────────────┐   any CHANGES:      │
+                   │   WAIT FOR ALL   ├─────────────────────┘
+                   │   4 reviews in   │   resume builder
+                   └─────────┬────────┘   (max 2 rounds)
+                             ▼ all PASS
+                   ┌──────────────────┐
+                   │     approver     │
+                   │       opus       │
+                   └─┬───────────────┬┘
+             APPROVE │               │ ESCALATE
+                     ▼               ▼
+              ┌─────────────┐ ┌─────────────┐
+              │merge to main│ │ needs-human │ ◄── /my-factory approve
+              └─────────────┘ └─────────────┘
+```
+
+"max 2 rounds" means the builder is resumed at most twice for reviewer findings after round 1, so a job gets up to 3 review rounds.
+Expose this as a single constant `MAX_REWORK_ROUNDS = 2` at the top of the skill.
+The count restarts after each human `rework`.
+If reviews still request changes when the cap is reached, the job goes to needs-human without running the approver.
+
+## Target file system
+
+```text
+.claude/
+  skills/my-factory/SKILL.md          # the orchestrator's instructions
+  agents/                             # one file per agent in the loop, all prefixed "my-factory-"
+    my-factory-spec-writer.md
+    my-factory-builder.md
+    my-factory-security-reviewer.md
+    my-factory-ux-reviewer.md
+    my-factory-ui-reviewer.md
+    my-factory-code-reviewer.md
+    my-factory-approver.md
+my-factory/
+  ORIGINAL-PROMPT.md               # this prompt
+  board.json                       # durable state, drives the dashboard (gitignored)
+  dashboard.html                   # visual board, polls board.json
+  backlog.md                       # queue of features for /my-factory next
+  jobs/003-rate-limiting/          # one folder per job (gitignored)
+    feature.md                     # the raw request, written by the orchestrator
+    spec.md
+    build.md
+    round-1/                       # one folder per review round,
+      review-security.md           # one file per reviewer
+      review-ux.md
+      review-ui.md
+      review-code.md
+    rework-1.md                    # human feedback from /my-factory rework, if any
+    decision.md
+.worktrees/<job-id>/               # git worktree per job (gitignored)
+```
+
+Job ids are the next free three-digit number plus a short kebab-case slug, for example `004-copy-entry-link`.
+Seed backlog.md with two or three small, real features for this repo, written as `- [ ]` checkbox lines.
+
+## Example files
+
+`.claude/agents/<name>.md` (Claude Code subagent syntax):
+
+```markdown
+---
+name: my-factory-example-agent
+description: One line on when the orchestrator should use this agent.
+tools: Read, Grep, Glob, Bash, Write
+model: sonnet
+---
+What this agent reads, what it does, and which file it writes.
+```
+
+Every agent name and file name starts with "my-factory-" so they are namespaced alongside the /my-factory skill.
+The builder also gets Edit.
+Models follow the diagram: spec-writer, builder, security, and approver on opus; ux, ui design, and code on sonnet.
+
+`my-factory/board.json`:
+
+```json
+{ "updated": "2026-10-08T14:03:00Z",
+  "jobs": [ { "id": "003-rate-limiting", "title": "Rate limiting",
+  "branch": "my-factory/003-rate-limiting",
+  "stage": "review", "round": 2,
+  "reviews": { "security": "CHANGES", "ux": "PASS", "ui": "pending", "code": "PASS" },
+  "history": [ { "security": "CHANGES", "ux": "PASS", "ui": "CHANGES", "code": "PASS" } ],
+  "reworks": 0, "builder": "builder-003-rate-limiting",
+  "decision": null, "note": "",
+  "created": "2026-10-08T13:40:00Z", "updated": "2026-10-08T14:03:00Z" } ] }
+```
+
+- `stage` is one of `spec`, `build`, `review`, `approve`, `needs-human`, `merged`.
+- `reviews` is the current round; when a new round starts, the orchestrator appends it to `history` and resets every chip to `pending`.
+- `reworks` counts human rework notes; `note` explains why a job is in needs-human.
+- The orchestrator rewrites the whole file after every change and creates it as `{ "jobs": [] }` if missing.
+
+## Rules
+- Agents get context from files, not the conversation, and write only their own file.
+- The orchestrator passes forward-slash absolute paths in every agent prompt (Git Bash on Windows strips backslashes).
+- Each review starts with VERDICT: PASS or CHANGES; decision.md starts with APPROVE or ESCALATE.
+- Reviewers use CHANGES only for blocker or major findings; minor findings alone are a PASS.
+- From round 2 on, each reviewer checks its own previous review was addressed and looks for regressions, without raising new nitpicks on unchanged code.
+- The builder works and commits on a feature branch (my-factory/<job-id>) inside its own git worktree (.worktrees/<job-id>), so the main checkout never switches branches.
+- The builder tests against the spec's acceptance criteria, test-first, and records evidence per criterion in build.md.
+- The builder commits without co-author trailers, never pushes, and never edits CHANGELOG.md or generated files.
+- WAIT FOR ALL: a review round is done only when every reviewer's file exists in the round folder. Never resume the builder mid-round.
+- Spawn the four reviewers in a single message so they run in parallel.
+- Spawn the builder with a name (builder-<job-id>) and resume that same builder with SendMessage for each new round, pointing it at the round folder.
+- If the named builder no longer exists (for example in a new session), spawn a fresh builder with the same name and point it at spec.md, build.md, and the latest round folder.
+- If an agent does not write its file or its first line is not a valid verdict, re-spawn it once, then escalate to needs-human.
+- UX and UI reviewers run the app from the worktree against a temp copy of data/EventTracker.db (never the original) and take Playwright screenshots; the UI reviewer covers 1280px and 375px widths in light and dark theme.
+- The approver escalates on any failed check, schema or user-data changes, dependency changes, auth/CSRF/secrets changes, or open questions resolved by guessing.
+
+## Merge
+- First merge main into the job branch inside the worktree and re-run the unit tests; on conflict or failure, go to needs-human.
+- Then merge with `--no-ff` in whichever worktree has main checked out (or a temporary one), remove the job worktree, and delete the branch.
+- Merging is local only; never push.
+
+## Commands
+/my-factory <feature>               run a new job through the loop
+/my-factory next                    run the first unchecked item in backlog.md and tick it with its job id
+/my-factory approve <job-id>        merge a needs-human job into main
+/my-factory rework <job-id> <note>  send a needs-human job back to the builder with feedback (written to rework-<n>.md), then review again
+
+## Dashboard
+One self-contained HTML file, served from the repo root with `uv run python -m http.server 8765 --bind 127.0.0.1 --directory my-factory` (bind to localhost; `python3` is often missing on Windows).
+Also add it to .claude/launch.json as `my-factory-dashboard`.
+Jobs are cards moving across the loop's stages as columns: Spec, Build, Review, Approve, Needs human, Merged.
+Each review round shows as a row of reviewer chips that fill in as verdicts land.
+needs-human jobs stand out and show the approve and rework commands.
+Click a card to read its markdown files, requesting only files the board says exist.
+Render markdown with a small escape-first renderer so agent-written HTML is never executed.
+Support light and dark mode via prefers-color-scheme, stack the columns below 960px, and keep the last good board when polling fails.
+Clean and minimal.
+
+## Housekeeping
+- Gitignore my-factory/board.json, my-factory/jobs/, and .worktrees/.
+- Never use the em dash; use a plain dash.
+- Verify the dashboard in a browser with temporary sample data, then delete the sample data.
