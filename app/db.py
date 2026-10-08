@@ -158,6 +158,8 @@ POST_ENTRY_SCHEMA_STATEMENTS = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_entries_sort_key ON entries(sort_key DESC)",
     "CREATE INDEX IF NOT EXISTS idx_entries_group_sort_key ON entries(group_id, sort_key DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_entries_year_month_day ON entries(event_year, event_month, event_day)",
+    "CREATE INDEX IF NOT EXISTS idx_entries_group_year_month_day ON entries(group_id, event_year, event_month, event_day)",
     "CREATE INDEX IF NOT EXISTS idx_entry_tags_tag_id ON entry_tags(tag_id)",
     "CREATE INDEX IF NOT EXISTS idx_entry_links_entry_id ON entry_links(entry_id)",
     "CREATE INDEX IF NOT EXISTS idx_entries_group_source_url ON entries(group_id, source_url) WHERE source_url IS NOT NULL",
