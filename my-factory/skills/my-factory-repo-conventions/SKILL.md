@@ -1,0 +1,47 @@
+---
+name: my-factory-repo-conventions
+description: EventTracker stack, layout, commands, and house rules that every my-factory agent works within. Preloaded into all my-factory agents.
+user-invocable: false
+---
+
+# EventTracker conventions
+
+The single source of truth for what the factory's agents need to know about this repo.
+If the code disagrees with this file, trust the code and say so in your output file.
+
+## Stack
+- Python 3.12, FastAPI, Jinja2 templates, Bootstrap 5.3 from a CDN, small inline JavaScript.
+- SQLite through raw `sqlite3` (no ORM, no migration framework); FTS5 for search, optional sqlite-vec embeddings.
+- AI features (OpenAI or GitHub Copilot) are optional and must degrade gracefully when unconfigured.
+- Python packages via `uv`; npm is only for the TypeScript Playwright suite.
+
+## Where code goes
+- Routes, CSRF middleware, and template filters: `app/main.py` (large; follow the neighbouring route's style).
+- Business logic: `app/services/<capability>.py`. Keep routes thin.
+- Schema bootstrapping and the connection context manager: `app/db.py`.
+- Templates: `app/templates/`, reusable fragments in `app/templates/partials/`.
+- Styles: `app/static/styles.css` on top of Bootstrap utilities. Dark mode uses `data-bs-theme` on `<html>`, persisted in `localStorage["theme"]`.
+- Scripts: `scripts/<name>.py`, run as `uv run python -m scripts.<name>`.
+
+## Commands (run inside the job worktree)
+- Unit and integration tests: `uv run pytest tests/ --ignore=tests/e2e -q` (about 90 seconds, about 490 tests).
+- Type checking: `uv run pyright` (curated file list in `pyproject.toml`; add new Python modules there).
+- Python E2E: `uv run pytest tests/e2e -q` (Playwright, isolated temp DB and free port per test).
+- TypeScript E2E: `npm ci` once per worktree, then `npm run test:e2e:ts -- <spec>`.
+- Prefer the `my-factory-run-checks` skill over running these by hand.
+
+## House rules
+- Parameterized SQL only, never string concatenation, including `ORDER BY` and FTS5 `MATCH` input.
+- Every state-changing route goes through the existing HMAC CSRF protection; forms send the token.
+- No new `|safe`, `Markup`, or `innerHTML` with user-controlled data.
+- Never hardcode credentials; configuration comes from `EVENTTRACKER_*` environment variables (`.env.example` is the template).
+- Log errors without secrets or entry content.
+- Entry `sort_key` is `YYYYMMDD`, using `00` when the day is missing. FTS5 and embeddings index `final_text` only.
+- New TypeScript E2E specs import `test` and `expect` from `tstests/e2e/helpers/harness.ts`, and use the Page Object Models in `tstests/e2e/poms/`.
+- Never edit `CHANGELOG.md` or files marked as generated (including the synced copies in `.claude/` and `.agents/`).
+- Never use the em dash in prose; use a plain dash.
+
+## Environment
+- Windows with Git Bash as the Bash tool: use forward-slash paths and quote any path that may contain backslashes.
+- Never point the app at the real database in `data/`; use the `my-factory-app-preview` skill, which works on a temp copy.
+- Do not push, switch branches in the main checkout, or touch another job's worktree.

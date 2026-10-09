@@ -8,12 +8,25 @@ The loop itself is documented in [skills/my-factory/SKILL.md](skills/my-factory/
 | Path | What it is |
 |------|------------|
 | `agents/` | Master copies of the factory's subagents. Edit these. |
-| `skills/` | Master copies of the factory's skills, starting with the `my-factory` orchestrator. Edit these. |
+| `skills/` | Master copies of the factory's skills: the `my-factory` orchestrator plus the shared skills the agents preload (see below). Edit these. |
 | `sync.ps1` | Mirrors `agents/` and `skills/` into `.claude/` and `.agents/`. |
 | `backlog.md` | Queue for `/my-factory next`. |
 | `dashboard.html` | Live board that reads `board.json`. |
 | `board.json`, `jobs/` | Runtime state written by the orchestrator (gitignored). |
 | `ORIGINAL-PROMPT.md` | The prompt that produces this factory. |
+
+## Shared skills
+
+Agents preload these through the `skills:` list in their frontmatter, so common rules live in one place.
+They set `user-invocable: false`, so they stay out of the slash menu.
+
+| Skill | What it gives the agent | Used by |
+|-------|-------------------------|---------|
+| `my-factory-repo-conventions` | Stack, where code goes, commands, house rules | all agents |
+| `my-factory-acceptance-criteria` | How ACs are written in spec.md, proven in build.md, and checked | spec writer, builder, code reviewer, approver |
+| `my-factory-review-protocol` | Context gathering, later rounds, grading, verdict, file format | all four reviewers |
+| `my-factory-run-checks` | `scripts/run_checks.py`: unit tests, pyright, chosen E2E, with a pasteable summary | builder, code reviewer, approver |
+| `my-factory-app-preview` | `scripts/preview.py`: app on a temp DB copy, screenshots at widths and themes, or Playwright flows | builder, UX and UI reviewers |
 
 ## Changing an agent or skill
 

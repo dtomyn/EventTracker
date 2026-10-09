@@ -20,21 +20,21 @@
     </script>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg sticky-top">
-        <div class="container py-2">
+    <nav class="navbar navbar-expand-lg sticky-lg-top">
+        <div class="container py-2 site-nav">
             <a class="navbar-brand fw-semibold" href="/">Events</a>
-            <div class="d-flex flex-column flex-lg-row align-items-stretch align-items-lg-center gap-2 ms-lg-auto w-100 justify-content-lg-end">
-                <form class="d-flex gap-2" method="get" action="/">
+            <div class="site-nav-tools d-flex flex-column flex-lg-row align-items-stretch align-items-lg-center gap-2 ms-lg-auto w-100 justify-content-lg-end">
+                <form class="site-nav-form d-flex gap-2" method="get" action="/">
                     {% if selected_group_query_value %}<input type="hidden" name="group_id" value="{{ selected_group_query_value }}">{% endif %}
-                    <input class="form-control" type="search" name="q" value="{{ query | default('', true) }}" placeholder="Filter timeline in plain English">
-                    <button class="btn btn-outline-secondary" type="submit">Filter</button>
-                    <button class="btn btn-outline-secondary" type="submit" formaction="/search">Search</button>
+                    <input class="form-control site-nav-query" type="search" name="q" value="{{ query | default('', true) }}" placeholder="Filter timeline in plain English">
+                    <button class="btn btn-outline-secondary site-nav-filter" type="submit">Filter</button>
+                    <button class="btn btn-outline-secondary site-nav-search" type="submit" formaction="/search">Search</button>
                 </form>
-                <div class="d-flex gap-2 justify-content-end">
-                    <a class="btn btn-outline-secondary" href="/entries/export">Export</a>
-                    <a class="btn btn-outline-secondary" href="/chat{% if selected_group_query_value %}?group_id={{ selected_group_query_value }}{% endif %}">Chat</a>
-                    <a class="btn btn-outline-secondary" href="/admin/groups">Admin</a>
-                    <button class="btn btn-outline-secondary" type="button" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <div class="site-nav-actions d-flex gap-2 justify-content-end">
+                    <a class="btn btn-outline-secondary site-nav-export" href="/entries/export">Export</a>
+                    <a class="btn btn-outline-secondary site-nav-chat" href="/chat{% if selected_group_query_value %}?group_id={{ selected_group_query_value }}{% endif %}">Chat</a>
+                    <a class="btn btn-outline-secondary site-nav-admin" href="/admin/groups">Admin</a>
+                    <button class="btn btn-outline-secondary site-nav-theme" type="button" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
                         <svg id="theme-icon-light" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" class="d-none">
                             <path d="M8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6m0 1a4 4 0 1 0 0-8 4 4 0 0 0 0 8M8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 0m0 13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 13m8-5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2a.5.5 0 0 1 .5.5M3 8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2A.5.5 0 0 1 3 8m10.657-5.657a.5.5 0 0 1 0 .707l-1.414 1.415a.5.5 0 1 1-.707-.708l1.414-1.414a.5.5 0 0 1 .707 0m-9.193 9.193a.5.5 0 0 1 0 .707L3.05 13.657a.5.5 0 0 1-.707-.707l1.414-1.414a.5.5 0 0 1 .707 0m9.193 2.121a.5.5 0 0 1-.707 0l-1.414-1.414a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707M3.757 4.464a.5.5 0 0 1-.707 0L1.636 3.05a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707"/>
                         </svg>
@@ -42,7 +42,7 @@
                             <path d="M6 .278a.77.77 0 0 1 .08.858 7.2 7.2 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277q.792-.001 1.533-.16a.79.79 0 0 1 .81.316.73.73 0 0 1-.031.893A8.35 8.35 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.75.75 0 0 1 6 .278"/>
                         </svg>
                     </button>
-                    <a class="btn btn-primary" href="/entries/new">New Entry</a>
+                    <a class="btn btn-primary site-nav-new text-nowrap" href="/entries/new">New Entry</a>
                 </div>
             </div>
         </div>

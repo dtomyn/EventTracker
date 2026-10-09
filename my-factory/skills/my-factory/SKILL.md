@@ -51,15 +51,18 @@ Agents get their context from files, never from this conversation, and each writ
               └─────────────┘ └─────────────┘
 ```
 
-| Step | Agent (`subagent_type`) | Writes |
-|------|-------------------------|--------|
-| spec | `my-factory-spec-writer` | `spec.md` |
-| build | `my-factory-builder` | code + commits on the branch, `build.md` |
-| review: security | `my-factory-security-reviewer` | `round-<n>/review-security.md` |
-| review: ux | `my-factory-ux-reviewer` | `round-<n>/review-ux.md` |
-| review: ui | `my-factory-ui-reviewer` | `round-<n>/review-ui.md` |
-| review: code | `my-factory-code-reviewer` | `round-<n>/review-code.md` |
-| approve | `my-factory-approver` | `decision.md` |
+| Step | Agent (`subagent_type`) | Writes | Preloaded skills |
+|------|-------------------------|--------|------------------|
+| spec | `my-factory-spec-writer` | `spec.md` | conventions, acceptance-criteria |
+| build | `my-factory-builder` | code + commits on the branch, `build.md` | conventions, acceptance-criteria, run-checks, app-preview |
+| review: security | `my-factory-security-reviewer` | `round-<n>/review-security.md` | conventions, review-protocol |
+| review: ux | `my-factory-ux-reviewer` | `round-<n>/review-ux.md` | conventions, review-protocol, app-preview |
+| review: ui | `my-factory-ui-reviewer` | `round-<n>/review-ui.md` | conventions, review-protocol, app-preview |
+| review: code | `my-factory-code-reviewer` | `round-<n>/review-code.md` | conventions, review-protocol, acceptance-criteria, run-checks |
+| approve | `my-factory-approver` | `decision.md` | conventions, acceptance-criteria, run-checks |
+
+The shared skills live next to this one (`my-factory-repo-conventions`, `my-factory-acceptance-criteria`, `my-factory-review-protocol`, `my-factory-run-checks`, `my-factory-app-preview`).
+Agents preload them through their `skills:` frontmatter, so you only pass paths in each prompt.
 
 `MAX_REWORK_ROUNDS = 2`: after round 1, the builder is resumed at most twice for reviewer findings.
 The count restarts after each human `rework`.

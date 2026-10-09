@@ -191,6 +191,41 @@ h3, .h3 { font-size: 1rem; font-weight: 600; line-height: 1.3; }
     letter-spacing: -0.01em;
 }
 
+/* Small screens: lay the header out on a 6-column grid so every control
+   gets a full-width or evenly sized slot instead of wrapping raggedly. */
+@media (max-width: 991.98px) {
+    .navbar > .site-nav {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .site-nav .site-nav-tools,
+    .site-nav .site-nav-form,
+    .site-nav .site-nav-actions {
+        display: contents !important;
+    }
+
+    .site-nav .navbar-brand { grid-column: 1 / 4; margin-right: 0; }
+    .site-nav .site-nav-theme { grid-column: 4 / 5; }
+    .site-nav .site-nav-new { grid-column: 5 / 7; }
+    .site-nav .site-nav-query { grid-column: 1 / -1; }
+    .site-nav .site-nav-filter { grid-column: 1 / 4; }
+    .site-nav .site-nav-search { grid-column: 4 / 7; }
+    .site-nav .site-nav-export { grid-column: 1 / 3; }
+    .site-nav .site-nav-chat { grid-column: 3 / 5; }
+    .site-nav .site-nav-admin { grid-column: 5 / 7; }
+
+    .site-nav .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        white-space: nowrap;
+    }
+}
+
 /* Card overrides — remove Bootstrap defaults, apply subtle-border style */
 .card {
     background: var(--et-card-bg);
@@ -353,6 +388,7 @@ h3, .h3 { font-size: 1rem; font-weight: 600; line-height: 1.3; }
 
 .timeline-hero-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.75rem;
 }
 

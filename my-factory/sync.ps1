@@ -91,6 +91,21 @@ foreach ($skill in $skills) {
     }
 }
 
+# Every my-factory* skill an agent preloads must exist in the master set.
+$skillNames = @($skills | ForEach-Object Name)
+foreach ($agent in $agents) {
+    $text = [IO.File]::ReadAllText($agent.FullName)
+    if ($text -notmatch '(?s)^---\r?\n(.*?)\r?\n---') { continue }
+    $frontmatter = $Matches[1]
+    if ($frontmatter -notmatch '(?ms)^skills:\s*\r?\n((?:[ \t]+-[^\r\n]*\r?\n?)+)') { continue }
+    foreach ($line in $Matches[1] -split '\r?\n') {
+        $ref = ($line -replace '^\s*-\s*', '').Trim()
+        if ($ref.StartsWith($Prefix) -and $ref -notin $skillNames) {
+            $problems.Add("$(Get-RepoPath $agent.FullName): preloads unknown skill '$ref'")
+        }
+    }
+}
+
 if ($problems.Count) {
     $problems | ForEach-Object { Write-Host "error: $_" -ForegroundColor Red }
     exit 2
