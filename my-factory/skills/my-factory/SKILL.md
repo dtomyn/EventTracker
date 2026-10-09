@@ -1,0 +1,156 @@
+---
+name: my-factory
+description: Run the EventTracker software factory - spec, build, four parallel reviews, approval, merge. Use when the user types /my-factory.
+argument-hint: "<feature> | next | approve <job-id> | rework <job-id> <note>"
+disable-model-invocation: true
+---
+
+# My Factory
+
+You are the orchestrator.
+You run the loop below, spawn every agent, and you are the only writer of `my-factory/board.json`.
+Agents get their context from files, never from this conversation, and each writes only its own file.
+
+## The loop (edit this to change the factory)
+
+```
+                   ┌──────────────────┐
+                   │     feature      │
+                   └─────────┬────────┘
+                             ▼
+                   ┌──────────────────┐
+                   │   spec-writer    │
+                   │       opus       │
+                   └─────────┬────────┘
+                             ▼
+                   ┌──────────────────┐
+                   │     builder      │◄────────────────────┐
+                   │       opus       │                     │
+                   └─────────┬────────┘                     │
+        ┌─────────────┬──────┴──────┬─────────────┐         │
+        ▼             ▼             ▼             ▼         │
+  ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐   │
+  │  security │ │     ux    │ │ ui design │ │    code   │   │
+  │    opus   │ │   sonnet  │ │   sonnet  │ │   sonnet  │   │
+  └─────┬─────┘ └─────┬─────┘ └─────┬─────┘ └─────┬─────┘   │
+        └─────────────┴──────┬──────┴─────────────┘         │
+                             ▼                              │
+                   ┌──────────────────┐   any CHANGES:      │
+                   │   WAIT FOR ALL   ├─────────────────────┘
+                   │   4 reviews in   │   resume builder
+                   └─────────┬────────┘   (max 2 rounds)
+                             ▼ all PASS
+                   ┌──────────────────┐
+                   │     approver     │
+                   │       opus       │
+                   └─┬───────────────┬┘
+             APPROVE │               │ ESCALATE
+                     ▼               ▼
+              ┌─────────────┐ ┌─────────────┐
+              │merge to main│ │ needs-human │ ◄── /my-factory approve
+              └─────────────┘ └─────────────┘
+```
+
+| Step | Agent (`subagent_type`) | Writes | Preloaded skills |
+|------|-------------------------|--------|------------------|
+| spec | `my-factory-spec-writer` | `spec.md` | conventions, acceptance-criteria |
+| build | `my-factory-builder` | code + commits on the branch, `build.md` | conventions, acceptance-criteria, run-checks, app-preview |
+| review: security | `my-factory-security-reviewer` | `round-<n>/review-security.md` | conventions, review-protocol |
+| review: ux | `my-factory-ux-reviewer` | `round-<n>/review-ux.md` | conventions, review-protocol, app-preview |
+| review: ui | `my-factory-ui-reviewer` | `round-<n>/review-ui.md` | conventions, review-protocol, app-preview |
+| review: code | `my-factory-code-reviewer` | `round-<n>/review-code.md` | conventions, review-protocol, acceptance-criteria, run-checks |
+| approve | `my-factory-approver` | `decision.md` | conventions, acceptance-criteria, run-checks |
+
+The shared skills live next to this one (`my-factory-repo-conventions`, `my-factory-acceptance-criteria`, `my-factory-review-protocol`, `my-factory-run-checks`, `my-factory-app-preview`).
+Agents preload them through their `skills:` frontmatter, so you only pass paths in each prompt.
+
+`MAX_REWORK_ROUNDS = 2`: after round 1, the builder is resumed at most twice for reviewer findings.
+The count restarts after each human `rework`.
+
+## Paths
+
+Use forward-slash absolute paths everywhere (`REPO` = `git rev-parse --show-toplevel`).
+
+- Job folder: `REPO/my-factory/jobs/<job-id>/` holding `feature.md`, `spec.md`, `build.md`, `round-<n>/review-*.md`, `rework-<n>.md`, `decision.md`.
+- Branch: `my-factory/<job-id>`, created from `main`.
+- Worktree: `REPO/.worktrees/<job-id>` (gitignored). The builder codes there so the main checkout never switches branches.
+- Job id: next free three-digit number plus a short kebab-case slug, for example `004-copy-entry-link`.
+
+## board.json
+
+Read it before every change and rewrite the whole file after every change (create it as `{ "jobs": [] }` if missing).
+The dashboard polls it, so update it the moment anything moves.
+
+```json
+{
+  "updated": "2026-10-08T14:03:00Z",
+  "jobs": [
+    {
+      "id": "003-rate-limiting",
+      "title": "Rate limiting",
+      "branch": "my-factory/003-rate-limiting",
+      "stage": "review",
+      "round": 2,
+      "reviews": { "security": "CHANGES", "ux": "PASS", "ui": "pending", "code": "PASS" },
+      "history": [ { "security": "CHANGES", "ux": "PASS", "ui": "CHANGES", "code": "PASS" } ],
+      "reworks": 0,
+      "builder": "builder-003-rate-limiting",
+      "decision": null,
+      "note": "",
+      "created": "2026-10-08T13:40:00Z",
+      "updated": "2026-10-08T14:03:00Z"
+    }
+  ]
+}
+```
+
+- `stage` is one of `spec`, `build`, `review`, `approve`, `needs-human`, `merged`.
+- `reviews` is the current round; when a new round starts, append it to `history` and reset every chip to `pending`.
+- `reworks` counts human `rework` notes; `note` says why a job is in `needs-human`.
+- `builder` is the name (or agent id) you resume with SendMessage.
+
+## /my-factory <feature>
+
+1. **Job.** Pick the job id, write the request verbatim to `feature.md`, add the job to the board with `stage: "spec"`, `round: 0`, all reviews `pending`.
+2. **Spec.** Spawn `my-factory-spec-writer` in the foreground with the job folder path. When it returns, confirm `spec.md` exists and set the board `title` from its heading.
+3. **Worktree.** `git worktree add REPO/.worktrees/<job-id> -b my-factory/<job-id> main`.
+4. **Build.** Set `stage: "build"`, `round: 1`. Spawn `my-factory-builder` in the foreground with `name: "builder-<job-id>"` and a prompt giving the job folder, worktree, and branch. Record the name in `builder`. Confirm `build.md` exists and `git log main..my-factory/<job-id>` is not empty.
+5. **Review round n.** Set `stage: "review"`. Create `round-<n>/`. Spawn the four reviewers in a single message so they run in parallel. Each prompt gives the job folder, worktree, branch, round number, and the exact output file. As each reviewer finishes, read the first line of its file and set its chip to `PASS` or `CHANGES`.
+6. **WAIT FOR ALL.** The round is done only when all four review files exist in `round-<n>/`. Never resume the builder while any reviewer is still running.
+7. **Branch on verdicts.**
+   - Any `CHANGES` and fewer than `MAX_REWORK_ROUNDS` reviewer-driven reworks since round 1 or the last human rework: move `reviews` into `history`, set `round: n+1`, `stage: "build"`, and resume the same builder with SendMessage to `builder-<job-id>`: "Round <n> reviews are in `<job>/round-<n>/`. Address every CHANGES finding, re-run the checks, commit, and update build.md." Then go to step 5 with `n+1`.
+   - Any `CHANGES` with the cap reached: `stage: "needs-human"`, `note: "Reviews still request changes after round <n>"`. Stop.
+   - All `PASS`: continue.
+8. **Approve.** Set `stage: "approve"`. Spawn `my-factory-approver` in the foreground. Read the first line of `decision.md` and store it in `decision`.
+   - `APPROVE`: run **Merge**.
+   - `ESCALATE`: `stage: "needs-human"`, `note` = the decision's one-line reason. Stop.
+
+## Merge
+
+1. In the worktree, bring the branch up to date: `git -C <worktree> merge main --no-edit`. On conflict, run `git -C <worktree> merge --abort`, set `needs-human` with `note: "Merge conflict with main"`, and stop. If the merge added commits, re-run `uv run pytest tests/ --ignore=tests/e2e -q` in the worktree; on failure set `needs-human` and stop.
+2. Find where `main` is checked out (`git worktree list --porcelain`). If nowhere, `git worktree add REPO/.worktrees/_main main` and use that.
+3. There: `git merge --no-ff my-factory/<job-id> -m "Merge my-factory/<job-id>: <title>"`. If git refuses because of local changes, set `needs-human` with that reason and stop.
+4. Clean up: `git worktree remove REPO/.worktrees/<job-id>` (and `_main` if you created it), then `git branch -d my-factory/<job-id>`.
+5. Set `stage: "merged"`. Do not push; tell the user `main` is ready to push.
+
+## /my-factory next
+
+Take the first `- [ ]` line in `my-factory/backlog.md`, change it to `- [x] <text> (<job-id>)`, and run it as `/my-factory <text>`.
+If nothing is unchecked, say so and stop.
+
+## /my-factory approve <job-id>
+
+Only for a job in `needs-human`.
+Set `decision: "APPROVE (human)"`, clear `note`, and run **Merge**.
+
+## /my-factory rework <job-id> <note>
+
+Only for a job in `needs-human`; a merged job cannot be reworked, so start a new job instead.
+Increment `reworks`, write the note verbatim to `rework-<reworks>.md`, move `reviews` into `history`, set `round: n+1`, `stage: "build"`, `decision: null`, `note: ""`.
+Resume the builder: "Human feedback is in `<job>/rework-<reworks>.md`. Address it, re-run the checks, commit, and update build.md." Then continue the loop from step 5.
+
+## Resuming and failures
+
+- If `builder-<job-id>` no longer exists (for example in a new session), spawn a fresh `my-factory-builder` with the same name and tell it to read `spec.md`, `build.md`, and the latest round folder or rework note before continuing.
+- If an agent finishes without writing its file, or its first line is not a valid verdict, re-spawn it once. If it fails again, set `needs-human` with a note naming the agent.
+- One job at a time. Report progress to the user in one line per stage change.

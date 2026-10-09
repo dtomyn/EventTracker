@@ -32,12 +32,12 @@
 
         <div class="timeline-hero-actions mt-3">
             <a class="btn btn-primary" href="{{ story_href(selected_group_query_value, query) }}">Story Mode</a>
-            <a class="btn btn-outline-primary ms-2" href="{{ board_href(selected_group_query_value, query) }}" data-poster-board-link>Poster Board</a>
+            <a class="btn btn-outline-primary" href="{{ board_href(selected_group_query_value, query) }}" data-poster-board-link>Poster Board</a>
             {% if selected_group_id and embeddings_enabled %}
-                <a class="btn btn-outline-primary ms-2" href="/groups/{{ selected_group_id }}/topics/graph">Tag Clusters</a>
+                <a class="btn btn-outline-primary" href="/groups/{{ selected_group_id }}/topics/graph">Tag Clusters</a>
             {% endif %}
             {% if selected_group_id %}
-                <a class="btn btn-outline-primary ms-2" href="/groups/{{ selected_group_id }}/connections/graph">Connection Graph</a>
+                <a class="btn btn-outline-primary" href="/groups/{{ selected_group_id }}/connections/graph">Connection Graph</a>
             {% endif %}
             {% if is_filtered %}
                 <a class="btn btn-link px-0" href="/{% if selected_group_query_value %}?group_id={{ selected_group_query_value }}{% endif %}">Clear filter</a>

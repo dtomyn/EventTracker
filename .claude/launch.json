@@ -12,6 +12,13 @@
       "runtimeExecutable": "uv",
       "runtimeArgs": ["run", "python", "-m", "scripts.run_dev", "--port", "35232", "--reload"],
       "port": 35232
+    },
+    {
+      "name": "my-factory-dashboard",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "python", "-m", "http.server", "8765", "--bind", "127.0.0.1", "--directory", "my-factory"],
+      "port": 8765,
+      "url": "http://127.0.0.1:8765"
     }
   ]
 }

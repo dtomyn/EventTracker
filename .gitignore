@@ -84,11 +84,15 @@ DS_Store
 .eventtracker-dev-reload.pid
 node_modules/
 playwright-report/
-test-results/playwright/
-test-results/playwright-artifacts/
+test-results/
 
 # Ignore all runtime data files
 data/
 gif_frames_story/
 # Demo videos are uploaded to GitHub as attachments, not committed
 demo-output/
+
+# Software factory runtime state and job worktrees
+.worktrees/
+my-factory/board.json
+my-factory/jobs/
