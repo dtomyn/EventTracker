@@ -1,0 +1,67 @@
+  /* ==========================================================
+     Newspaper style: black ink on newsprint. Overrides the
+     poster palette only - layout, packing and behaviour are
+     shared with the poster board.
+     ========================================================== */
+  :root{
+    --ink:#111; --ink-2:#2b2b2b; --ink-3:#5a5a5a; --card:#fbfaf6;
+    --display:"Playfair Display","Didot","Bodoni MT","Hoefler Text",Georgia,"Times New Roman",serif;
+    --sans:Georgia,"Times New Roman",Times,serif;
+    --mono:"Courier New",Courier,monospace;
+    --lift:none; --lift-hi:0 10px 24px -10px rgba(0,0,0,.45);
+  }
+  [data-hue]{--paper:#f6f4ee; --accent:#111; --pin:#111}
+  body{background-color:#e9e6dc; background-image:none; font-family:Georgia,"Times New Roman",serif}
+  .topbar{
+    background:#f6f4ee; border-radius:0; box-shadow:none; transform:none; animation:none;
+    border-top:4px double #111; border-bottom:1px solid #111; border-left:0; border-right:0;
+  }
+  .brand{flex-direction:column; align-items:flex-start; gap:3px}
+  .kicker{margin:0; font:italic 11px/1 Georgia,serif; letter-spacing:.14em; text-transform:uppercase; color:#444}
+  .brand h1{font-family:var(--display); font-weight:900; text-transform:none; letter-spacing:-.01em; color:#000}
+  .brand h1::after{display:none}
+  .brand .meta{font-family:Georgia,serif; font-weight:400; font-style:italic; text-transform:none; letter-spacing:.02em; color:#444}
+  .chip,.act,.search,.controls select{border-radius:0; border:1px solid #111; background-color:#fbfaf6; color:#111; font-family:Georgia,serif; letter-spacing:.06em}
+  .chip[aria-pressed="true"],.act.primary,.act[aria-current="true"]{background:#111; color:#fbfaf6}
+  .act.primary:hover,.act[aria-current="true"]:hover{color:#fbfaf6}
+  .chip:hover{transform:none}
+  .chip .dot{display:none}
+  .style-switch{display:flex; gap:0}
+  .style-switch .act:first-child{border-right-width:0}
+
+  .paper{
+    border-radius:0; background-image:none; box-shadow:none; transform:none; border:1px solid #111;
+    border-top-width:3px;
+  }
+  .poster.in .paper,.poster.out .paper{transform:none}
+  .poster.in:hover .paper{transform:translateY(-3px); box-shadow:var(--lift-hi)}
+  .pin,.tape,.sticker{display:none !important}
+  .cat{background:none; color:#111; border-bottom:1px solid #111; border-radius:0; padding:0 0 3px; font-family:Georgia,serif; font-style:italic; letter-spacing:.1em; flex:1 1 auto}
+  .flag{background:#111; border-radius:0; animation:none; font-family:Georgia,serif}
+  .headline{font-family:var(--display); font-weight:900; color:#000; letter-spacing:-.01em}
+  .paper.big .headline{font-family:var(--display); text-transform:none; letter-spacing:-.015em}
+  .dek{font-family:Georgia,serif; color:#2b2b2b}
+  .foot{font-family:"Courier New",monospace; border-top:1px solid #111; color:#444}
+  .foot .src{color:#111}
+
+  .yarn__core{stroke:#111}
+  .yarn__twist{stroke:rgba(255,255,255,.7)}
+  .yarns{filter:none}
+  .string-toggle[aria-pressed="true"]{background:#111; border-color:#111; color:#fbfaf6}
+  .string-toggle .yarn{border-bottom-color:#111}
+  .string-toggle[aria-pressed="true"] .yarn{border-bottom-color:#fbfaf6}
+
+  dialog#pop::backdrop{background:rgba(0,0,0,.6)}
+  .sheet,dialog#tie{border-radius:0; background:#fbfaf6; border:1px solid #111}
+  .sheet__band,.tie__band{background:#111; color:#fbfaf6; font-family:Georgia,serif}
+  .sheet h2{font-family:var(--display); text-transform:none; letter-spacing:-.01em}
+  .sheet h4,.tie__body h4{color:#111; font-family:Georgia,serif; border-bottom:1px solid #111; padding-bottom:4px}
+  .sheet .body{font-family:Georgia,serif}
+  .sheet .body blockquote{border-left-color:#111}
+  .links button,.links a{color:#111; border-bottom-color:#111}
+  .tag{background:none; border:1px solid #111; border-radius:0; color:#111}
+  .sheet__nav{border-top:1px solid #111}
+  .sheet__nav button{border-radius:0; border:1px solid #111; background:#fbfaf6; font-family:Georgia,serif}
+  .tie__end{background:#f6f4ee; border-radius:0; border-color:#111}
+  .tie__link span{background:#111}
+  .tie__note{font-family:Georgia,serif}

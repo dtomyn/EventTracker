@@ -7,11 +7,13 @@
 {% endif %}<title>{{ board_title }} | Poster Board</title>
 <style>
 {% include "poster_board/board.css" %}
+{% if board_style == "newspaper" %}{% include "poster_board/newspaper.css" %}{% endif %}
 </style>
 </head>
-<body{% if not export_mode %} data-entry-url="/entries/{id}/view"{% endif %}>
+<body class="style-{{ board_style }}"{% if not export_mode %} data-entry-url="/entries/{id}/view"{% endif %}>
   <header class="topbar">
     <div class="brand">
+      {% if board_style == "newspaper" %}<p class="kicker">The EventTracker Gazette</p>{% endif %}
       <h1>{{ board_title }}</h1>
       <p class="meta">
         {%- if board.date_range %}{{ board.date_range }} &nbsp;&middot;&nbsp; {% endif -%}
@@ -39,6 +41,11 @@
             <option value="{{ choice }}"{% if choice == board_limit %} selected{% endif %}>Top {{ choice }}</option>
           {% endfor %}
         </select>
+        <div class="style-switch" role="group" aria-label="Board style">
+          {% for choice in style_choices %}
+            <a class="act" href="{{ style_hrefs[choice] }}" data-board-style="{{ choice }}"{% if choice == board_style %} aria-current="true"{% endif %}>{{ choice | capitalize }}</a>
+          {% endfor %}
+        </div>
         <a class="act" href="{{ timeline_href }}">&larr; Timeline</a>
         <a class="act primary" href="{{ export_href }}" download data-board-export>Export HTML</a>
       </form>

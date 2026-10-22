@@ -285,7 +285,7 @@ class PosterBoardRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("<title>Board | Poster Board</title>", response.text)
         self.assertIn('data-entry-url="/entries/{id}/view"', response.text)
-        self.assertIn('href="/timeline/board/export?group_id=50&amp;limit=30"', response.text)
+        self.assertIn('href="/timeline/board/export?group_id=50&amp;limit=30&amp;style=poster"', response.text)
         self.assertIn('href="/?group_id=50"', response.text)
         payload = self._payload(response.text)
         self.assertEqual(payload["total_in_scope"], 2)
@@ -329,6 +329,23 @@ class PosterBoardRouteTests(unittest.TestCase):
         self.assertIn("exported", html)
         self.assertIn(".poster{", html)
         self.assertIn('getElementById("board-data")', html)
+
+    def test_newspaper_style_applies_stylesheet_and_keeps_scope(self) -> None:
+        response = self.client.get("/timeline/board?group_id=50&style=newspaper")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('<body class="style-newspaper"', response.text)
+        self.assertIn("Newspaper style: black ink on newsprint", response.text)
+        self.assertIn("The EventTracker Gazette", response.text)
+        self.assertIn("style=newspaper", response.text)
+        self.assertIn("style=poster", response.text)
+
+    def test_unknown_style_falls_back_to_poster(self) -> None:
+        response = self.client.get("/timeline/board?style=<script>")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('<body class="style-poster"', response.text)
+        self.assertNotIn("Newspaper style: black ink", response.text)
 
     def test_timeline_links_to_board_with_scope(self) -> None:
         response = self.client.get("/?group_id=50")

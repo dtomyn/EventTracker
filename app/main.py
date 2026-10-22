@@ -568,6 +568,9 @@ class GeneratedPreviewContext(TypedDict, total=False):
     source_snapshot_extractor_version: str
 
 
+BOARD_STYLE_CHOICES: tuple[str, ...] = ("poster", "newspaper")
+
+
 class PosterBoardPageContext(TypedDict):
     request: Request
     board: BoardPayload
@@ -582,6 +585,9 @@ class PosterBoardPageContext(TypedDict):
     export_href: str
     export_mode: bool
     exported_on: str
+    board_style: str
+    style_choices: tuple[str, ...]
+    style_hrefs: dict[str, str]
 
 
 class HtmlPreviewContext(TypedDict):
@@ -2161,9 +2167,16 @@ def timeline_poster_board(
     group_id: str = "",
     year: str = "",
     limit: str = "",
+    style: str = "",
 ) -> HTMLResponse:
     context = _build_poster_board_context(
-        request, q=q, group_id=group_id, year=year, limit=limit, export_mode=False
+        request,
+        q=q,
+        group_id=group_id,
+        year=year,
+        limit=limit,
+        style=style,
+        export_mode=False,
     )
     return templates.TemplateResponse(
         request,
@@ -2179,9 +2192,16 @@ def export_timeline_poster_board(
     group_id: str = "",
     year: str = "",
     limit: str = "",
+    style: str = "",
 ) -> HTMLResponse:
     context = _build_poster_board_context(
-        request, q=q, group_id=group_id, year=year, limit=limit, export_mode=True
+        request,
+        q=q,
+        group_id=group_id,
+        year=year,
+        limit=limit,
+        style=style,
+        export_mode=True,
     )
     file_name = _poster_board_export_file_name(context["board_title"])
     return templates.TemplateResponse(
@@ -2199,9 +2219,11 @@ def _build_poster_board_context(
     group_id: str,
     year: str,
     limit: str,
+    style: str,
     export_mode: bool,
 ) -> PosterBoardPageContext:
     selected_year = _parse_board_year(year)
+    board_style = style if style in BOARD_STYLE_CHOICES else BOARD_STYLE_CHOICES[0]
     board_limit = normalize_board_limit(limit)
     with connection_context() as connection:
         scope = _load_group_scope(connection, q=q, group_id=group_id)
@@ -2229,6 +2251,15 @@ def _build_poster_board_context(
     if selected_year is not None:
         export_params["year"] = str(selected_year)
     export_params["limit"] = str(board_limit)
+    export_params["style"] = board_style
+    style_base_params = dict(scope_params)
+    if selected_year is not None:
+        style_base_params["year"] = str(selected_year)
+    style_base_params["limit"] = str(board_limit)
+    style_hrefs = {
+        choice: "/timeline/board?" + urlencode({**style_base_params, "style": choice})
+        for choice in BOARD_STYLE_CHOICES
+    }
 
     return {
         "request": request,
@@ -2244,6 +2275,9 @@ def _build_poster_board_context(
         "export_href": f"/timeline/board/export?{urlencode(export_params)}",
         "export_mode": export_mode,
         "exported_on": datetime.now().strftime("%b %d, %Y").replace(" 0", " "),
+        "board_style": board_style,
+        "style_choices": BOARD_STYLE_CHOICES,
+        "style_hrefs": style_hrefs,
     }
 
 
